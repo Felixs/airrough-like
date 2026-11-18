@@ -1,12 +1,19 @@
 name: Release
 
-# Push a version tag (e.g. `git tag v0.1 && git push origin v0.1`) to build the
-# Windows executable and publish it as a GitHub release.
+# Builds the Windows executable and publishes it as a GitHub release.
+# - Push to main: releases v<config/version from project.godot> if that tag doesn't exist yet,
+#   so bumping the version on main is enough to ship a new release.
+# - Push a version tag (e.g. `git tag v0.2 && git push origin v0.2`): releases that tag.
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
 
 permissions:
   contents: write
@@ -19,6 +26,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="$GITHUB_REF_NAME"
+            publish=true
+          else
+            tag="v$(grep -oP '^config/version="\K[^"]+' project.godot)"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+              echo "$tag already exists, building without publishing."
+              publish=false
+            else
+              publish=true
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "Version $tag, publish=$publish"
 
       - name: Install Godot and the Windows export template
         run: |
@@ -48,7 +74,7 @@ jobs:
           mkdir -p export/windows
           godot --headless --path . --export-release "Windows Desktop" export/windows/AirportAutoBattler.exe
           test -s export/windows/AirportAutoBattler.exe
-          cd export/windows && zip -9 "../../AirportAutoBattler-${GITHUB_REF_NAME}-windows.zip" AirportAutoBattler.exe
+          cd export/windows && zip -9 "../../AirportAutoBattler-${{ steps.version.outputs.tag }}-windows.zip" AirportAutoBattler.exe
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -57,8 +83,11 @@ jobs:
           path: AirportAutoBattler-*-windows.zip
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.version.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Airport Auto-Battler ${{ steps.version.outputs.tag }}
           files: AirportAutoBattler-*-windows.zip
           generate_release_notes: true

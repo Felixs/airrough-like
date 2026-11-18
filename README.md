@@ -47,12 +47,8 @@ godot --path . -- --shot=shot.png rate=6 after=120 [expand]
 
 ## Releases
 
-Pushing a version tag builds the Windows executable on GitHub Actions and publishes it on
-the repository's Releases page (`.github/workflows/release.yml`):
-
-```bash
-git tag v0.2
-git push origin v0.2
-```
-
-Bump `config/version` in `project.godot` and the versions in `export_presets.cfg` first.
+GitHub Actions builds the Windows executable and publishes it on the repository's
+Releases page (`.github/workflows/release.yml`). To ship a new version, bump
+`config/version` in `project.godot` (and the versions in `export_presets.cfg`) and push to
+`main`: the workflow publishes `v<version>` if that release doesn't exist yet. Pushing a
+`v*` tag yourself works too.
