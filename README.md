@@ -44,3 +44,15 @@ godot --headless --path . -- --selftest rate=6 seconds=900 expand
 # save a screenshot after 120 s of play (needs a display, e.g. xvfb-run)
 godot --path . -- --shot=shot.png rate=6 after=120 [expand]
 ```
+
+## Releases
+
+Pushing a version tag builds the Windows executable on GitHub Actions and publishes it on
+the repository's Releases page (`.github/workflows/release.yml`):
+
+```bash
+git tag v0.2
+git push origin v0.2
+```
+
+Bump `config/version` in `project.godot` and the versions in `export_presets.cfg` first.
