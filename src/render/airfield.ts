@@ -42,15 +42,20 @@ function drawStructure(g: Graphics, s: Structure, labels: Container): void {
   switch (s.kind) {
     case 'runway': {
       g.rect(x, y, w, h).fill(COLOURS.asphalt).stroke({ width: 0.6, color: COLOURS.asphaltEdge });
-      const cy = y + h / 2;
-      for (let dx = 16; dx < w - 16; dx += 13) g.rect(x + dx, cy - 0.4, 7.5, 0.8).fill(COLOURS.marking);
+      const vertical = h > w;
+      const len = vertical ? h : w;
+      const wid = vertical ? w : h;
+      // Draws a rectangle given along/across offsets from the Runway's start corner.
+      const r = (along: number, across: number, l: number, a: number) =>
+        (vertical ? g.rect(x + across, y + along, a, l) : g.rect(x + along, y + across, l, a)).fill(COLOURS.marking);
+      for (let d = 16; d < len - 16; d += 13) r(d, wid / 2 - 0.4, 7.5, 0.8);
       for (let k = 0; k < 8; k++) {
-        const by = y + 2 + k * ((h - 4) / 8);
-        g.rect(x + 2, by, 9, 1.4).fill(COLOURS.marking);
-        g.rect(x + w - 11, by, 9, 1.4).fill(COLOURS.marking);
+        const across = 2 + k * ((wid - 4) / 8);
+        r(2, across, 9, 1.4);
+        r(len - 11, across, 9, 1.4);
       }
-      g.rect(x, y + 0.5, w, 0.4).fill(COLOURS.marking);
-      g.rect(x, y + h - 0.9, w, 0.4).fill(COLOURS.marking);
+      r(0, 0.5, len, 0.4);
+      r(0, wid - 0.9, len, 0.4);
       break;
     }
     case 'taxiway': {

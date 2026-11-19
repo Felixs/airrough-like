@@ -1,5 +1,5 @@
 import { formatClock } from '../sim/clock';
-import { alerts, flightStrips, movementsPerHour, quotaProgress, runwayStatus, standsStatus } from '../sim/liveView';
+import { alerts, flightStrips, movementsPerHour, quotaProgress, runwayStatuses, standsStatus } from '../sim/liveView';
 import {
   ACTION_IDS, actionAvailability, mostUrgentHolding, secondRollChance, type ActionId, type Simulation,
 } from '../sim/simulation';
@@ -134,12 +134,14 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       }).join('');
 
       // Runway and wind chips
-      const rw = runwayStatus(sim);
-      const state = { open: 'OPEN', blocked: `BLOCKED until ${rw.until !== null ? hhmm(rw.until) : ''}`, dark: 'CLOSED (dark)', curfew: 'CURFEW' }[rw.state];
-      const chip = $('#runway-chip');
-      chip.textContent = `RWY ${rw.name} ${state}`;
-      chip.className = `chip ${rw.state}`;
-      chip.title = rw.state === 'dark' ? 'Only Lit or ILS Runways work after 20:00' : rw.state === 'blocked' ? 'Cleared faster with a Fire & Rescue Station' : '';
+      const statuses = runwayStatuses(sim);
+      const rw = statuses[0]!;
+      const label = (r: typeof rw) => ({ open: 'OPEN', blocked: `BLOCKED until ${r.until !== null ? hhmm(r.until) : ''}`, dark: 'CLOSED (dark)', curfew: 'CURFEW', unconnected: 'NOT CONNECTED' })[r.state];
+      const tip = (r: typeof rw) => r.state === 'dark' ? 'Only Lit or ILS Runways work after 20:00'
+        : r.state === 'blocked' ? 'Cleared faster with a Fire & Rescue Station'
+        : r.state === 'unconnected' ? 'Needs Taxiway connectors at both ends' : '';
+      $('#runway-chip').outerHTML = `<span id="runway-chip" class="chip-group">${statuses.map((r) =>
+        `<span class="chip ${r.state}" title="${esc(tip(r))}">RWY ${esc(r.name)} ${label(r)}</span>`).join('')}</span>`;
       $('#wind-chip').textContent = `Wind ${String(rw.wind.direction).padStart(3, '0')}° ${rw.wind.knots} kt`;
 
       // Movements per hour

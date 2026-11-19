@@ -12,14 +12,27 @@ export interface Tile {
   readonly y: number;
 }
 
+/** How aircraft get on and off one Runway. */
+export interface RunwayAccess {
+  /** Index into layout.runways. */
+  readonly index: number;
+  readonly runway: Runway;
+  readonly vertical: boolean;
+  /** Taxiway tile next to the Runway where landing aircraft leave it (far end). */
+  readonly runwayExit: Tile;
+  /** Taxiway tile next to the Runway where departures hold short (near end). */
+  readonly holdPoint: Tile;
+}
+
 export interface TaxiNetwork {
   readonly layout: AirportLayout;
   /** Taxiway tiles keyed by "x,y". */
   readonly tiles: ReadonlySet<string>;
+  /** Runways with Taxiway connectors at both ends; others can't be used. */
+  readonly runways: readonly RunwayAccess[];
+  /** The first usable Runway (kept for single-Runway callers). */
   readonly runway: Runway;
-  /** Taxiway tile next to the Runway where landing aircraft leave it (far end, Runway 09 in use). */
   readonly runwayExit: Tile;
-  /** Taxiway tile next to the Runway where departures hold short (near end). */
   readonly holdPoint: Tile;
 }
 
@@ -33,26 +46,37 @@ function tilesOf(r: TileRect): Tile[] {
 
 const centreTile = (r: TileRect): Tile => ({ x: r.x + Math.floor(r.w / 2), y: r.y + Math.floor(r.h / 2) });
 
+/** Taxiway connectors touching a Runway's long sides, in landing order, with the tile where each meets it. */
+function runwayAccess(layout: AirportLayout, runway: Runway, index: number): RunwayAccess | null {
+  const vertical = runway.h > runway.w;
+  const meets: Tile[] = [];
+  for (const t of layout.structures) {
+    if (t.kind !== 'taxiway') continue;
+    if (!vertical && t.x >= runway.x && t.x + t.w <= runway.x + runway.w) {
+      if (t.y + t.h === runway.y) meets.push({ x: centreTile(t).x, y: runway.y - 1 });
+      else if (t.y === runway.y + runway.h) meets.push({ x: centreTile(t).x, y: runway.y + runway.h });
+    } else if (vertical && t.y >= runway.y && t.y + t.h <= runway.y + runway.h) {
+      if (t.x + t.w === runway.x) meets.push({ x: runway.x - 1, y: centreTile(t).y });
+      else if (t.x === runway.x + runway.w) meets.push({ x: runway.x + runway.w, y: centreTile(t).y });
+    }
+  }
+  meets.sort((a, b) => (vertical ? a.y - b.y : a.x - b.x));
+  const first = meets[0];
+  const last = meets[meets.length - 1];
+  if (!first || !last || meets.length < 2 || (vertical ? first.y === last.y : first.x === last.x)) return null;
+  return { index, runway, vertical, holdPoint: first, runwayExit: last };
+}
+
 export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {
-  const runway = layout.runways[0];
-  if (!runway) throw new Error('A layout needs a Runway');
+  if (!layout.runways[0]) throw new Error('A layout needs a Runway');
   const tiles = new Set<string>();
   for (const s of layout.structures) if (s.kind === 'taxiway') for (const t of tilesOf(s)) tiles.add(key(t));
-
-  // Connectors: Taxiways touching the Runway's top edge. The row right above the Runway is where they meet it.
-  const edgeRow = runway.y - 1;
-  const connectors = layout.structures
-    .filter((s) => s.kind === 'taxiway' && s.y + s.h === runway.y && s.x >= runway.x && s.x + s.w <= runway.x + runway.w)
-    .sort((a, b) => a.x - b.x);
-  const first = connectors[0];
-  const last = connectors[connectors.length - 1];
-  if (!first || !last || first === last) throw new Error('A Runway needs Taxiway connectors at both ends');
+  const runways = layout.runways.flatMap((r, i) => runwayAccess(layout, r, i) ?? []);
+  const main = runways[0];
+  const nowhere = { x: -1, y: -1 };
   return {
-    layout,
-    tiles,
-    runway,
-    holdPoint: { x: centreTile(first).x, y: edgeRow },
-    runwayExit: { x: centreTile(last).x, y: edgeRow },
+    layout, tiles, runways,
+    runway: main?.runway ?? layout.runways[0], runwayExit: main?.runwayExit ?? nowhere, holdPoint: main?.holdPoint ?? nowhere,
   };
 }
 

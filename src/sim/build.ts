@@ -2,8 +2,9 @@
  * Build Mode: a session of pending placements on top of the Run's layout, validated with a checks list,
  * paid for and applied on Confirm. The simulation routes on the new layout from the next Day.
  */
-import { createLayout, WORLD, type AirportLayout, type HoldingBay, type SizeClass, type Stand, type Structure, type TileRect } from './layout';
-import { UPKEEP, type RunState } from './run';
+import { createLayout, WORLD, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
+import { UPKEEP, type LandPlot, type RunState } from './run';
+import { AIRCRAFT_TYPES, sizeRank } from './aircraft';
 import type { Tile } from './taxi';
 
 /** Prices *(first guess)*. */
@@ -15,26 +16,47 @@ export const BUILD_COSTS = {
   stand: { small: 8_000, medium: 16_000, large: 36_000 },
   remoteStandFactor: 0.5,
   holdingBay: { small: 4_000, medium: 8_000, large: 16_000 },
-  /** Each copy of the same Stand or Holding Bay already built (or pending) adds this share. */
+  /** Each copy of the same Stand, Holding Bay or Runway already built (or pending) adds this share. */
   perCopy: 0.25,
+  runway: { short: 30_000, medium: 80_000, long: 160_000 },
+  runwayTiles: { short: 24, medium: 36, long: 48 },
+  runwayWidth: 4,
+  supportBuilding: { rampAgentStation: 12_000, adminOffice: 15_000, airlineOffice: 20_000 },
+  supportBuildingSize: { w: 3, h: 2 },
+  /** Terminal and Cargo Hub wings, per tile. */
+  wingPerTile: 1_500,
+  /** Demolish refunds this share of the base price. */
+  refundShare: 0.5,
+  /** Land Plot n (counting from the first bought) costs this × n. */
+  plotBase: 24_000,
+  startingPlots: 6,
 } as const;
 
 /** Stand and Holding Bay footprints (outline plus clearance), in tiles; they open onto the Taxiway below. */
 export const FOOTPRINT = { small: { w: 2, h: 3 }, medium: { w: 3, h: 3 }, large: { w: 4, h: 3 } } as const;
 
-export interface PendingChange {
-  readonly kind: 'add';
-  readonly structure: Structure;
+/** A change in Build Mode. Structures are matched by identity within the session's layout. */
+export type Change =
+  | { readonly kind: 'add'; readonly structure: Structure }
+  | { readonly kind: 'remove'; readonly structure: Structure }
+  | { readonly kind: 'move'; readonly from: Structure; readonly to: Structure }
+  | { readonly kind: 'replace'; readonly from: Structure; readonly to: Structure }
+  | { readonly kind: 'buyPlot'; readonly plot: LandPlot };
+
+export type PendingChange = Change & {
   readonly label: string;
+  /** Money paid (negative for refunds). */
   readonly cost: number;
+  /** Change in daily Upkeep. */
   readonly upkeep: number;
-}
+};
 
 export interface BuildSession {
   readonly base: RunState;
   readonly pending: readonly PendingChange[];
   /** The base layout with every pending change applied. */
   readonly layout: AirportLayout;
+  readonly ownedPlots: readonly LandPlot[];
 }
 
 export interface Check {
@@ -51,7 +73,7 @@ export interface PlacementCheck {
 }
 
 export function openBuild(run: RunState): BuildSession {
-  return { base: run, pending: [], layout: run.layout };
+  return { base: run, pending: [], layout: run.layout, ownedPlots: run.ownedPlots };
 }
 
 /** A straight 3-wide Taxiway along the dominant drag axis, centred on the dragged line. */
@@ -70,30 +92,35 @@ const tilesOf = (r: TileRect): Tile[] => {
   return out;
 };
 
-export function ownsTile(run: RunState, t: Tile): boolean {
+export function ownsTile(owner: { readonly ownedPlots: readonly LandPlot[] }, t: Tile): boolean {
   if (t.x < 0 || t.y < 0 || t.x >= WORLD.width || t.y >= WORLD.height) return false;
   const px = Math.floor(t.x / WORLD.plotW);
   const py = Math.floor(t.y / WORLD.plotH);
-  return run.ownedPlots.some((p) => p.px === px && p.py === py);
+  return owner.ownedPlots.some((p) => p.px === px && p.py === py);
 }
 
 function isTaxiwayAt(layout: AirportLayout, t: Tile): boolean {
   return layout.structures.some((s) => s.kind === 'taxiway' && t.x >= s.x && t.x < s.x + s.w && t.y >= s.y && t.y < s.y + s.h);
 }
 
-/** Both end caps of a Taxiway strip touch (or overlap) an existing Taxiway. */
+/** Both end caps of a Taxiway strip touch (or overlap) an existing Taxiway, or meet a Runway's side. */
 function connectsAtBothEnds(layout: AirportLayout, t: TileRect): boolean {
-  const vertical = t.h > t.w;
-  const ends: Array<[Tile[], Tile[]]> = vertical
-    ? [
-        [tilesOf({ x: t.x, y: t.y - 1, w: t.w, h: 1 }), tilesOf({ x: t.x, y: t.y, w: t.w, h: 1 })],
-        [tilesOf({ x: t.x, y: t.y + t.h, w: t.w, h: 1 }), tilesOf({ x: t.x, y: t.y + t.h - 1, w: t.w, h: 1 })],
-      ]
-    : [
-        [tilesOf({ x: t.x - 1, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x, y: t.y, w: 1, h: t.h })],
-        [tilesOf({ x: t.x + t.w, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x + t.w - 1, y: t.y, w: 1, h: t.h })],
-      ];
-  return ends.every(([outside, inside]) => [...outside, ...inside].some((tile) => isTaxiwayAt(layout, tile)));
+  const width = BUILD_COSTS.taxiwayWidth;
+  // The strip runs along whichever side is not the Taxiway width (both are tried for a square or odd strip).
+  const orientations = t.w === width && t.h !== width ? [true] : t.h === width && t.w !== width ? [false] : [true, false];
+  const runwayAt = (p: Tile) => layout.runways.some((r) => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h);
+  return orientations.some((vertical) => {
+    const ends: Array<[Tile[], Tile[]]> = vertical
+      ? [
+          [tilesOf({ x: t.x, y: t.y - 1, w: t.w, h: 1 }), tilesOf({ x: t.x, y: t.y, w: t.w, h: 1 })],
+          [tilesOf({ x: t.x, y: t.y + t.h, w: t.w, h: 1 }), tilesOf({ x: t.x, y: t.y + t.h - 1, w: t.w, h: 1 })],
+        ]
+      : [
+          [tilesOf({ x: t.x - 1, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x, y: t.y, w: 1, h: t.h })],
+          [tilesOf({ x: t.x + t.w, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x + t.w - 1, y: t.y, w: 1, h: t.h })],
+        ];
+    return ends.every(([outside, inside]) => [...outside, ...inside].some((tile) => isTaxiwayAt(layout, tile)) || outside.every(runwayAt));
+  });
 }
 
 function nextId(layout: AirportLayout, prefix: string, numeric: boolean): string {
@@ -126,51 +153,202 @@ function spotPrice(layout: AirportLayout, s: Stand | HoldingBay): number {
   return Math.round(base * (1 + BUILD_COSTS.perCopy * copies));
 }
 
-export function placementChecks(session: BuildSession, s: Structure): PlacementCheck {
+
+export function newRunway(_session: BuildSession, at: Tile, length: RunwayLength, vertical: boolean): Runway {
+  const long = BUILD_COSTS.runwayTiles[length];
+  const wide = BUILD_COSTS.runwayWidth;
+  return { kind: 'runway', x: at.x, y: at.y, w: vertical ? wide : long, h: vertical ? long : wide, length, surface: 'asphalt' };
+}
+
+export function newBuilding(_session: BuildSession, at: Tile, role: SupportRole): SupportBuilding {
+  return { kind: 'supportBuilding', role, x: at.x, y: at.y, ...BUILD_COSTS.supportBuildingSize };
+}
+
+const ROLE_NAME: Record<SupportRole, string> = { rampAgentStation: 'Ramp Agent Station', adminOffice: 'Admin Office', airlineOffice: 'Airline Office' };
+const LENGTH_NAME: Record<RunwayLength, string> = { short: 'Short', medium: 'Medium', long: 'Long' };
+
+/** Base price (no copy surcharge) used for refunds. */
+function basePrice(s: Structure): number {
+  switch (s.kind) {
+    case 'taxiway': return s.w * s.h * BUILD_COSTS.taxiwayPerTile;
+    case 'stand': return BUILD_COSTS.stand[s.size] * (s.placement === 'remote' ? BUILD_COSTS.remoteStandFactor : 1);
+    case 'holdingBay': return BUILD_COSTS.holdingBay[s.size];
+    case 'runway': return BUILD_COSTS.runway[s.length];
+    case 'supportBuilding': return BUILD_COSTS.supportBuilding[s.role];
+    case 'terminal':
+    case 'cargoHub': return s.w * s.h * BUILD_COSTS.wingPerTile;
+    default: return 0;
+  }
+}
+
+function structureUpkeep(s: Structure): number {
+  switch (s.kind) {
+    case 'taxiway': return s.w * s.h * UPKEEP.taxiwayPerTile;
+    case 'stand': return UPKEEP.stand[s.size];
+    case 'holdingBay': return UPKEEP.holdingBay[s.size];
+    case 'runway': return UPKEEP.runway[s.length] + UPKEEP.surface[s.surface];
+    case 'supportBuilding': return UPKEEP.supportBuilding;
+    default: return 0;
+  }
+}
+
+function describe(s: Structure): string {
+  switch (s.kind) {
+    case 'taxiway': return `Taxiway, ${s.w * s.h} tiles`;
+    case 'stand': return `${SIZE_NAME[s.size]} ${s.placement === 'remote' ? 'Remote' : 'Contact'} Stand ${s.id} (${s.serves === 'terminal' ? 'Terminal' : 'Cargo Hub'})`;
+    case 'holdingBay': return `${SIZE_NAME[s.size]} Holding Bay ${s.id}`;
+    case 'runway': return `${LENGTH_NAME[s.length]} Runway (${s.w >= s.h ? '09-27' : '18-36'})`;
+    case 'supportBuilding': return ROLE_NAME[s.role];
+    case 'terminal': return `Terminal wing, ${s.w * s.h} tiles`;
+    case 'cargoHub': return `Cargo Hub wing, ${s.w * s.h} tiles`;
+    case 'atcTower': return 'ATC Tower';
+  }
+}
+
+/** Price of a new structure, with the copy surcharge for Stands, Holding Bays and Runways. */
+function priceOf(layout: AirportLayout, s: Structure): number {
+  if (s.kind === 'stand' || s.kind === 'holdingBay') return spotPrice(layout, s);
+  if (s.kind === 'runway') return Math.round(BUILD_COSTS.runway[s.length] * (1 + BUILD_COSTS.perCopy * layout.runways.length));
+  return basePrice(s);
+}
+
+const without = (layout: AirportLayout, s: Structure) => createLayout(layout.width, layout.height, layout.structures.filter((o) => o !== s));
+const MOVABLE = new Set<Structure['kind']>(['atcTower', 'supportBuilding', 'holdingBay']);
+
+/** Where a structure may stand on `layout` (shared by new placements, Moves and lengthening). */
+function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure): Check[] {
+  const items: Check[] = [];
+  const clearOfAll = !layout.structures.some((o) => overlaps(o, s));
+  switch (s.kind) {
+    case 'taxiway':
+      items.push({ label: 'Connects at both ends', ok: connectsAtBothEnds(layout, s) });
+      items.push({ label: 'Crosses no Runway', ok: !layout.runways.some((r) => overlaps(r, s)) });
+      items.push({ label: 'Clear of buildings and Stands', ok: !layout.structures.some((o) => o.kind !== 'taxiway' && o.kind !== 'runway' && overlaps(o, s)) });
+      break;
+    case 'stand':
+    case 'holdingBay': {
+      items.push({ label: 'Clear of other structures', ok: clearOfAll });
+      items.push({ label: 'Taxiway access', ok: isTaxiwayAt(layout, { x: s.x + Math.floor(s.w / 2), y: s.y + s.h }) });
+      if (s.kind === 'stand' && s.placement === 'contact') {
+        const building = s.serves === 'terminal' ? 'terminal' : 'cargoHub';
+        const attached = layout.structures.some((b) => b.kind === building && b.y + b.h === s.y && s.x >= b.x && s.x + s.w <= b.x + b.w);
+        items.push({ label: s.serves === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: attached });
+      }
+      break;
+    }
+    case 'terminal':
+    case 'cargoHub': {
+      items.push({ label: 'Clear of other structures', ok: clearOfAll });
+      const touches = (b: TileRect) =>
+        (b.x + b.w === s.x || s.x + s.w === b.x) && s.y < b.y + b.h && b.y < s.y + s.h ||
+        (b.y + b.h === s.y || s.y + s.h === b.y) && s.x < b.x + b.w && b.x < s.x + s.w;
+      items.push({ label: s.kind === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: layout.structures.some((b) => b.kind === s.kind && touches(b)) });
+      break;
+    }
+    default:
+      items.push({ label: 'Clear of other structures', ok: clearOfAll });
+  }
+  items.push({ label: 'Inside owned land', ok: tilesOf(s).every((t) => ownsTile(session, t)) });
+  return items;
+}
+
+/** Overnight aircraft still fit on the remaining Stands. */
+function overnightFits(run: RunState, layout: AirportLayout): boolean {
+  const free = new Set(layout.stands.map((s) => s.id));
+  const aircraft = [...run.overnight].sort((a, b) => sizeRank(AIRCRAFT_TYPES[b.type].size) - sizeRank(AIRCRAFT_TYPES[a.type].size));
+  for (const f of aircraft) {
+    const t = AIRCRAFT_TYPES[f.type];
+    const serves = t.purpose === 'passenger' ? 'terminal' : 'cargoHub';
+    const stand = layout.stands
+      .filter((s) => free.has(s.id) && s.serves === serves && sizeRank(s.size) >= sizeRank(t.size))
+      .sort((a, b) => sizeRank(a.size) - sizeRank(b.size))[0];
+    if (!stand) return false;
+    free.delete(stand.id);
+  }
+  return true;
+}
+
+const adjacentPlot = (plots: readonly LandPlot[], p: LandPlot) =>
+  plots.some((o) => Math.abs(o.px - p.px) + Math.abs(o.py - p.py) === 1);
+
+/** Checks a change against the session (with everything already pending), with its cost and Upkeep. */
+export function checkChange(session: BuildSession, change: Change): PlacementCheck {
   const run = session.base;
   const layout = session.layout;
-  const items: Check[] = [];
+  let items: Check[] = [];
   let cost = 0;
   let upkeepCost = 0;
-  let label: string = s.kind;
-  if (s.kind === 'taxiway') {
-    const tiles = s.w * s.h;
-    cost = tiles * BUILD_COSTS.taxiwayPerTile;
-    upkeepCost = tiles * BUILD_COSTS.taxiwayUpkeepPerTile;
-    label = `Taxiway, ${tiles} tiles`;
-    items.push({ label: 'Connects at both ends', ok: connectsAtBothEnds(layout, s) });
-    items.push({ label: 'Crosses no Runway', ok: !layout.runways.some((r) => overlaps(r, s)) });
-    items.push({
-      label: 'Clear of buildings and Stands',
-      ok: !layout.structures.some((o) => o.kind !== 'taxiway' && o.kind !== 'runway' && overlaps(o, s)),
-    });
-  }
-  if (s.kind === 'stand' || s.kind === 'holdingBay') {
-    cost = spotPrice(layout, s);
-    upkeepCost = s.kind === 'stand' ? UPKEEP.stand[s.size] : UPKEEP.holdingBay[s.size];
-    label = s.kind === 'stand'
-      ? `${SIZE_NAME[s.size]} ${s.placement === 'remote' ? 'Remote' : 'Contact'} Stand ${s.id} (${s.serves === 'terminal' ? 'Terminal' : 'Cargo Hub'})`
-      : `${SIZE_NAME[s.size]} Holding Bay ${s.id}`;
-    items.push({ label: 'Clear of other structures', ok: !layout.structures.some((o) => overlaps(o, s)) });
-    const entry = { x: s.x + Math.floor(s.w / 2), y: s.y + s.h };
-    items.push({ label: 'Taxiway access', ok: isTaxiwayAt(layout, entry) });
-    if (s.kind === 'stand' && s.placement === 'contact') {
-      const building = s.serves === 'terminal' ? 'terminal' : 'cargoHub';
-      const attached = layout.structures.some((b) => b.kind === building && b.y + b.h === s.y && s.x >= b.x && s.x + s.w <= b.x + b.w);
-      items.push({ label: s.serves === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: attached });
+  let label = '';
+  switch (change.kind) {
+    case 'add': {
+      const s = change.structure;
+      items = siteChecks(session, layout, s);
+      cost = priceOf(layout, s);
+      upkeepCost = structureUpkeep(s);
+      label = describe(s);
+      break;
+    }
+    case 'move': {
+      label = `Move ${describe(change.from)}`;
+      items = [{ label: 'Can be moved', ok: MOVABLE.has(change.from.kind) || (change.from.kind === 'stand' && change.from.placement === 'remote') }];
+      items.push(...siteChecks(session, without(layout, change.from), change.to));
+      break;
+    }
+    case 'replace': {
+      const { from, to } = change;
+      label = from.kind === 'runway' && to.kind === 'runway' ? `Lengthen Runway to ${LENGTH_NAME[to.length]}` : `Change ${describe(from)}`;
+      items = siteChecks(session, without(layout, from), to);
+      cost = Math.max(0, basePrice(to) - basePrice(from));
+      upkeepCost = structureUpkeep(to) - structureUpkeep(from);
+      break;
+    }
+    case 'remove': {
+      const s = change.structure;
+      const after = without(layout, s);
+      label = `Demolish ${describe(s)}`;
+      cost = -Math.round(basePrice(s) * BUILD_COSTS.refundShare);
+      upkeepCost = -structureUpkeep(s);
+      if (s.kind === 'runway') items.push({ label: 'Not the last Runway', ok: after.runways.length > 0 });
+      if (s.kind === 'atcTower') items.push({ label: 'Not the ATC Tower', ok: false });
+      if (s.kind === 'terminal' || s.kind === 'cargoHub') {
+        const left = after.structures.filter((b) => b.kind === s.kind);
+        const orphan = layout.stands.some((st) => st.placement === 'contact' && st.serves === s.kind &&
+          !left.some((b) => b.y + b.h === st.y && st.x >= b.x && st.x + st.w <= b.x + b.w));
+        items.push({ label: 'No Contact Stands attached', ok: !orphan });
+      }
+      if (s.kind === 'stand') items.push({ label: 'Not in use by an aircraft', ok: overnightFits(run, after) });
+      break;
+    }
+    case 'buyPlot': {
+      const { plot } = change;
+      label = `Land Plot ${plot.px + 1}-${plot.py + 1}`;
+      const bought = session.ownedPlots.length - BUILD_COSTS.startingPlots;
+      cost = BUILD_COSTS.plotBase * (bought + 1);
+      const inWorld = plot.px >= 0 && plot.py >= 0 && plot.px < WORLD.width / WORLD.plotW && plot.py < WORLD.height / WORLD.plotH;
+      items.push({ label: 'Not owned yet', ok: !session.ownedPlots.some((o) => o.px === plot.px && o.py === plot.py) });
+      items.push({ label: 'Borders owned land', ok: inWorld && adjacentPlot(session.ownedPlots, plot) });
+      break;
     }
   }
-  items.push({ label: 'Inside owned land', ok: tilesOf(s).every((t) => ownsTile(run, t)) });
-  if (run.inDebt) items.push({ label: 'Not in Debt', ok: false });
+  if (run.inDebt && cost > 0) items.push({ label: 'Not in Debt', ok: false });
   items.push({ label: 'Affordable', ok: run.money >= pendingTotal(session).cost + cost });
   return { ok: items.every((c) => c.ok), items, cost, upkeep: upkeepCost, label };
 }
 
-export function addPending(session: BuildSession, s: Structure): BuildSession {
-  const check = placementChecks(session, s);
+/** Same as checkChange for a new structure (kept for the placement ghost). */
+export function placementChecks(session: BuildSession, s: Structure): PlacementCheck {
+  return checkChange(session, { kind: 'add', structure: s });
+}
+
+/** Adds a valid change to the pending list; throws with the failed checks otherwise. */
+export function applyChange(session: BuildSession, change: Change): BuildSession {
+  const check = checkChange(session, change);
   if (!check.ok) throw new Error(check.items.filter((c) => !c.ok).map((c) => c.label).join(', '));
-  const pending = [...session.pending, { kind: 'add' as const, structure: s, label: check.label, cost: check.cost, upkeep: check.upkeep }];
-  return withPending(session, pending);
+  return withPending(session, [...session.pending, { ...change, label: check.label, cost: check.cost, upkeep: check.upkeep }]);
+}
+
+export function addPending(session: BuildSession, s: Structure): BuildSession {
+  return applyChange(session, { kind: 'add', structure: s });
 }
 
 export function undoPending(session: BuildSession): BuildSession {
@@ -179,8 +357,18 @@ export function undoPending(session: BuildSession): BuildSession {
 
 function withPending(session: BuildSession, pending: readonly PendingChange[]): BuildSession {
   const base = session.base.layout;
-  const structures = [...base.structures, ...pending.map((p) => p.structure)];
-  return { ...session, pending, layout: createLayout(base.width, base.height, structures) };
+  let structures: Structure[] = [...base.structures];
+  let plots: LandPlot[] = [...session.base.ownedPlots];
+  for (const p of pending) {
+    switch (p.kind) {
+      case 'add': structures.push(p.structure); break;
+      case 'remove': structures = structures.filter((s) => s !== p.structure); break;
+      case 'move':
+      case 'replace': structures = structures.map((s) => (s === p.from ? p.to : s)); break;
+      case 'buyPlot': plots = [...plots, p.plot]; break;
+    }
+  }
+  return { ...session, pending, layout: createLayout(base.width, base.height, structures), ownedPlots: plots };
 }
 
 export function pendingTotal(session: BuildSession): { cost: number; upkeep: number } {
@@ -191,8 +379,34 @@ export function pendingTotal(session: BuildSession): { cost: number; upkeep: num
 export function confirmBuild(session: BuildSession): RunState {
   const run = session.base;
   const { cost } = pendingTotal(session);
-  if (run.inDebt) throw new Error('In Debt: pay it off first');
+  if (run.inDebt && cost > 0) throw new Error('In Debt: pay it off first');
   if (run.money < cost) throw new Error('Not enough Money');
   // Upkeep follows from the layout, so it changes with it.
-  return { ...run, layout: session.layout, money: run.money - cost, stats: { ...run.stats, spending: run.stats.spending + cost } };
+  return {
+    ...run, layout: session.layout, ownedPlots: session.ownedPlots, money: run.money - cost,
+    stats: { ...run.stats, spending: run.stats.spending + Math.max(0, cost) },
+  };
+}
+
+/** The structure drawn on top at a tile (buildings over Stands over Runways over Taxiways). */
+export function structureAt(layout: AirportLayout, t: Tile): Structure | undefined {
+  const rank: Record<Structure['kind'], number> = {
+    atcTower: 0, supportBuilding: 0, terminal: 1, cargoHub: 1, stand: 2, holdingBay: 2, runway: 3, taxiway: 4,
+  };
+  return layout.structures
+    .filter((s) => t.x >= s.x && t.x < s.x + s.w && t.y >= s.y && t.y < s.y + s.h)
+    .sort((a, b) => rank[a.kind] - rank[b.kind])[0];
+}
+
+/** The same Runway one length class longer (extending east or south), or null when already Long. */
+export function lengthened(r: Runway): Runway | null {
+  const next: RunwayLength | undefined = r.length === 'short' ? 'medium' : r.length === 'medium' ? 'long' : undefined;
+  if (!next) return null;
+  const tiles = BUILD_COSTS.runwayTiles[next];
+  return r.w >= r.h ? { ...r, w: tiles, length: next } : { ...r, h: tiles, length: next };
+}
+
+/** Plot price for the next purchase in this session. */
+export function nextPlotPrice(session: BuildSession): number {
+  return BUILD_COSTS.plotBase * (session.ownedPlots.length - BUILD_COSTS.startingPlots + 1);
 }
