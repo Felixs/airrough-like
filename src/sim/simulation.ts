@@ -161,6 +161,8 @@ export interface Simulation {
   readonly money: number;
   /** Landings and takeoffs handled today. */
   readonly movements: number;
+  /** Arrival and Departure Fees earned today. */
+  readonly fees: number;
   /** Crashes today. */
   readonly crashes: number;
   /** Crashes earlier this Week (for Crash Fines). */
@@ -226,6 +228,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     seed: setup.seed,
     money: setup.money ?? 0,
     movements: 0,
+    fees: 0,
     crashes: 0,
     earlierCrashesThisWeek: setup.earlierCrashesThisWeek ?? 0,
     diversions: 0,
@@ -390,6 +393,11 @@ function divert(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   f.phaseStart = now;
 }
 
+function earnFee(sim: MutableSim, f: Flight): void {
+  sim.money += AIRCRAFT_TYPES[f.type].fee;
+  sim.fees += AIRCRAFT_TYPES[f.type].fee;
+}
+
 function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, cost = 0): void {
   sim.money -= cost;
   sim.events.push({ minute: now, kind, flightId: f.id, cost });
@@ -543,7 +551,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       const turnaround = turnaroundMinutes(f, stand!);
       if (!f.unloaded && now >= f.phaseStart + turnaround * TIMINGS.unloadShare) {
         f.unloaded = true;
-        sim.money += AIRCRAFT_TYPES[f.type].fee;
+        earnFee(sim, f);
       }
       if (now < f.phaseStart + turnaround) break;
       if (isDark(now) && !nightCapable(sim)) break; // stays overnight
@@ -571,7 +579,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
         enter('holdShort');
         break;
       }
-      sim.money += AIRCRAFT_TYPES[f.type].fee;
+      earnFee(sim, f);
       sim.movements += 1;
       enter('departed');
       break;

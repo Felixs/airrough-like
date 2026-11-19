@@ -3,9 +3,9 @@ import './style.css';
 import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
-import { startingAirport } from './sim/layout';
-import { planDay } from './sim/schedule';
-import { createSimulation, runTo } from './sim/simulation';
+import { dayPlan, endDay, startLiveDay, startRun, type RunState } from './sim/run';
+import { runTo, type Simulation } from './sim/simulation';
+import { dayName, showDayEnd } from './ui/dayEnd';
 import { mountTopBar } from './ui/topBar';
 
 async function start(): Promise<void> {
@@ -14,27 +14,53 @@ async function start(): Promise<void> {
   await app.init({ resizeTo: mapEl, background: '#0b1210', antialias: true, autoDensity: true, resolution: window.devicePixelRatio });
   mapEl.appendChild(app.canvas);
 
-  const layout = startingAirport();
-  const airfield = drawAirfield(layout);
+  let run: RunState = startRun(Math.floor(Math.random() * 2 ** 31));
+  let sim: Simulation = startLiveDay(run);
+  let quota = dayPlan(run).quota;
+  let ended = false;
+
+  let airfield = drawAirfield(run.layout);
   const flightLayer = new FlightLayer();
+  const mountAirfield = () => {
+    airfield.removeChild(flightLayer.container);
+    airfield.destroy({ children: true });
+    airfield = drawAirfield(run.layout);
+    airfield.addChild(flightLayer.container);
+    app.stage.addChild(airfield);
+    fit();
+  };
+  const fit = () => fitToScreen(airfield, run.layout, app.screen.width, app.screen.height);
   airfield.addChild(flightLayer.container);
   app.stage.addChild(airfield);
-  const fit = () => fitToScreen(airfield, layout, app.screen.width, app.screen.height);
   fit();
   app.renderer.on('resize', fit);
 
-  // Week 1 Monday until the Run loop ticket lands.
-  const seed = Math.floor(Math.random() * 2 ** 31);
-  const plan = planDay({ layout, week: 1, weekday: 0, seed });
-  let sim = createSimulation({ layout, seed, schedule: plan.schedule });
   let speed: Speed = 1;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => (speed = s));
+  const dayLabel = document.querySelector<HTMLElement>('#day-name')!;
+
+  const beginDay = () => {
+    sim = startLiveDay(run);
+    quota = dayPlan(run).quota;
+    ended = false;
+    dayLabel.textContent = dayName(run.week, run.weekday);
+    mountAirfield();
+  };
+  dayLabel.textContent = dayName(run.week, run.weekday);
 
   app.ticker.add((ticker) => {
-    sim = runTo(sim, advance(sim.clock, ticker.deltaMS, speed));
+    if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, speed));
     flightLayer.update(sim.flights);
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
-    topBar.showStats(sim.money, sim.movements, plan.quota);
+    topBar.showStats(sim.money, sim.movements, quota);
+    if (!ended && isDayOver(sim.clock)) {
+      ended = true;
+      run = endDay(run, sim);
+      showDayEnd(document.querySelector<HTMLElement>('#app')!, run, beginDay, () => {
+        run = startRun(Math.floor(Math.random() * 2 ** 31));
+        beginDay();
+      });
+    }
   });
 }
 
