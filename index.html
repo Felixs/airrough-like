@@ -13,8 +13,11 @@
         <span id="day-name" class="day-name"></span>
         <span id="clock" class="clock" aria-live="off">05:00</span>
         <span id="day-status" class="day-status"></span>
+        <div id="quota" class="quota" role="meter" aria-label="Movements against the Daily Quota" aria-valuemin="0">
+          <div class="quota-track"><div class="quota-fill"></div><div class="quota-pace"></div></div>
+          <span class="quota-label"><b id="movements">0</b> / <span id="quota-value">0</span></span>
+        </div>
         <span class="money" aria-label="Money">$ <b id="money">0</b></span>
-        <span class="movements">Movements / Quota <b id="movements">0</b></span>
         <span class="spacer"></span>
         <div class="speed" role="group" aria-label="Simulation speed">
           <button type="button" data-speed="0" aria-label="Pause">❚❚</button>
@@ -23,7 +26,23 @@
           <button type="button" data-speed="4">4×</button>
         </div>
       </header>
-      <main id="map" class="map" aria-label="Airfield"></main>
+      <div class="body">
+        <aside id="rail" class="rail" aria-label="Flight strips">
+          <button type="button" id="rail-toggle" class="rail-toggle" aria-expanded="true" aria-controls="rail" title="Collapse flight strips">⟨</button>
+          <section class="strips" data-group="inbound"><h3><span class="icon" aria-hidden="true">↘</span><span class="label">Inbound</span> <span class="count">0</span></h3><ol></ol></section>
+          <section class="strips" data-group="holding"><h3><span class="icon" aria-hidden="true">◎</span><span class="label">Holding</span> <span class="count">0</span></h3><ol></ol></section>
+          <section class="strips" data-group="ground"><h3><span class="icon" aria-hidden="true">▣</span><span class="label">Ground</span> <span class="count">0</span></h3><ol></ol></section>
+        </aside>
+        <main id="map" class="map" aria-label="Airfield">
+          <div class="chips"><span id="runway-chip" class="chip"></span><span id="wind-chip" class="chip"></span></div>
+        </main>
+        <aside class="panel" aria-label="Tower">
+          <section class="actions"><h3>Emergency Actions</h3><p class="empty">Coming soon</p></section>
+          <section class="alerts"><h3>Alerts</h3><ol id="alerts"></ol></section>
+          <section class="stands"><h3>Stands</h3><div id="stands" class="stand-grid"></div></section>
+        </aside>
+      </div>
+      <footer class="hours" aria-label="Movements per hour"><div id="hours" class="hour-bars"></div></footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
