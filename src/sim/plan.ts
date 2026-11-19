@@ -6,6 +6,7 @@ import type { RunwaySurface, Structure } from './layout';
 import { createLayout } from './layout';
 import { dayPlan, upkeep, type DayReport, type RunState, type TowerModules } from './run';
 import { BOSS_DAY, RUSH_DAY, planDay } from './schedule';
+import { twistFor, type Twist } from './twists';
 
 /** Prices *(first guess)*. */
 export const PRICES = {
@@ -99,6 +100,8 @@ export interface CalendarDay {
   readonly boss: boolean;
   readonly state: 'done' | 'today' | 'upcoming' | 'locked';
   readonly result: DayReport | null;
+  /** Shown from the start of its Week; null on locked Weeks. */
+  readonly twist: Twist | null;
 }
 
 export interface CalendarWeek {
@@ -113,10 +116,11 @@ export function runCalendar(run: RunState): CalendarWeek[] {
   return weeks.map((week) => {
     const locked = week > run.week;
     const days = [0, 1, 2, 3, 4, 5, 6].map((weekday): CalendarDay => {
-      const plan = planDay({ layout: run.layout, week, weekday, seed: run.seed });
+      const twist = locked ? null : twistFor(run.seed, week, weekday);
+      const plan = planDay({ layout: run.layout, week, weekday, seed: run.seed, twist });
       const result = run.history.find((h) => h.week === week && h.weekday === weekday) ?? null;
       const state = locked ? 'locked' : result ? 'done' : week === run.week && weekday === run.weekday ? 'today' : week < run.week ? 'done' : 'upcoming';
-      return { weekday, demand: plan.demand, quota: plan.quota, rush: weekday === RUSH_DAY, boss: weekday === BOSS_DAY, state, result };
+      return { weekday, demand: plan.demand, quota: plan.quota, rush: weekday === RUSH_DAY, boss: weekday === BOSS_DAY, state, result, twist };
     });
     return { week, locked, days };
   });

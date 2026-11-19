@@ -109,7 +109,7 @@ export function standsStatus(sim: Simulation): SpotStatus[] {
 
 export interface RunwayStatus {
   readonly name: string;
-  readonly state: 'open' | 'blocked' | 'dark' | 'curfew' | 'unconnected';
+  readonly state: 'open' | 'blocked' | 'dark' | 'curfew' | 'unconnected' | 'ilsOnly';
   readonly until: number | null;
   readonly wind: { readonly direction: number; readonly knots: number };
 }
@@ -121,12 +121,16 @@ export function runwayStatuses(sim: Simulation): RunwayStatus[] {
   const wind = { direction: 240 + Math.round(rng.next() * 6) * 10, knots: 4 + rng.int(12) };
   return sim.layout.runways.map((r, i): RunwayStatus => {
     const name = (r.w >= r.h ? '09-27' : '18-36') + (sim.layout.runways.length > 1 ? ` (R${i + 1})` : '');
-    const lit = r.surface === 'lit' || r.surface === 'ils';
-    const blockedUntil = sim.runwayBlockedUntil[i] ?? 0;
+    const lit = !sim.noLights && (r.surface === 'lit' || r.surface === 'ils');
+    const active = sim.windows.filter((w) => (w.runway === undefined || w.runway === i) && now >= w.from && now < w.to);
+    const closedTo = Math.max(0, ...active.filter((w) => w.kind === 'closed').map((w) => w.to));
+    const blockedUntil = Math.max(sim.runwayBlockedUntil[i] ?? 0, closedTo);
+    const ilsOnly = active.some((w) => w.kind === 'ilsOnly') && (sim.noLights || r.surface !== 'ils');
     if (!sim.network.runways.some((a) => a.index === i)) return { name, state: 'unconnected', until: null, wind };
     if (now < HOURS.operationsStart || now >= HOURS.curfew) return { name, state: 'curfew', until: HOURS.operationsStart, wind };
     if (now < blockedUntil) return { name, state: 'blocked', until: blockedUntil, wind };
     if (isDark(now) && !lit) return { name, state: 'dark', until: null, wind };
+    if (ilsOnly) return { name, state: 'ilsOnly', until: null, wind };
     return { name, state: 'open', until: null, wind };
   });
 }

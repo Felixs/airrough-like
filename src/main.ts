@@ -4,7 +4,7 @@ import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
-import { dayPlan, endDay, startLiveDay, startRun, type RunState } from './sim/run';
+import { dayPlan, dayTwist, endDay, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showDayEnd } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
@@ -62,7 +62,9 @@ async function start(): Promise<void> {
     sim = startLiveDay(run);
     quota = dayPlan(run).quota;
     ended = false;
-    dayLabel.textContent = dayName(run.week, run.weekday);
+    const twist = dayTwist(run);
+    dayLabel.textContent = dayName(run.week, run.weekday) + (twist ? ` · ${twist.name}` : '');
+    dayLabel.title = twist?.description ?? '';
     mountAirfield();
   };
   const openPlan = () => {

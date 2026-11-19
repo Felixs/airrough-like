@@ -61,9 +61,11 @@ describe('Run Calendar', () => {
     expect(week1!.locked).toBe(false);
     expect(week1!.days.map((d: { state: string }) => d.state)).toEqual(['done', 'today', 'upcoming', 'upcoming', 'upcoming', 'upcoming', 'upcoming']);
     expect(week1!.days[0]!.result).toMatchObject({ quotaMet: true });
-    expect(week1!.days[6]).toMatchObject({ boss: true, quota: 87 });
+    expect(week1!.days[6]).toMatchObject({ boss: true });
     expect(week1!.days[5]).toMatchObject({ rush: true });
     expect(week2!.locked).toBe(true);
+    expect(week1!.days[6]!.twist).toMatchObject({ boss: true, severity: 1 });
+    expect(week2!.days[6]!.twist).toBe(null); // not shown before its Week
   });
 });
 
