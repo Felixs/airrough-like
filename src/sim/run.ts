@@ -5,7 +5,7 @@
 import { startingAirport, type AirportLayout, type Structure } from './layout';
 import { mixSeed } from './random';
 import { planDay, type DayPlan } from './schedule';
-import { simulationEffects, twistFor, type Twist } from './twists';
+import { simulationEffects, twistsFor, type Twist } from './twists';
 import { carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
@@ -46,7 +46,10 @@ export interface DayReport {
   readonly moneyAfter: number;
 }
 
-export type RunStatus = 'planning' | 'lost';
+export type RunStatus = 'planning' | 'lost' | 'won';
+
+/** Surviving this many Weeks wins the Run. */
+export const WEEKS_TO_WIN = 4;
 
 export interface RunState {
   readonly seed: number;
@@ -57,6 +60,8 @@ export interface RunState {
   /** 0 = Monday … 6 = Sunday (Boss Day). */
   readonly weekday: number;
   readonly status: RunStatus;
+  /** Continuing after a win, until a Daily Quota is missed. */
+  readonly endless: boolean;
   readonly layout: AirportLayout;
   /** Land Plots owned, by plot column/row (see WORLD). */
   readonly ownedPlots: readonly LandPlot[];
@@ -98,6 +103,7 @@ export function startRun(seed: number): RunState {
     week: 1,
     weekday: 0,
     status: 'planning',
+    endless: false,
     layout: startingAirport(),
     ownedPlots: [0, 1, 2].flatMap((px) => [0, 1].map((py) => ({ px, py }))),
     towerModules: { radar: 1, groundRadar: 1, weatherStation: 1, controllerTraining: 1 },
@@ -137,14 +143,19 @@ export function upkeep(run: RunState): number {
   );
 }
 
-/** The current Day's Twist, if any. */
+/** The current Day's Twists (Endless Boss Days stack several). */
+export function dayTwists(run: RunState): Twist[] {
+  return twistsFor(run.seed, run.week, run.weekday);
+}
+
+/** The current Day's first Twist, if any. */
 export function dayTwist(run: RunState): Twist | null {
-  return twistFor(run.seed, run.week, run.weekday);
+  return dayTwists(run)[0] ?? null;
 }
 
 export function dayPlan(run: RunState): DayPlan {
   return planDay({
-    layout: run.layout, week: run.week, weekday: run.weekday, seed: run.seed, includeOvernight: run.dayIndex === 0, twist: dayTwist(run),
+    layout: run.layout, week: run.week, weekday: run.weekday, seed: run.seed, includeOvernight: run.dayIndex === 0, twist: dayTwists(run),
   });
 }
 
@@ -153,7 +164,7 @@ export function startLiveDay(run: RunState): Simulation {
   const plan = dayPlan(run);
   // On the first Day the Schedule's overnight aircraft stand in for "last night"; afterwards the real ones carry over.
   const today = plan.schedule.map((f) => ({ ...f, id: `D${run.dayIndex + 1}-${f.id}` }));
-  const effects = simulationEffects(dayTwist(run), mixSeed(run.seed, run.dayIndex), run.towerModules.weatherStation);
+  const effects = simulationEffects(dayTwists(run), mixSeed(run.seed, run.dayIndex), run.towerModules.weatherStation);
   return createSimulation({
     riskMultiplier: effects.riskMultiplier,
     windows: effects.windows,
@@ -175,6 +186,7 @@ export function startLiveDay(run: RunState): Simulation {
 export function endDay(run: RunState, sim: Simulation): RunState {
   const quota = dayPlan(run).quota;
   const quotaMet = sim.movements >= quota;
+  const endOfWeek = run.weekday === 6;
   const cost = upkeep(run);
   const penalties = sim.events.reduce((n, e) => n + e.cost, 0);
   const money = sim.money - cost;
@@ -182,10 +194,10 @@ export function endDay(run: RunState, sim: Simulation): RunState {
     week: run.week, weekday: run.weekday, quota, movements: sim.movements, fees: sim.fees, upkeep: cost, penalties,
     crashes: sim.crashes, diversions: sim.diversions, quotaMet, moneyAfter: money,
   };
-  const endOfWeek = run.weekday === 6;
+  const won = quotaMet && !run.endless && endOfWeek && run.week === WEEKS_TO_WIN;
   return {
     ...run,
-    status: quotaMet ? 'planning' : 'lost',
+    status: !quotaMet ? 'lost' : won ? 'won' : 'planning',
     dayIndex: run.dayIndex + 1,
     week: endOfWeek ? run.week + 1 : run.week,
     weekday: endOfWeek ? 0 : run.weekday + 1,
@@ -203,6 +215,12 @@ export function endDay(run: RunState, sim: Simulation): RunState {
     },
     history: [...run.history, report],
   };
+}
+
+/** After a win: keep playing into Endless Mode. */
+export function continueEndless(run: RunState): RunState {
+  if (run.status !== 'won') return run;
+  return { ...run, status: 'planning', endless: true };
 }
 
 /** Plays the current Day to the end without any Player input (tests, autoplay). */
