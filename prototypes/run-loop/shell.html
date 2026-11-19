@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE · Run loop</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2433; --mute:#6b7385; --line:#e3e6ec; --accent:#2563eb; --bad:#c62828; --warn:#b26a00; --good:#2e7d32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:980px; margin:0 auto; padding:14px; }
+  h1 { font-size:20px; margin:4px 0 6px; }
+  h2 { font-size:14px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mute); }
+  h3 { font-size:14px; margin:12px 0 6px; }
+  p { margin:6px 0; }
+  .tag { display:inline-block; font-size:11px; padding:2px 7px; border-radius:99px; background:#fdecc8; color:#7a4b00; font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:12px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  label.f { display:flex; flex-direction:column; font-size:12px; color:var(--mute); gap:3px; flex:1 1 130px; }
+  select, input { font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  button { font:inherit; font-size:14px; padding:9px 12px; border-radius:9px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.next { outline:3px solid #93b4f5; }
+  button.done { opacity:.55; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; }
+  .stat { border:1px solid var(--line); border-radius:9px; padding:8px; }
+  .stat b { display:block; font-size:18px; }
+  .stat span { font-size:12px; color:var(--mute); }
+  .bad { color:var(--bad); } .warn { color:var(--warn); } .good { color:var(--good); } .mute { color:var(--mute); }
+  .cal { display:grid; grid-template-columns:auto repeat(7, minmax(0, 1fr)); gap:3px; font-size:12px; }
+  .cal .wk { color:var(--mute); align-self:center; padding-right:4px; }
+  .cal .dh { text-align:center; color:var(--mute); }
+  .cell { border:1px solid var(--line); border-radius:7px; min-height:46px; padding:4px 1px; text-align:center; overflow:hidden; background:#fff; cursor:pointer; line-height:1.25; }
+  .cell.locked { background:#eef0f3; color:#a3a9b6; cursor:default; }
+  .cell.next { outline:2px solid var(--accent); }
+  .cell.sel { background:#eef4ff; }
+  .cell.boss { border-color:#c9b6f5; }
+  .cell.lost { background:#fdeaea; }
+  .cell small { display:block; color:var(--mute); font-size:10px; letter-spacing:-.02em; }
+  .detail { margin-top:10px; background:#f3f5f9; border-radius:9px; padding:10px; font-size:14px; }
+  .shop-group { margin-top:10px; }
+  .item { display:flex; justify-content:space-between; gap:8px; align-items:center; border-bottom:1px dashed var(--line); padding:6px 0; }
+  .item .lbl { font-size:14px; }
+  .item .lbl small { display:block; color:var(--mute); }
+  .item button { white-space:nowrap; padding:7px 10px; }
+  .tabs { display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; }
+  .tabs button { white-space:nowrap; }
+  .tabs button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .steps { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .steps button { text-align:left; }
+  .report { font-size:14px; }
+  .report ul { margin:6px 0; padding-left:18px; }
+  .sticky { position:sticky; top:0; z-index:5; background:var(--bg); padding:6px 0; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px 12px; font-size:14px; }
+  .bar b { font-variant-numeric:tabular-nums; }
+  details summary { cursor:pointer; color:var(--mute); }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">THROWAWAY PROTOTYPE</span>
+  <h1>Airport Auto Battler · Does the Run loop feel right?</h1>
+  <p><b>Question:</b> with the new rules (lose by missing a Daily Quota once; Crashes cost Crash Fines; Airport Closed diverts instead of crashing; Saturday Rush Day; stronger traffic; ATC upgrades shorten Runway Separation), does a 4-Week Run force real building choices, and does the Run Calendar let you prepare for each Boss Day?</p>
+  <p class="mute">Quota = 75% of the Day's Demand in Movements (landings + takeoffs), 90% on Boss Days. Each Day auto-plays the Live Day simulation. On a Fuel Alert it uses Manual Divert if built, else Priority Landing; on an Emergency Alert it always intervenes. "Autopilot" is a prototype helper that builds with a simple rule set so you can fast-forward; it is not a game feature. The simulation steps every 15 seconds. Runway Separation goes from 4 min (landing) / 3 min (takeoff) down to 2 / 1.5 min as Radar and Controller Training rise. Large aircraft only appear from Thursday of Week 2. Each extra copy of the same Stand, Holding Bay or Runway costs 25% more than the last. Each Size Class only sends as many flights as its fitting Stands can absorb (Small 10, Medium 8, Large 6 per Stand per Day). Crash Fines: Small 5k / Medium 10k / Large 20k, +50% per earlier Crash that Week, capped at ×3. A plane at minimum fuel diverts when no Runway that fits it is open. Prices are first guesses. Same seed = same Run.</p>
+
+  <div class="card">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+  </div>
+
+  <div class="sticky"><div class="bar" id="bar"></div></div>
+
+  <div class="card">
+    <h2>New Run</h2>
+    <div class="row">
+      <label class="f">Seed<input id="seed" type="number" value="1"></label>
+      <button class="primary" id="newRun">Start new Run</button>
+      <button id="autopilot">Autopilot: build + play rest of Week</button>
+    </div>
+  </div>
+
+  <div class="card" id="scoreCard" hidden></div>
+
+  <div class="card">
+    <h2>Run Calendar</h2>
+    <div class="cal" id="cal"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+
+  <div class="card" id="reportCard" hidden></div>
+
+  <div class="card">
+    <h2>Plan Mode</h2>
+    <div class="row">
+      <button class="primary" id="playDay">Play next Day</button>
+      <button id="playWeek">Play rest of Week</button>
+      <button id="playRun">Play rest of Run</button>
+    </div>
+    <div id="airport" class="mute" style="margin-top:10px;font-size:13px"></div>
+    <div id="shop"></div>
+    <details style="margin-top:12px"><summary>Demolish (50% refund)</summary><div id="demolish"></div></details>
+  </div>
+</main>
+
+<script>
+/*__SIM__*/
+</script>
+<script>
+// ===================== Page shell (throwaway) =====================
+const $ = (id) => document.getElementById(id);
+const L = LiveDay, R = RunLoop;
+let run, selected = null, lastAction = null;
+
+function money(n) { return (n < 0 ? '−' : '') + Math.abs(Math.round(n)).toLocaleString('en-US'); }
+function dispatch(action) { const before = run; run = R.reduce(run, action); lastAction = { action, before }; selected = null; render(); }
+function newRun(start, seed) { run = R.newRun({ start, seed }); selected = null; lastAction = null; render(); }
+
+$('newRun').onclick = () => newRun('allrounder', +$('seed').value || 1);
+$('autopilot').onclick = () => dispatch({ type: 'autopilotWeek' });
+$('playDay').onclick = () => dispatch({ type: 'playDay' });
+$('playWeek').onclick = () => dispatch({ type: 'playWeek' });
+$('playRun').onclick = () => dispatch({ type: 'playRun' });
+
+function twistLabel(k) { const t = L.TWISTS[k]; return k === 'none' ? 'No Twist' : `${t.short} ${t.name} <span class="mute">(${t.family}, Severity ${t.sev})</span>`; }
+
+function reportHtml(r, title) {
+  const st = r.stats, m = r.meta;
+  const skipped = m.skipped.slice(1).map((n, i) => n ? `${n} ${L.SIZE[i + 1]}` : '').filter(Boolean).join(', ');
+  const capped = (m.capped || []).slice(1).map((n, i) => n ? `${n} ${L.SIZE[i + 1]}` : '').filter(Boolean).join(', ');
+  return `<div class="report"><b>${title}</b> · ${twistLabel(r.twist)}
+    <div class="stats" style="margin-top:8px">
+      <div class="stat"><b class="${r.lost ? 'bad' : 'good'}">${r.movements} / ${r.quota}</b><span>Movements / Daily Quota</span></div>
+      <div class="stat"><b class="${r.net < 0 ? 'bad' : 'good'}">${r.net >= 0 ? '+' : ''}${money(r.net)}</b><span>Net Money</span></div>
+      <div class="stat"><b>+${money(r.fees)}</b><span>Fees</span></div>
+      <div class="stat"><b>−${money(r.upkeep)}</b><span>Upkeep</span></div>
+      <div class="stat"><b>${st.landed}/${st.departed}</b><span>Landed / Departed</span></div>
+      <div class="stat"><b class="${st.crashes ? 'bad' : ''}">${st.crashes}</b><span>Crashes (Fines −${money(st.crashFines)})</span></div>
+      <div class="stat"><b class="${st.closedMinutes ? 'warn' : ''}">${Math.round(st.closedMinutes / 60 * 10) / 10} h</b><span>Airport Closed (${st.closedDiversions} diverted at min. fuel)</span></div>
+      <div class="stat"><b>${st.diversions}</b><span>Diversions</span></div>
+      <div class="stat"><b>${st.incidents}</b><span>Incidents (−${money(st.incidentCosts)})</span></div>
+      <div class="stat"><b>${st.fuelAlerts}</b><span>Fuel Alerts</span></div>
+    </div>
+    <p class="mute" style="margin-top:8px">Schedule: ${m.mix[1]} Small, ${m.mix[2]} Medium, ${m.mix[3]} Large arrivals.${m.swapped ? ` ${m.swapped} swapped to Small (Week 1 rule).` : ''}${skipped ? ` <b class="warn">Didn't come (you can't handle them): ${skipped}.</b>` : ''}${capped ? ` <b class="warn">Didn't come (not enough Stands of that size): ${capped}.</b>` : ''}</p>
+    ${r.events.length ? `<ul>${r.events.map(e => `<li class="${/CRASH|lost/.test(e) ? 'bad' : ''}">${e}</li>`).join('')}</ul>` : ''}
+    ${r.lost ? `<p class="bad"><b>Daily Quota missed (${r.movements} of ${r.quota} Movements): Run lost.</b></p>` : ''}</div>`;
+}
+
+function render() {
+  const idx = R.dayIndex(run), up = R.upkeep(run.airport), cap = run.plots * R.P.plotSize, used = R.spaceUsed(run.airport);
+  // status bar
+  $('bar').innerHTML = run.over
+    ? `<b>${run.won ? '🏆 Run won' : '💥 Run lost'}</b> · Money <b>${money(run.money)}</b>`
+    : `<span>Next: <b>Week ${run.week} · ${L.DAYS[run.dow]}</b></span><span>Money <b class="${run.money < 0 ? 'bad' : ''}">${money(run.money)}</b></span>
+       <span>Crashes this Week <b class="${run.weekCrashes ? 'warn' : ''}">${run.weekCrashes}</b></span><span>Upkeep <b>${money(up)}</b>/Day</span><span>Space <b>${used}/${cap}</b></span>`;
+  $('seed').value = run.seed;
+
+  // calendar
+  let cal = '<div></div>' + L.DAYS.map(d => `<div class="dh">${d.slice(0, 3)}</div>`).join('');
+  for (let w = 1; w <= 4; w++) {
+    cal += `<div class="wk">W${w}</div>`;
+    for (let d = 0; d < 7; d++) {
+      const i = (w - 1) * 7 + d, h = run.history[i], tw = L.TWISTS[run.twists[i]];
+      const visible = w <= run.week || run.over;
+      const cls = ['cell', !visible ? 'locked' : '', i === idx && !run.over ? 'next' : '', selected === i ? 'sel' : '', d === 6 ? 'boss' : '', h && h.lost ? 'lost' : ''].join(' ');
+      let inner;
+      if (h) inner = `${h.lost ? '✗' : '✓'}${h.stats.crashes ? '💥' : ''}<small>${h.movements}/${h.quota}</small>`;
+      else if (visible) inner = `${tw.short || '·'}<small>${d === 6 ? 'BOSS' : d === 5 ? 'RUSH' : ''} Q${R.forecast(run, i).meta.quota}</small>`;
+      else inner = d === 6 ? '?<small>BOSS</small>' : '';
+      cal += `<div class="${cls}" data-i="${i}">${inner}</div>`;
+    }
+  }
+  $('cal').innerHTML = cal;
+  $('cal').querySelectorAll('.cell').forEach(c => c.onclick = () => { const i = +c.dataset.i; const w = Math.floor(i / 7) + 1; if (w > run.week && !run.over) return; selected = i; render(); });
+
+  const sel = selected != null ? selected : (run.over ? run.history.length - 1 : idx);
+  const sw = Math.floor(sel / 7) + 1, sd = sel % 7;
+  if (run.history[sel]) $('detail').innerHTML = reportHtml(run.history[sel], `Week ${sw} · ${L.DAYS[sd]}`);
+  else {
+    const f = R.forecast(run, sel), m = f.meta;
+    const skipped = m.skipped.slice(1).map((n, i) => n ? `${n} ${L.SIZE[i + 1]}` : '').filter(Boolean).join(', ');
+    const capped = m.capped.slice(1).map((n, i) => n ? `${n} ${L.SIZE[i + 1]}` : '').filter(Boolean).join(', ');
+    $('detail').innerHTML = `<b>Forecast · Week ${sw} · ${L.DAYS[sd]}${sd === 6 ? ' (Boss Day)' : ''}</b><br>${twistLabel(run.twists[sel])}
+      <p><b>Daily Quota: ${m.quota} Movements</b> (Demand ${m.wanted} flights${sd === 6 ? ', Boss Day 90%' : ''}).</p>
+      <p>${f.flights} arrivals will come: ${m.mix[1]} Small, ${m.mix[2]} Medium, ${m.mix[3]} Large${m.swapped ? `, ${m.swapped} swapped to Small` : ''}, plus ${f.parked} parked overnight.</p>
+      ${skipped ? `<p class="warn">Would not come with your current airport: ${skipped}.</p>` : ''}
+      ${capped ? `<p class="warn">Would not come (not enough Stands of that size): ${capped}.</p>` : ''}
+      <p class="mute">Forecast uses your airport as it is right now. Later Weeks stay locked until they start.</p>`;
+  }
+
+  // last report + score
+  if (lastAction && lastAction.action.type.startsWith('play') && run.lastReport) {
+    const played = run.history.filter((h, i) => h && !lastAction.before.history[i]);
+    const net = run.money - lastAction.before.money;
+    $('reportCard').hidden = false;
+    $('reportCard').innerHTML = `<h2>What just happened</h2>${played.length > 1 ? `<p>${played.length} Days played, net ${net >= 0 ? '+' : ''}${money(net)}, ${played.reduce((n, h) => n + h.stats.crashes, 0)} Crashes. Tap Days in the Run Calendar for details. Last Day:</p>` : ''}${reportHtml(run.lastReport, `Week ${run.lastReport.week} · ${L.DAYS[run.lastReport.dow]}`)}`;
+  } else $('reportCard').hidden = true;
+
+  if (run.over) {
+    const sc = R.score(run);
+    $('scoreCard').hidden = false;
+    $('scoreCard').innerHTML = `<h2>Score Screen</h2><p><b>${run.won ? 'You survived all 4 Weeks!' : `Run lost in Week ${run.lastReport.week} on ${L.DAYS[run.lastReport.dow]}: Daily Quota missed.`}</b></p>
+      <div class="stats"><div class="stat"><b>${sc.days}</b><span>Days survived</span></div><div class="stat"><b>${run.totals.flights}</b><span>Flights handled</span></div>
+      <div class="stat"><b>${money(run.totals.fees)}</b><span>Fees earned</span></div><div class="stat"><b>${money(run.spent)}</b><span>Spent on building</span></div>
+      <div class="stat"><b>${run.totals.crashes}</b><span>Crashes (−${money(run.totals.fines)})</span></div><div class="stat"><b>${money(sc.score)}</b><span>Score</span></div>
+      <div class="stat"><b class="good">${money(sc.airMiles)}</b><span>Air Miles</span></div></div>`;
+  } else $('scoreCard').hidden = true;
+
+  ['playDay', 'playWeek', 'playRun'].forEach(id => $(id).disabled = run.over);
+
+  // airport + shop
+  const a = run.airport;
+  $('airport').innerHTML = `<b>Your airport:</b> ${a.runways.map((r, i) => `R${i + 1} ${L.LEN[r.len]} ${L.SURF_NAME[r.surf]}`).join(', ')} ·
+    Stands: ${a.stands.map(s => `${L.SIZE[s.size][0]}${s.kind === 'remote' ? 'r' : ''}${s.hub === 'cargo' ? '(cargo)' : ''}`).join(' ')} ·
+    Holding Bays: ${a.bays.map(b => L.SIZE[b.size][0]).join(' ') || 'none'} · Tower: Radar ${a.tower.radar}, Ground ${a.tower.ground}, Weather ${a.tower.weather}, Training ${a.tower.training} ·
+    Fire & Rescue: ${a.fire || 'none'} · Support: ${['ramp', 'admin', 'airline'].filter(k => a.support[k]).join(', ') || 'none'}`;
+  const items = R.shop(run), groups = [...new Set(items.map(i => i.group))];
+  $('shop').innerHTML = groups.map(g => `<div class="shop-group"><h3>${g}</h3>${items.filter(i => i.group === g).map(i => `
+    <div class="item"><div class="lbl">${i.label}<small>${money(i.cost)}${i.space ? ` · ${i.space} space` : ''}${i.upkeep ? ` · +${money(i.upkeep)} Upkeep/Day` : ''}${i.hint ? ` · ${i.hint}` : ''}${i.why ? ` · <span class="warn">${i.why}</span>` : ''}</small></div>
+    <button data-buy="${i.key}" ${i.ok ? '' : 'disabled'}>Buy</button></div>`).join('')}</div>`).join('');
+  $('shop').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => dispatch({ type: 'build', key: b.dataset.buy }));
+  $('demolish').innerHTML = R.structures(run).map(s => `<div class="item"><div class="lbl">${s.label}<small>refund ${money(s.refund)}</small></div><button data-dem="${s.key}" ${run.over ? 'disabled' : ''}>Demolish</button></div>`).join('');
+  $('demolish').querySelectorAll('[data-dem]').forEach(b => b.onclick = () => dispatch({ type: 'demolish', key: b.dataset.dem }));
+}
+
+// ---- Walkthroughs ----
+const SCENARIOS = [
+  {
+    name: '1 · Hands-off Run',
+    text: 'Never build anything. The Daily Quota grows every Day (shown as Q in the Run Calendar) and the Saturday Rush Day doubles traffic. The starting airport soon can\'t keep up, and from Week 2 Large aircraft you can\'t handle don\'t come at all. Expect the Run to end on the first Boss Day or early in Week 2.',
+    seed: 1,
+    steps: [['Play Week 1', { type: 'playWeek' }], ['Play Week 2', { type: 'playWeek' }]],
+  },
+  {
+    name: '2 · Read the Calendar',
+    text: 'The Autopilot builds sensibly for three Weeks but never looks at the Calendar. At the start of Week 4, the Calendar shows the Boss Day: a Thunderstorm that needs ILS. We upgrade Runway 1 from Lit to ILS (80k), then play Week 4.',
+    seed: 1,
+    steps: [['Autopilot Week 1', { type: 'autopilotWeek' }], ['Autopilot Week 2', { type: 'autopilotWeek' }], ['Autopilot Week 3', { type: 'autopilotWeek' }], ['Buy R1: Lit → ILS', { type: 'build', key: 'surface:0' }], ['Play Week 4', { type: 'playWeek' }]],
+  },
+  {
+    name: '3 · Ignore the Calendar',
+    text: 'Same Run, but nobody buys ILS. Despite a huge bank account, the Thunderstorm closes the airport for hours. Low-fuel planes divert (no Crashes thanks to Airport Closed), and the Boss Day Quota is missed. Compare the Boss Day report with scenario 2.',
+    seed: 1,
+    steps: [['Autopilot Week 1', { type: 'autopilotWeek' }], ['Autopilot Week 2', { type: 'autopilotWeek' }], ['Autopilot Week 3', { type: 'autopilotWeek' }], ['Play Week 4', { type: 'playWeek' }]],
+  },
+];
+let activeTab = 0, stepIdx = 0;
+function renderTabs() {
+  $('tabs').innerHTML = SCENARIOS.map((sc, i) => `<button class="${i === activeTab ? 'on' : ''}" data-tab="${i}">${sc.name}</button>`).join('');
+  const sc = SCENARIOS[activeTab];
+  $('scenario').innerHTML = `<p>${sc.text}</p><div class="steps">
+    <button data-step="-1" class="${stepIdx === 0 ? 'next' : 'done'}">Start: new Run for this scenario</button>
+    ${sc.steps.map(([l], i) => `<button data-step="${i}" class="${stepIdx === i + 1 ? 'next' : stepIdx > i + 1 ? 'done' : ''}">${i + 1}. ${l}</button>`).join('')}</div>`;
+}
+$('tabs').onclick = (e) => { const i = e.target.dataset.tab; if (i == null) return; activeTab = +i; stepIdx = 0; renderTabs(); };
+$('scenario').onclick = (e) => {
+  const i = e.target.dataset.step; if (i == null) return;
+  const sc = SCENARIOS[activeTab];
+  if (+i === -1 || stepIdx === 0) { newRun('allrounder', sc.seed); stepIdx = 1; }
+  if (+i >= 0) {
+    const act = sc.steps[+i][1];
+    if (act.type === 'playDays') { const before = run; for (let k = 0; k < act.n; k++) run = R.reduce(run, { type: 'playDay' }); lastAction = { action: { type: 'playDays' }, before }; selected = null; render(); }
+    else dispatch(act);
+    stepIdx = +i + 2;
+  }
+  renderTabs();
+};
+
+newRun('allrounder', 1);
+renderTabs();
+</script>
+</body>
+</html>

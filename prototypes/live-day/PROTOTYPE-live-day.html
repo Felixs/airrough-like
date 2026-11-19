@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE · Live Day</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2433; --mute:#6b7385; --line:#e3e6ec; --accent:#2563eb; --bad:#c62828; --warn:#b26a00; --good:#2e7d32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:980px; margin:0 auto; padding:14px; }
+  h1 { font-size:20px; margin:4px 0 6px; }
+  h2 { font-size:15px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mute); }
+  p { margin:6px 0; }
+  .tag { display:inline-block; font-size:11px; padding:2px 7px; border-radius:99px; background:#fdecc8; color:#7a4b00; font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:12px 0; }
+  .grid { display:grid; gap:12px; grid-template-columns:1fr; }
+  @media (min-width:820px){ .grid.two { grid-template-columns:1fr 1fr; } }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  label.f { display:flex; flex-direction:column; font-size:12px; color:var(--mute); gap:3px; flex:1 1 130px; }
+  select, input { font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  button { font:inherit; font-size:14px; padding:9px 12px; border-radius:9px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.next { outline:3px solid #93b4f5; }
+  button.done { opacity:.55; }
+  .clock { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+  .stat { border:1px solid var(--line); border-radius:9px; padding:8px; }
+  .stat b { display:block; font-size:18px; }
+  .stat span { font-size:12px; color:var(--mute); }
+  .bad { color:var(--bad); } .warn { color:var(--warn); } .good { color:var(--good); } .mute { color:var(--mute); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; border:1px solid var(--line); margin:2px 2px 2px 0; }
+  .pill.busy { background:#e8effe; border-color:#bcd0fb; }
+  .pill.closed { background:#fdeaea; border-color:#f3b9b9; }
+  .pill.free { background:#eaf6ea; border-color:#bfe0bf; }
+  .bar { height:6px; background:#eee; border-radius:4px; overflow:hidden; width:80px; display:inline-block; vertical-align:middle; }
+  .bar i { display:block; height:100%; background:var(--good); }
+  .bar i.low { background:var(--bad); }
+  ul.plain { list-style:none; padding:0; margin:0; }
+  ul.plain li { padding:4px 0; border-bottom:1px dashed var(--line); font-size:14px; }
+  .log { max-height:320px; overflow:auto; font-size:13px; }
+  .log li.new { background:#fff8db; }
+  .alert { border:2px solid var(--bad); background:#fff4f4; }
+  .tabs { display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; }
+  .tabs button { white-space:nowrap; }
+  .tabs button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .steps { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .steps button { text-align:left; }
+  .changed { font-size:13px; background:#eef4ff; border-radius:8px; padding:8px; margin-top:8px; }
+  .risk { font-weight:700; }
+  details summary { cursor:pointer; color:var(--mute); }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">THROWAWAY PROTOTYPE</span>
+  <h1>Airport Auto Battler · Does the Live Day feel right?</h1>
+  <p><b>Question:</b> when an airport is under-built, does it fail in a way the Player can <i>see coming and understand</i> (planes Holding → Fuel Reserve running low → Crash → Strike), and do upgrades in Plan Mode visibly fix it? Also: do Twists, the Curfew, Emergency Actions and Emergency Alerts behave sensibly?</p>
+  <p class="mute">The map is abstract here (no tiles, no pathfinding): Taxiways are just a travel time. Numbers are first guesses, not balance. Same settings + same seed always replay the same Day.</p>
+
+  <!-- Walkthroughs -->
+  <div class="card">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+    <div id="scenStatus" class="changed" hidden></div>
+  </div>
+  <div id="alertBox" class="card alert" hidden></div>
+
+  <div class="grid two">
+    <!-- Plan Mode -->
+    <div class="card">
+      <h2>Plan Mode (changing anything restarts the Day)</h2>
+      <div class="row">
+        <label class="f">Starting Airport<select id="preset"></select></label>
+        <label class="f">Week<select id="week"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+        <label class="f">Day<select id="dow"></select></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="f">Twist<select id="twist"></select></label>
+        <label class="f">Strikes already this Week<select id="strikes0"><option>0</option><option>1</option><option>2</option></select></label>
+        <label class="f">Seed<input id="seed" type="number" value="1"></label>
+      </div>
+      <p style="margin-top:10px"><b>Build &amp; upgrade</b></p>
+      <div class="row" id="upgrades"></div>
+      <details style="margin-top:10px"><summary>Current airport</summary><div id="airportDesc" style="margin-top:6px"></div></details>
+      <div class="row" style="margin-top:10px"><button class="primary" id="restart">Restart Day</button></div>
+    </div>
+
+    <!-- Live controls -->
+    <div class="card">
+      <h2>Live Day</h2>
+      <div class="row" style="justify-content:space-between">
+        <div class="clock" id="clock">05:00</div>
+        <div id="riskBox"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button data-adv="15">+15 min</button>
+        <button data-adv="60">+1 hour</button>
+        <button id="untilEvent">Run until something happens</button>
+        <button id="toEnd">Run to end of Day</button>
+      </div>
+      <p style="margin:12px 0 4px"><b>Emergency Actions</b></p>
+      <div class="row" id="actions"></div>
+      <div id="changed" class="changed" hidden></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>State</h2>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="grid two">
+    <div class="card"><h2>In the air</h2><div id="air"></div></div>
+    <div class="card"><h2>Runways</h2><div id="runways"></div><h2 style="margin-top:14px">Departure queue</h2><div id="queue"></div></div>
+  </div>
+  <div class="grid two">
+    <div class="card"><h2>Stands</h2><div id="stands"></div></div>
+    <div class="card"><h2>Event log (newest first)</h2><ul class="plain log" id="log"></ul></div>
+  </div>
+</main>
+
+<script id="sim">
+// ===================== SIM-START: pure Live Day model (no DOM) =====================
+const LiveDay = (() => {
+  const SIZE = ['', 'Small', 'Medium', 'Large'];
+  const SURF = ['grass', 'asphalt', 'lit', 'ils'];
+  const SURF_NAME = { grass: 'Grass', asphalt: 'Asphalt', lit: 'Lit', ils: 'ILS' };
+  const LEN = ['', 'Short', 'Medium', 'Long'];
+
+  const AIRCRAFT = [
+    { id: 'C208', name: 'Cessna 208 Caravan', size: 1, purpose: 'pax', fee: 150, fuel: 40 },
+    { id: 'C208F', name: 'Cessna 208 Cargomaster', size: 1, purpose: 'cargo', fee: 160, fuel: 40 },
+    { id: 'Q400', name: 'Dash 8-Q400', size: 1, purpose: 'pax', fee: 300, fuel: 40 },
+    { id: 'A320', name: 'A320', size: 2, purpose: 'pax', fee: 600, fuel: 45 },
+    { id: 'B738', name: 'B737-800', size: 2, purpose: 'pax', fee: 600, fuel: 45 },
+    { id: 'B738F', name: 'B737-800BCF', size: 2, purpose: 'cargo', fee: 700, fuel: 45 },
+    { id: 'B77W', name: 'B777-300ER', size: 3, purpose: 'pax', fee: 1400, fuel: 55 },
+    { id: 'A350', name: 'A350', size: 3, purpose: 'pax', fee: 1400, fuel: 55 },
+    { id: 'B748F', name: 'B747-8F', size: 3, purpose: 'cargo', fee: 1800, fuel: 55 },
+  ];
+
+  const PRESETS = {
+    regional: {
+      name: 'Regional Field (hard)', money: 5000,
+      runways: [{ len: 1, surf: 'grass' }],
+      stands: [{ size: 1, kind: 'contact', hub: 'pax' }, { size: 1, kind: 'contact', hub: 'pax' }],
+      tower: { radar: 1, ground: 1, weather: 1, training: 1 },
+      support: { ramp: false, admin: false, airline: false },
+    },
+    allrounder: {
+      name: 'All-Rounder (normal)', money: 15000,
+      runways: [{ len: 2, surf: 'asphalt' }],
+      stands: [
+        { size: 2, kind: 'contact', hub: 'pax' }, { size: 2, kind: 'contact', hub: 'pax' },
+        { size: 1, kind: 'contact', hub: 'pax' }, { size: 1, kind: 'contact', hub: 'pax' },
+        { size: 2, kind: 'contact', hub: 'cargo' },
+        { size: 2, kind: 'remote', hub: 'pax' }, { size: 2, kind: 'remote', hub: 'pax' },
+      ],
+      tower: { radar: 1, ground: 1, weather: 1, training: 1 },
+      support: { ramp: false, admin: false, airline: false },
+    },
+  };
+
+  // Twists. Times are minutes since 00:00.
+  const TWISTS = {
+    none: { name: 'No Twist' },
+    windy: { name: 'Windy · Weather, Severity 1', from: 360, to: 1440, pilot: 1.5 },
+    rain: { name: 'Heavy Rain + Crosswind · Weather, Severity 2', from: 600, to: 1080, pilot: 2, atc: 1.3, windShift: 840 },
+    storm: { name: 'Storm · Weather, Severity 3', from: 780, to: 1020, pilot: 2.5, atc: 1.8, needILS: true, windShift: 900 },
+    thunder: { name: 'Thunderstorm · Weather, Severity 4', from: 720, to: 1080, pilot: 3, atc: 2.2, needILS: true, closeAll: [840, 900], windShift: 960 },
+    closure: { name: 'Runway closure · Infrastructure, Severity 3', closeFirst: [540, 900] },
+    surge: { name: 'Heavy Day · Traffic Surge, Severity 3', traffic: 1.4, largeBoost: 0.15 },
+  };
+
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday (Boss Day)'];
+
+  const T = {
+    dayStart: 300, opsStart: 360, lastArrival: 1320, curfew: 1440, daylightEnd: 1200,
+    landMin: 3, takeoffMin: 2, taxiMin: 5, lowFuel: 10,
+    turnaround: [0, 25, 40, 60], remoteFactor: 1.5, unloadShare: 0.4,
+    incidentCost: 2000, groundIncidentCost: 1000,
+    cooldown: { groundStop: 480, priority: 90, divert: 60, rush: 90 },
+    groundStopMin: 10,
+  };
+
+  const fmt = (t) => { const h = Math.floor(t / 60) % 25, m = t % 60; return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); };
+
+  function rngNext(state) { // mulberry32, state.seed mutated
+    let a = (state.seed = (state.seed + 0x6D2B79F5) | 0);
+    a = Math.imul(a ^ (a >>> 15), a | 1);
+    a ^= a + Math.imul(a ^ (a >>> 7), a | 61);
+    return ((a ^ (a >>> 14)) >>> 0) / 4294967296;
+  }
+
+  function upkeep(airport) {
+    let u = 0;
+    for (const r of airport.runways) u += [0, 300, 600, 1000][r.len] + { grass: 0, asphalt: 100, lit: 200, ils: 400 }[r.surf];
+    for (const s of airport.stands) u += s.kind === 'contact' ? 100 : 50;
+    for (const k in airport.tower) u += airport.tower[k] * 100;
+    for (const k in airport.support) if (airport.support[k]) u += 150;
+    return u;
+  }
+
+  function log(s, text, kind = 'info', stop = false) { s.log.push({ t: s.t, text, kind, seq: s.log.length, stop: stop || kind === 'bad' }); }
+
+  function runwayCanServe(r, size) { return r.len >= size && (r.surf !== 'grass' || size === 1); }
+  function standFits(st, f) { return st.hub === f.purpose && st.size >= f.size; }
+
+  function makeSchedule(cfg, s) {
+    const tw = TWISTS[cfg.twist] || TWISTS.none;
+    const w = cfg.week, d = cfg.dow;
+    const count = Math.round((18 + 8 * (w - 1)) * (1 + 0.1 * d) * (tw.traffic || 1));
+    let pSmall = [0.6, 0.45, 0.35, 0.25][w - 1], pLarge = [0.05, 0.1, 0.15, 0.25][w - 1];
+    if (tw.largeBoost) { pLarge += tw.largeBoost; pSmall -= tw.largeBoost; }
+    const hours = []; for (let h = 6; h <= 21; h++) hours.push(h);
+    const wts = hours.map(h => 0.3 + Math.exp(-((h - 8.5) ** 2) / 4) + Math.exp(-((h - 17.5) ** 2) / 4));
+    const tot = wts.reduce((a, b) => a + b, 0);
+    const pickType = () => {
+      const r = rngNext(s);
+      const size = r < pSmall ? 1 : r < 1 - pLarge ? 2 : 3;
+      const purpose = rngNext(s) < 0.25 ? 'cargo' : 'pax';
+      const opts = AIRCRAFT.filter(a => a.size === size && a.purpose === purpose);
+      return opts[Math.floor(rngNext(s) * opts.length)];
+    };
+    const arrivals = [];
+    for (let i = 0; i < count; i++) {
+      let r = rngNext(s) * tot, h = hours[0];
+      for (let j = 0; j < hours.length; j++) { r -= wts[j]; if (r <= 0) { h = hours[j]; break; } }
+      const t = h * 60 + Math.floor(rngNext(s) * 60);
+      arrivals.push({ t: Math.min(t, T.lastArrival - 1), type: pickType() });
+    }
+    arrivals.sort((a, b) => a.t - b.t);
+    return arrivals;
+  }
+
+  function newFlight(s, type) {
+    return { id: 'F' + (++s.nextId), type: type.id, name: type.name, size: type.size, purpose: type.purpose, fee: type.fee,
+      fuelMax: type.fuel, fuel: type.fuel, state: 'scheduled', priority: false, lowFuel: false };
+  }
+
+  function create(cfg) {
+    const base = cfg.airport;
+    const s = {
+      cfg, seed: cfg.seed | 0, t: T.dayStart, nextId: 0,
+      twist: cfg.twist, money: base.money, strikes: cfg.startStrikes || 0,
+      airport: {
+        runways: base.runways.map((r, i) => ({ ...r, id: 'R' + (i + 1), busyUntil: 0, blockedUntil: 0, use: null })),
+        stands: base.stands.map((st, i) => ({ ...st, id: (st.kind === 'contact' ? 'C' : 'X') + (i + 1), occupant: null })),
+        tower: { ...base.tower }, support: { ...base.support },
+      },
+      flights: [], log: [], pendingAlert: null, ended: false, runLost: false,
+      cooldowns: { groundStop: 0, priority: 0, divert: 0, rush: 0 }, groundStopUntil: 0,
+      stats: { landed: 0, departed: 0, arrivalFees: 0, departureFees: 0, crashes: 0, incidents: 0, goArounds: 0, diversions: 0, upkeep: 0 },
+    };
+    const sched = makeSchedule(cfg, s);
+    for (const a of sched) { const f = newFlight(s, a.type); f.arriveAt = a.t; s.flights.push(f); }
+    // Overnight aircraft: parked on Stands from yesterday, depart early.
+    const parkN = Math.round(sched.length * 0.12);
+    let parked = 0;
+    for (const st of s.airport.stands) {
+      if (parked >= parkN) break;
+      const opts = AIRCRAFT.filter(a => a.size <= st.size && a.purpose === st.hub);
+      const type = opts[Math.floor(rngNext(s) * opts.length)];
+      const f = newFlight(s, type);
+      f.state = 'onStand'; f.standId = st.id; f.unloaded = true; f.readyAt = T.opsStart + Math.floor(rngNext(s) * 120); f.overnight = true;
+      st.occupant = f.id; s.flights.push(f); parked++;
+    }
+    log(s, `${DAYS[cfg.dow]}, Week ${cfg.week}. ${sched.length} arrivals scheduled, ${parked} aircraft parked overnight. Twist: ${(TWISTS[cfg.twist] || TWISTS.none).name}.`);
+    return s;
+  }
+
+  // ---------- derived helpers ----------
+  const tw = (s) => TWISTS[s.twist] || TWISTS.none;
+  const inWindow = (t, a, b) => t >= a && t < b;
+  function weatherActive(s) { const x = tw(s); return x.from != null && inWindow(s.t, x.from, x.to); }
+  function weatherMult(s, key) {
+    if (!weatherActive(s)) return 1;
+    const m = tw(s)[key] || 1, ws = s.airport.tower.weather;
+    return 1 + (m - 1) * Math.max(0, 1 - 0.15 * (ws - 1));
+  }
+  function airborne(s) { return s.flights.filter(f => f.state === 'holding' || f.state === 'landing').length; }
+  function radarCap(s) { return 2 + 2 * s.airport.tower.radar; }
+  function errorChances(s, runway) {
+    const over = Math.max(0, airborne(s) - radarCap(s));
+    const atc = 0.025 * (1 - 0.15 * (s.airport.tower.training - 1)) * (1 + 0.4 * over) * weatherMult(s, 'atc');
+    let pilot = 0.015 * weatherMult(s, 'pilot');
+    if (runway && runway.surf === 'ils') pilot *= 0.6;
+    if (runway && runway.surf === 'grass') pilot *= 1.3;
+    return { atc, pilot, over };
+  }
+  function runwayStatus(s, r, i) {
+    const x = tw(s);
+    if (s.t < T.opsStart) return { open: false, why: 'before 06:00 (Curfew)' };
+    if (x.closeAll && inWindow(s.t, x.closeAll[0], x.closeAll[1])) return { open: false, why: 'closed by Thunderstorm' };
+    if (i === 0 && x.closeFirst && inWindow(s.t, x.closeFirst[0], x.closeFirst[1])) return { open: false, why: 'closed (inspection)' };
+    if (r.blockedUntil > s.t) return { open: false, why: 'blocked until ' + fmt(r.blockedUntil) };
+    const night = s.t >= T.daylightEnd;
+    if (night && (r.surf === 'grass' || r.surf === 'asphalt')) return { open: false, why: 'dark: needs Lit or ILS' };
+    if (x.needILS && weatherActive(s) && r.surf !== 'ils') return { open: false, why: 'weather: needs ILS' };
+    return { open: true };
+  }
+  function findStand(s, f) {
+    return s.airport.stands.filter(st => !st.occupant && standFits(st, f))
+      .sort((a, b) => (a.kind === 'contact' ? 0 : 1) - (b.kind === 'contact' ? 0 : 1) || a.size - b.size)[0];
+  }
+  function canEverServe(s, f) {
+    return s.airport.runways.some(r => runwayCanServe(r, f.size)) && s.airport.stands.some(st => standFits(st, f));
+  }
+  function nightBlocks(s, f) { // dark and no Lit/ILS Runway that fits this aircraft
+    return s.t >= T.daylightEnd && !s.airport.runways.some(r => runwayCanServe(r, f.size) && (r.surf === 'lit' || r.surf === 'ils'));
+  }
+  function holdReason(s, f) {
+    const fits = s.airport.runways.map((r, i) => ({ r, i })).filter(({ r }) => runwayCanServe(r, f.size));
+    if (!fits.some(({ r, i }) => runwayStatus(s, r, i).open)) return 'no fitting Runway is open';
+    if (!findStand(s, f)) return `no free ${f.purpose === 'cargo' ? 'Cargo Hub' : 'Terminal'} Stand for a ${SIZE[f.size]} aircraft`;
+    return 'Runway busy';
+  }
+  function alertCovers(s, cause) {
+    const r = s.airport.tower.radar;
+    return (cause === 'ATC' && r >= 3) || (cause === 'pilot' && r >= 4) || (cause === 'fuel' && r >= 5);
+  }
+
+  // ---------- events ----------
+  function crash(s, f, cause, runway) {
+    f.state = 'crashed'; s.strikes++; s.stats.crashes++;
+    if (f.standId) { const st = s.airport.stands.find(x => x.id === f.standId); if (st && st.occupant === f.id) st.occupant = null; }
+    if (runway) { runway.blockedUntil = s.t + 60; runway.use = null; }
+    const why = { ATC: 'ATC Error', pilot: 'Pilot Error', fuel: 'Fuel Reserve ran out while Holding' }[cause];
+    log(s, `CRASH: ${f.name} (${f.id}) — ${why}. Strike ${s.strikes}/3.${runway ? ' ' + runway.id + ' blocked for 1 h.' : ''}`, 'bad');
+    if (s.strikes >= 3) { s.runLost = true; log(s, 'Third Strike this Week: the Run is lost.', 'bad'); }
+  }
+  function goAround(s, f, r) {
+    f.state = 'holding'; f.fuel = Math.max(1, f.fuel - 5); s.stats.goArounds++; f.noLandUntil = s.t + 5;
+    if (f.standId) { const st = s.airport.stands.find(x => x.id === f.standId); if (st) st.occupant = null; f.standId = null; }
+    r.use = null;
+    log(s, `Go-Around: ${f.name} (${f.id}) back to Holding (−5 min fuel).`, 'warn', true);
+  }
+  function rejectTakeoff(s, f, r) {
+    f.state = 'queue'; f.queuedAt = s.t; r.use = null; r.busyUntil = s.t + 4;
+    log(s, `Rejected takeoff: ${f.name} (${f.id}) back to the departure queue.`, 'warn');
+  }
+  function incident(s, f, r, phase) {
+    s.money -= T.incidentCost; s.stats.incidents++; r.blockedUntil = s.t + 20;
+    log(s, `Incident during ${phase}: ${f.name} (${f.id}) — ${r.id} blocked 20 min, −${T.incidentCost}.`, 'warn', true);
+  }
+
+  // Roll for errors at a risky moment. Returns true if the flight's normal flow continues.
+  function riskyMoment(s, f, r, phase) {
+    const p = errorChances(s, r);
+    const x = rngNext(s);
+    let cause = null;
+    if (x < p.atc) cause = 'ATC'; else if (x < p.atc + p.pilot) cause = 'pilot';
+    if (!cause) return true;
+    const y = rngNext(s);
+    if (y < (phase === 'landing' ? 0.8 : 0.85)) { phase === 'landing' ? goAround(s, f, r) : rejectTakeoff(s, f, r); return false; }
+    if (y < 0.97) { incident(s, f, r, phase); return phase === 'landing'; } // landing incident: plane still lands
+    // crash
+    if (alertCovers(s, cause)) {
+      s.pendingAlert = { flightId: f.id, cause, phase, runwayId: r.id };
+      log(s, `EMERGENCY ALERT: ${f.name} (${f.id}) is about to crash on ${phase} (${cause === 'ATC' ? 'ATC Error' : 'Pilot Error'}). Decide!`, 'bad');
+      return false;
+    }
+    crash(s, f, cause, r);
+    return false;
+  }
+
+  function startLanding(s, f, r) {
+    const st = findStand(s, f);
+    f.standId = st.id; st.occupant = f.id;
+    f.state = 'landing'; f.until = s.t + T.landMin; f.runwayId = r.id; f.priority = false;
+    r.busyUntil = s.t + T.landMin; r.use = f.id;
+    riskyMoment(s, f, r, 'landing');
+  }
+  function startTakeoff(s, f, r) {
+    f.state = 'takeoff'; f.until = s.t + T.takeoffMin; f.runwayId = r.id;
+    r.busyUntil = s.t + T.takeoffMin; r.use = f.id;
+    riskyMoment(s, f, r, 'takeoff');
+  }
+
+  function taxiIncident(s, f) {
+    if (s.groundStopUntil > s.t) return;
+    const moving = s.flights.filter(x => x.state === 'taxiIn' || x.state === 'taxiOut').length;
+    const p = 0.004 * (1 + 0.3 * moving) * Math.max(0.2, 1 - 0.15 * (s.airport.tower.ground - 1));
+    if (rngNext(s) < p) {
+      s.money -= T.groundIncidentCost; s.stats.incidents++; f.until += 10;
+      log(s, `Ground Incident on a Taxiway: ${f.name} (${f.id}) scraped another aircraft. −${T.groundIncidentCost}, +10 min delay.`, 'warn');
+    }
+  }
+
+  function tick(s) {
+    const x = tw(s);
+    if (x.windShift === s.t) {
+      for (const r of s.airport.runways) r.blockedUntil = Math.max(r.blockedUntil, s.t + 15);
+      log(s, 'Wind Shift: every Runway switches Active Direction (15 min, no movements).', 'warn', true);
+    }
+    if (x.from === s.t) log(s, `${x.name} begins.`, 'warn', true);
+    if (x.to === s.t) log(s, `${x.name} ends.`, 'good');
+
+    // arrivals enter Holding
+    for (const f of s.flights) {
+      if (f.state === 'scheduled' && f.arriveAt <= s.t) {
+        if (!canEverServe(s, f)) {
+          f.state = 'diverted'; s.stats.diversions++;
+          log(s, `Diversion: ${f.name} (${f.id}) — no ${SIZE[f.size]} ${f.purpose === 'cargo' ? 'cargo ' : ''}Runway/Stand here. Fees lost.`, 'warn');
+        } else if (nightBlocks(s, f)) {
+          f.state = 'diverted'; s.stats.diversions++;
+          log(s, `Diversion: ${f.name} (${f.id}) — it is dark and no Lit/ILS Runway fits it. Fees lost.`, 'warn');
+        } else { f.state = 'holding'; f.holdSince = s.t; log(s, `${f.name} (${f.id}) arrives and enters Holding.`); }
+      }
+    }
+    if (s.t === T.daylightEnd) log(s, 'Dusk (20:00): only Lit or ILS Runways can operate now.', 'warn', true);
+    // fuel
+    for (const f of s.flights) {
+      if (f.state !== 'holding') continue;
+      if (nightBlocks(s, f)) {
+        f.state = 'diverted'; s.stats.diversions++;
+        log(s, `Diversion: ${f.name} (${f.id}) was still Holding at dusk and no Lit/ILS Runway fits it. Fees lost.`, 'warn');
+        continue;
+      }
+      f.fuel -= 1;
+      if (!f.lowFuel && f.fuel <= T.lowFuel) { f.lowFuel = true; log(s, `Low fuel: ${f.name} (${f.id}) has ${f.fuel} min left and jumps the landing queue (still waiting because: ${holdReason(s, f)}).`, 'warn', true); }
+      if (f.fuel <= 0) {
+        if (alertCovers(s, 'fuel')) { s.pendingAlert = { flightId: f.id, cause: 'fuel', phase: 'holding' }; log(s, `EMERGENCY ALERT: ${f.name} (${f.id}) is out of fuel. Decide!`, 'bad'); return; }
+        log(s, `${f.name} (${f.id}) never got down because: ${holdReason(s, f)}.`, 'bad');
+        crash(s, f, 'fuel', null); if (s.runLost) return;
+      }
+    }
+    // progress ground/air movements
+    const gs = s.groundStopUntil > s.t;
+    for (const f of s.flights) {
+      if (f.state === 'landing' && s.t >= f.until) {
+        const r = s.airport.runways.find(r => r.id === f.runwayId); r.use = null;
+        f.state = 'taxiIn'; f.until = s.t + T.taxiMin; s.stats.landed++; taxiIncident(s, f);
+      } else if (f.state === 'taxiIn' && (gs ? (f.until++, false) : s.t >= f.until)) {
+        const st = s.airport.stands.find(x => x.id === f.standId);
+        const ta = Math.round(T.turnaround[f.size] * (st.kind === 'remote' ? T.remoteFactor : 1));
+        f.state = 'onStand'; f.unloadAt = s.t + Math.round(ta * T.unloadShare); f.readyAt = s.t + ta; f.unloaded = false;
+      } else if (f.state === 'onStand') {
+        if (!f.unloaded && s.t >= f.unloadAt) { f.unloaded = true; s.money += f.fee; s.stats.arrivalFees += f.fee; log(s, `Arrival Fee +${f.fee}: ${f.name} (${f.id}) unloaded.`, 'money'); }
+        if (s.t >= f.readyAt && s.t >= T.opsStart) {
+          const st = s.airport.stands.find(x => x.id === f.standId); st.occupant = null; f.standId = null;
+          f.state = 'taxiOut'; f.until = s.t + T.taxiMin; taxiIncident(s, f);
+        }
+      } else if (f.state === 'taxiOut' && (gs ? (f.until++, false) : s.t >= f.until)) {
+        f.state = 'queue'; f.queuedAt = s.t;
+      } else if (f.state === 'takeoff' && s.t >= f.until) {
+        const r = s.airport.runways.find(r => r.id === f.runwayId); r.use = null;
+        f.state = 'departed'; s.money += f.fee; s.stats.departureFees += f.fee; s.stats.departed++;
+        log(s, `Departure Fee +${f.fee}: ${f.name} (${f.id}) took off.`, 'money');
+      }
+    }
+    // ATC assigns free Runways
+    s.airport.runways.forEach((r, i) => {
+      if (s.pendingAlert || s.runLost) return;
+      if (r.busyUntil > s.t || !runwayStatus(s, r, i).open) return;
+      const holding = s.flights.filter(f => f.state === 'holding' && !(f.noLandUntil > s.t) && runwayCanServe(r, f.size) && findStand(s, f))
+        .sort((a, b) => (b.priority - a.priority) || (b.lowFuel - a.lowFuel) || (a.holdSince - b.holdSince));
+      const queue = s.flights.filter(f => f.state === 'queue' && runwayCanServe(r, f.size)).sort((a, b) => a.queuedAt - b.queuedAt);
+      const urgent = holding[0] && (holding[0].priority || holding[0].lowFuel);
+      if (urgent) return startLanding(s, holding[0], r);
+      if (queue[0] && (!holding[0] || s.t - queue[0].queuedAt >= 3)) return startTakeoff(s, queue[0], r);
+      if (holding[0]) return startLanding(s, holding[0], r);
+    });
+  }
+
+  function endOfDay(s) {
+    for (const f of s.flights) if (f.state === 'holding' || f.state === 'scheduled') {
+      f.state = 'diverted'; s.stats.diversions++;
+      log(s, `Curfew: ${f.name} (${f.id}) still airborne at 24:00 — Diverted.`, 'warn');
+    }
+    const u = upkeep(s.airport); s.money -= u; s.stats.upkeep = u;
+    s.ended = true;
+    const parked = s.flights.filter(f => f.state === 'onStand' || f.state === 'taxiIn' || f.state === 'queue' || f.state === 'taxiOut').length;
+    log(s, `End of Day. Upkeep −${u}. ${parked} aircraft stay overnight and depart tomorrow.${s.money < 0 ? ' You are in Debt.' : ''}`, s.money < 0 ? 'bad' : 'info');
+  }
+
+  const stopped = (s) => s.ended || s.runLost || !!s.pendingAlert;
+  function advance(s, minutes, untilEvent) {
+    const startLog = s.log.length;
+    for (let i = 0; i < minutes && !stopped(s); i++) {
+      if (s.t >= T.curfew) { endOfDay(s); break; }
+      tick(s); s.t++;
+      if (s.t >= T.curfew && !stopped(s)) { endOfDay(s); break; }
+      if (untilEvent && s.log.slice(startLog).some(e => e.stop)) break;
+    }
+  }
+
+  function holdingTarget(s, pred) {
+    return s.flights.filter(f => f.state === 'holding' && (!pred || pred(f))).sort((a, b) => a.fuel - b.fuel)[0];
+  }
+
+  // ---------- reducer ----------
+  function reduce(prev, action) {
+    const s = structuredClone(prev);
+    const cd = s.cooldowns;
+    switch (action.type) {
+      case 'advance': advance(s, action.minutes, false); break;
+      case 'untilEvent': advance(s, 9999, true); break;
+      case 'toEnd': advance(s, 9999, false); break;
+      case 'groundStop':
+        if (cd.groundStop > s.t || s.ended) break;
+        s.groundStopUntil = s.t + T.groundStopMin; cd.groundStop = s.t + T.cooldown.groundStop;
+        log(s, 'Ground Stop: all taxiing frozen for 10 min, no Taxiway Incidents meanwhile.', 'good'); break;
+      case 'priority': {
+        if (!s.airport.support.airline || cd.priority > s.t) break;
+        const f = holdingTarget(s, f => !f.priority); if (!f) { log(s, 'Priority Landing: nobody is Holding.', 'info'); break; }
+        f.priority = true; cd.priority = s.t + T.cooldown.priority;
+        log(s, `Priority Landing: ${f.name} (${f.id}) moved to the front of the landing queue.`, 'good'); break;
+      }
+      case 'divert': {
+        if (!s.airport.support.admin || cd.divert > s.t) break;
+        const f = holdingTarget(s); if (!f) { log(s, 'Manual Divert: nobody is Holding.', 'info'); break; }
+        f.state = 'diverted'; s.stats.diversions++; cd.divert = s.t + T.cooldown.divert;
+        log(s, `Manual Divert: ${f.name} (${f.id}) sent away with ${f.fuel} min fuel. Fees lost, no Strike.`, 'good'); break;
+      }
+      case 'rush': {
+        if (!s.airport.support.ramp || cd.rush > s.t) break;
+        // Target the Stand the most urgent Holding aircraft is waiting for; otherwise the slowest Turnaround.
+        const urgent = holdingTarget(s);
+        const onStand = s.flights.filter(f => f.state === 'onStand');
+        const helps = urgent ? onStand.filter(f => standFits(s.airport.stands.find(st => st.id === f.standId), urgent)) : [];
+        const f = (helps.length ? helps : onStand).sort((a, b) => a.readyAt - b.readyAt)[helps.length ? 0 : onStand.length - 1];
+        if (!f) { log(s, 'Rush Turnaround: no aircraft on a Stand.', 'info'); break; }
+        const left = f.readyAt - s.t; f.readyAt = s.t + Math.ceil(left / 2);
+        if (!f.unloaded) f.unloadAt = Math.min(f.unloadAt, f.readyAt);
+        cd.rush = s.t + T.cooldown.rush;
+        log(s, `Rush Turnaround: ${f.name} (${f.id}) on ${f.standId} now ready at ${fmt(f.readyAt)}.`, 'good'); break;
+      }
+      case 'resolveAlert': {
+        const a = s.pendingAlert; if (!a) break;
+        s.pendingAlert = null;
+        const f = s.flights.find(x => x.id === a.flightId);
+        const r = a.runwayId ? s.airport.runways.find(x => x.id === a.runwayId) : null;
+        const pSave = 0.5 + 0.1 * (s.airport.tower.training - 1);
+        if (action.intervene && rngNext(s) < pSave) {
+          log(s, `Intervention worked (${Math.round(pSave * 100)}% chance).`, 'good');
+          if (a.phase === 'landing') goAround(s, f, r);
+          else if (a.phase === 'takeoff') rejectTakeoff(s, f, r);
+          else { f.fuel = 8; f.priority = true; log(s, `${f.name} (${f.id}) squeezes out 8 more minutes and gets Priority Landing.`, 'good'); }
+        } else {
+          if (action.intervene) log(s, `Intervention failed (${Math.round(pSave * 100)}% chance).`, 'bad');
+          crash(s, f, a.cause, r);
+        }
+        break;
+      }
+    }
+    return s;
+  }
+
+  // ---------- read model for the page ----------
+  function view(s) {
+    const best = s.airport.runways.find((r, i) => runwayStatus(s, r, i).open) || s.airport.runways[0];
+    const p = errorChances(s, best);
+    const risk = p.atc + p.pilot;
+    return {
+      time: fmt(s.t), risk, riskLevel: risk < 0.05 ? 'Low' : risk < 0.1 ? 'Medium' : 'High', overload: p.over,
+      airborne: airborne(s), radarCap: radarCap(s),
+      runways: s.airport.runways.map((r, i) => ({ ...r, label: `${r.id} · ${LEN[r.len]} ${SURF_NAME[r.surf]}`, status: runwayStatus(s, r, i), busy: r.busyUntil > s.t,
+        useName: r.use ? (s.flights.find(f => f.id === r.use) || {}).name : null })),
+      stands: s.airport.stands.map(st => ({ ...st, label: `${st.id} · ${SIZE[st.size]} ${st.kind === 'contact' ? 'Contact' : 'Remote'} (${st.hub === 'pax' ? 'Terminal' : 'Cargo Hub'})`,
+        flight: st.occupant ? s.flights.find(f => f.id === st.occupant) : null })),
+      holding: s.flights.filter(f => f.state === 'holding' || f.state === 'landing').sort((a, b) => a.fuel - b.fuel).map(f => ({ ...f, reason: f.state === 'holding' ? holdReason(s, f) : '' })),
+      queue: s.flights.filter(f => f.state === 'queue' || f.state === 'taxiOut'),
+      upcoming: s.flights.filter(f => f.state === 'scheduled').length,
+    };
+  }
+
+  return { create, reduce, view, PRESETS, TWISTS, DAYS, AIRCRAFT, SIZE, SURF, upkeep, fmt, T };
+})();
+// ===================== SIM-END =====================
+</script>
+
+<script>
+// ===================== Page shell (throwaway) =====================
+const $ = (id) => document.getElementById(id);
+const clone = (x) => JSON.parse(JSON.stringify(x));
+let cfg, state, lastSeenLog = 0, lastSnapshot = null;
+
+function defaultCfg(preset = 'allrounder') {
+  return { preset, week: 1, dow: 0, twist: 'none', seed: 1, startStrikes: 0, airport: clone(LiveDay.PRESETS[preset]) };
+}
+function restart() { state = LiveDay.create(clone(cfg)); lastSeenLog = 0; lastSnapshot = null; render(); }
+function dispatch(action) {
+  lastSnapshot = { money: state.money, strikes: state.strikes, stats: { ...state.stats }, t: state.t };
+  lastSeenLog = state.log.length;
+  state = LiveDay.reduce(state, action); render();
+}
+
+// ---- Plan Mode controls ----
+function fillSelects() {
+  $('preset').innerHTML = Object.entries(LiveDay.PRESETS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+  $('dow').innerHTML = LiveDay.DAYS.map((d, i) => `<option value="${i}">${d}</option>`).join('');
+  $('twist').innerHTML = Object.entries(LiveDay.TWISTS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+}
+function syncForm() {
+  $('preset').value = cfg.preset; $('week').value = cfg.week; $('dow').value = cfg.dow;
+  $('twist').value = cfg.twist; $('strikes0').value = cfg.startStrikes; $('seed').value = cfg.seed;
+}
+$('preset').onchange = () => { const keep = { week: cfg.week, dow: cfg.dow, twist: cfg.twist, seed: cfg.seed, startStrikes: cfg.startStrikes }; cfg = { ...defaultCfg($('preset').value), ...keep }; restart(); };
+$('week').onchange = () => { cfg.week = +$('week').value; restart(); };
+$('dow').onchange = () => { cfg.dow = +$('dow').value; restart(); };
+$('twist').onchange = () => { cfg.twist = $('twist').value; restart(); };
+$('strikes0').onchange = () => { cfg.startStrikes = +$('strikes0').value; restart(); };
+$('seed').onchange = () => { cfg.seed = +$('seed').value || 1; restart(); };
+$('restart').onclick = restart;
+
+const UPGRADES = [
+  { label: '+ Medium Asphalt Runway', fn: a => a.runways.push({ len: 2, surf: 'asphalt' }) },
+  { label: '+ Long ILS Runway', fn: a => a.runways.push({ len: 3, surf: 'ils' }) },
+  { label: 'Upgrade all Runway Surfaces', fn: a => a.runways.forEach(r => { const i = LiveDay.SURF.indexOf(r.surf); if (i < 3) r.surf = LiveDay.SURF[i + 1]; }) },
+  { label: 'Lengthen all Runways', fn: a => a.runways.forEach(r => { if (r.len < 3) r.len++; }) },
+  { label: '+2 Medium Contact Stands (Terminal)', fn: a => a.stands.push({ size: 2, kind: 'contact', hub: 'pax' }, { size: 2, kind: 'contact', hub: 'pax' }) },
+  { label: '+1 Large Contact Stand (Terminal)', fn: a => a.stands.push({ size: 3, kind: 'contact', hub: 'pax' }) },
+  { label: '+2 Medium Remote Stands (Terminal)', fn: a => a.stands.push({ size: 2, kind: 'remote', hub: 'pax' }, { size: 2, kind: 'remote', hub: 'pax' }) },
+  { label: '+1 Medium Cargo Hub Stand', fn: a => a.stands.push({ size: 2, kind: 'contact', hub: 'cargo' }) },
+  { label: '+1 Large Cargo Hub Stand', fn: a => a.stands.push({ size: 3, kind: 'contact', hub: 'cargo' }) },
+  { label: 'Radar +1', fn: a => a.tower.radar = Math.min(5, a.tower.radar + 1) },
+  { label: 'Ground Radar +1', fn: a => a.tower.ground = Math.min(5, a.tower.ground + 1) },
+  { label: 'Weather Station +1', fn: a => a.tower.weather = Math.min(5, a.tower.weather + 1) },
+  { label: 'Controller Training +1', fn: a => a.tower.training = Math.min(5, a.tower.training + 1) },
+  { label: 'Build Ramp Agent Station', fn: a => a.support.ramp = true },
+  { label: 'Build Admin Office', fn: a => a.support.admin = true },
+  { label: 'Build Airline Office', fn: a => a.support.airline = true },
+];
+$('upgrades').innerHTML = UPGRADES.map((u, i) => `<button data-up="${i}">${u.label}</button>`).join('');
+$('upgrades').onclick = (e) => { const i = e.target.dataset.up; if (i == null) return; UPGRADES[i].fn(cfg.airport); restart(); };
+
+// ---- Live controls ----
+document.querySelectorAll('[data-adv]').forEach(b => b.onclick = () => dispatch({ type: 'advance', minutes: +b.dataset.adv }));
+$('untilEvent').onclick = () => dispatch({ type: 'untilEvent' });
+$('toEnd').onclick = () => dispatch({ type: 'toEnd' });
+
+const ACTIONS = [
+  { type: 'groundStop', label: 'Ground Stop', need: null },
+  { type: 'priority', label: 'Priority Landing', need: 'airline', needName: 'Airline Office' },
+  { type: 'divert', label: 'Manual Divert', need: 'admin', needName: 'Admin Office' },
+  { type: 'rush', label: 'Rush Turnaround', need: 'ramp', needName: 'Ramp Agent Station' },
+];
+
+function render() {
+  const s = state, v = LiveDay.view(s), fmt = LiveDay.fmt;
+  syncForm();
+  $('clock').textContent = v.time + (s.ended ? ' · Day over' : '');
+  $('riskBox').innerHTML = `Risk Meter: <span class="risk ${v.riskLevel === 'Low' ? 'good' : v.riskLevel === 'Medium' ? 'warn' : 'bad'}">${v.riskLevel}</span> <span class="mute">(${(v.risk * 100).toFixed(1)}% error chance per movement)</span>`;
+
+  const locked = s.ended || s.runLost || !!s.pendingAlert;
+  document.querySelectorAll('[data-adv], #untilEvent, #toEnd').forEach(b => b.disabled = locked);
+  $('actions').innerHTML = ACTIONS.map(a => {
+    const have = !a.need || s.airport.support[a.need];
+    const cdLeft = s.cooldowns[a.type] - s.t;
+    const ok = have && cdLeft <= 0 && !locked;
+    const note = !have ? `needs ${a.needName}` : cdLeft > 0 ? `ready ${fmt(s.cooldowns[a.type])}` : 'ready';
+    return `<button data-act="${a.type}" ${ok ? '' : 'disabled'}>${a.label}<br><small class="mute">${note}</small></button>`;
+  }).join('');
+  $('actions').querySelectorAll('button').forEach(b => b.onclick = () => dispatch({ type: b.dataset.act }));
+
+  // what changed
+  if (lastSnapshot) {
+    const parts = [];
+    const dm = s.money - lastSnapshot.money; if (dm) parts.push(`Money ${dm > 0 ? '+' : ''}${dm}`);
+    if (s.strikes !== lastSnapshot.strikes) parts.push(`<b class="bad">Strikes ${lastSnapshot.strikes} → ${s.strikes}</b>`);
+    for (const [k, n] of [['landed', 'landed'], ['departed', 'departed'], ['goArounds', 'Go-Arounds'], ['incidents', 'Incidents'], ['diversions', 'Diversions'], ['crashes', 'Crashes']]) {
+      const d = s.stats[k] - lastSnapshot.stats[k]; if (d) parts.push(`${d} ${n}`);
+    }
+    $('changed').hidden = false;
+    $('changed').innerHTML = `<b>Since ${fmt(lastSnapshot.t)}:</b> ${parts.join(' · ') || 'nothing notable'}`;
+  } else $('changed').hidden = true;
+  // compact status under the walkthrough, so phone users don't have to scroll
+  const notable = s.log.filter(e => e.seq >= lastSeenLog && e.kind !== 'money' && e.kind !== 'info').slice(-4);
+  $('scenStatus').hidden = !lastSnapshot;
+  $('scenStatus').innerHTML = `<b>${v.time}</b> · Money ${s.money} · Strikes ${s.strikes}/3 · In the air ${v.airborne}/${v.radarCap} · Risk ${v.riskLevel}${s.runLost ? ' · <b class="bad">RUN LOST</b>' : ''}${s.ended ? ' · Day over' : ''}<br>${$('changed').innerHTML}`
+    + (notable.length ? `<ul class="plain" style="margin-top:6px">${notable.map(e => `<li><span class="mute">${fmt(e.t)}</span> <span class="${e.kind === 'bad' ? 'bad' : e.kind === 'warn' ? 'warn' : 'good'}">${e.text}</span></li>`).join('')}</ul>` : '')
+    + `<small class="mute">Full state and log further down.</small>`;
+
+  // alert
+  if (s.pendingAlert) {
+    const a = s.pendingAlert, f = s.flights.find(x => x.id === a.flightId);
+    const p = Math.round((0.5 + 0.1 * (s.airport.tower.training - 1)) * 100);
+    $('alertBox').hidden = false;
+    $('alertBox').innerHTML = `<h2 class="bad">Emergency Alert — game paused</h2>
+      <p><b>${f.name}</b> (${f.id}) is about to crash (${a.cause === 'fuel' ? 'out of fuel while Holding' : (a.cause === 'ATC' ? 'ATC Error' : 'Pilot Error') + ' during ' + a.phase}).</p>
+      <p>Intervening gives a second roll: <b>${p}%</b> chance to save it (Controller Training raises this).</p>
+      <div class="row"><button class="primary" id="intervene">Intervene</button><button id="letgo">Let it play out</button></div>`;
+    $('intervene').onclick = () => dispatch({ type: 'resolveAlert', intervene: true });
+    $('letgo').onclick = () => dispatch({ type: 'resolveAlert', intervene: false });
+  } else $('alertBox').hidden = true;
+
+  const st = s.stats;
+  const strikeCls = s.strikes >= 3 ? 'bad' : s.strikes ? 'warn' : '';
+  $('stats').innerHTML = [
+    [`<span class="${s.money < 0 ? 'bad' : ''}">${s.money}</span>`, s.money < 0 ? 'Money (Debt!)' : 'Money'],
+    [`<span class="${strikeCls}">${s.strikes} / 3</span>`, s.runLost ? 'Strikes — RUN LOST' : 'Strikes this Week'],
+    [`<span class="${v.overload ? 'bad' : ''}">${v.airborne} / ${v.radarCap}</span>`, 'Airborne / Radar capacity'],
+    [v.upcoming, 'Arrivals still to come'],
+    [st.landed, 'Landed'], [st.departed, 'Departed'],
+    [`+${st.arrivalFees + st.departureFees}`, 'Fees earned today'],
+    [st.goArounds, 'Go-Arounds'], [st.incidents, 'Incidents'], [st.diversions, 'Diversions'], [st.crashes, 'Crashes'],
+    [s.ended ? `−${st.upkeep}` : `≈ −${LiveDay.upkeep(s.airport)}`, s.ended ? 'Upkeep paid' : 'Upkeep due at 24:00'],
+  ].map(([b, l]) => `<div class="stat"><b>${b}</b><span>${l}</span></div>`).join('');
+
+  $('air').innerHTML = v.holding.length ? `<ul class="plain">${v.holding.map(f => {
+    const pct = Math.max(0, Math.round(100 * f.fuel / f.fuelMax));
+    return `<li>${f.state === 'landing' ? '🛬 landing' : '⟳ Holding'} · <b>${f.name}</b> <span class="mute">${f.id} · ${LiveDay.SIZE[f.size]} ${f.purpose === 'cargo' ? 'Cargo' : 'Pax'}</span><br>
+      Fuel <span class="bar"><i class="${f.lowFuel ? 'low' : ''}" style="width:${pct}%"></i></span> ${f.fuel} min ${f.priority ? '<b class="good">PRIORITY</b>' : ''}${f.lowFuel ? ' <b class="bad">LOW FUEL</b>' : ''}${f.reason ? `<br><small class="mute">waiting: ${f.reason}</small>` : ''}</li>`;
+  }).join('')}</ul>` : '<p class="mute">Nobody in the air.</p>';
+
+  $('runways').innerHTML = v.runways.map(r => {
+    const cls = !r.status.open ? 'closed' : r.busy ? 'busy' : 'free';
+    const txt = !r.status.open ? r.status.why : r.busy ? (r.useName ? 'in use: ' + r.useName : 'busy') : 'free';
+    return `<div><span class="pill ${cls}">${r.label}</span> <span class="mute">${txt}</span></div>`;
+  }).join('');
+  $('queue').innerHTML = v.queue.length ? `<ul class="plain">${v.queue.map(f => `<li>${f.state === 'taxiOut' ? 'taxiing out' : 'waiting'} · <b>${f.name}</b> <span class="mute">${f.id}</span></li>`).join('')}</ul>` : '<p class="mute">Empty.</p>';
+
+  $('stands').innerHTML = v.stands.map(x => {
+    const f = x.flight;
+    let txt = '<span class="mute">free</span>';
+    if (f) {
+      if (f.state === 'landing') txt = `reserved for ${f.name} (landing)`;
+      else if (f.state === 'taxiIn') txt = `${f.name} taxiing in`;
+      else if (f.state === 'onStand') txt = `<b>${f.name}</b> · ${f.unloaded ? 'loading' : 'unloading'} · ready ${fmt(f.readyAt)}${f.overnight ? ' (overnight)' : ''}`;
+    }
+    return `<div style="margin-bottom:4px"><span class="pill ${f ? 'busy' : 'free'}">${x.label}</span> ${txt}</div>`;
+  }).join('');
+
+  $('log').innerHTML = s.log.slice().reverse().map(e =>
+    `<li class="${e.seq >= lastSeenLog && lastSnapshot ? 'new' : ''}"><span class="mute">${fmt(e.t)}</span> <span class="${e.kind === 'bad' ? 'bad' : e.kind === 'warn' ? 'warn' : e.kind === 'good' ? 'good' : e.kind === 'money' ? 'mute' : ''}">${e.text}</span></li>`).join('');
+
+  const a = s.airport;
+  $('airportDesc').innerHTML = `<p><b>Runways:</b> ${v.runways.map(r => r.label).join(', ')}</p>
+    <p><b>Stands:</b> ${v.stands.map(x => x.label).join('; ')}</p>
+    <p><b>ATC Tower:</b> Radar ${a.tower.radar}, Ground Radar ${a.tower.ground}, Weather Station ${a.tower.weather}, Controller Training ${a.tower.training}</p>
+    <p><b>Support Buildings:</b> ${['ramp', 'admin', 'airline'].filter(k => a.support[k]).map(k => ({ ramp: 'Ramp Agent Station', admin: 'Admin Office', airline: 'Airline Office' })[k]).join(', ') || 'none'}</p>
+    <p><b>Upkeep:</b> ${LiveDay.upkeep(a)} per Day</p>`;
+}
+
+// ---- Walkthroughs ----
+const SCENARIOS = [
+  {
+    name: '1 · Quiet Monday',
+    text: 'The happy path. All-Rounder airport, Week 1 Monday, no Twist. Watch the overnight aircraft leave first, fees come in on unload and on takeoff, and Upkeep get paid at midnight. Expect a calm Day with maybe a Go-Around.',
+    setup: () => ({ ...defaultCfg('allrounder'), seed: 3 }),
+    steps: [['Run to 09:00', { type: 'advance', minutes: 240 }], ['Run to 18:00', { type: 'advance', minutes: 540 }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '2 · Not enough Stands',
+    text: 'Same airport, but Week 3 Saturday. Traffic outgrows the Stands, especially the single Cargo Hub Stand. ATC only lets a plane land if a Stand is free, so planes stack up in Holding and burn Fuel Reserve. Watch the "In the air" list grow, LOW FUEL flags appear, and maybe a fuel Crash. Question to ask yourself: is this readable? Would you know what to build?',
+    setup: () => ({ ...defaultCfg('allrounder'), week: 3, dow: 5, seed: 7 }),
+    steps: [['Run to 09:00', { type: 'advance', minutes: 240 }], ['Run until something happens', { type: 'untilEvent' }], ['Run until something happens', { type: 'untilEvent' }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '3 · Fix it in Plan Mode',
+    text: 'Scenario 2 replayed with the same seed after Plan Mode upgrades: a second Medium Asphalt Runway, four more Medium Terminal Stands, two more Medium Cargo Hub Stands and Radar +1. Compare Holding, Crashes and fees with scenario 2. Does building feel like it clearly fixed the problem?',
+    setup: () => {
+      const c = { ...defaultCfg('allrounder'), week: 3, dow: 5, seed: 7 };
+      c.airport.runways.push({ len: 2, surf: 'asphalt' });
+      for (let i = 0; i < 2; i++) c.airport.stands.push({ size: 2, kind: 'contact', hub: 'pax' });
+      for (let i = 0; i < 2; i++) c.airport.stands.push({ size: 2, kind: 'remote', hub: 'pax' });
+      for (let i = 0; i < 2; i++) c.airport.stands.push({ size: 2, kind: 'contact', hub: 'cargo' });
+      c.airport.tower.radar = 2; return c;
+    },
+    steps: [['Run to 09:00', { type: 'advance', minutes: 240 }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '4 · Regional Field diversions',
+    text: 'Hard mode: one Short Grass Runway and two Small Stands. The Schedule ignores your airport (pure difficulty curve), so every Medium and Large flight Diverts immediately: no Strike, but fees lost. Question: is it fun or just frustrating that most traffic can never land here?',
+    setup: () => ({ ...defaultCfg('regional'), week: 1, dow: 2, seed: 2 }),
+    steps: [['Run to 10:00', { type: 'advance', minutes: 300 }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '5 · Storm Sunday',
+    text: 'Week 3 Boss Day with the Storm Boss Twist (13:00–17:00). The airport already has two Asphalt Runways and extra Cargo Stands, so on a normal Day it copes. But during the Storm, Runways without ILS cannot take landings, and there is a Wind Shift at 15:00. Start at 12:30, then step through the storm. Planes pile up in Holding with no way down. Question: should ATC automatically divert planes when a closure will outlast their fuel, or is "no ILS on a storm Boss Day = Run over" the intended lesson? Afterwards, try "Upgrade all Runway Surfaces" twice (→ ILS) in Plan Mode and replay.',
+    setup: () => { const c = { ...defaultCfg('allrounder'), week: 3, dow: 6, twist: 'storm', seed: 11 }; for (let i = 0; i < 2; i++) c.airport.stands.push({ size: 2, kind: 'contact', hub: 'cargo' }); c.airport.runways.push({ len: 2, surf: 'asphalt' }); return c; },
+    steps: [['Run to 12:30', { type: 'advance', minutes: 450 }], ['Run until something happens', { type: 'untilEvent' }], ['Run until something happens', { type: 'untilEvent' }], ['Run until something happens', { type: 'untilEvent' }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '6 · Emergency Alert',
+    text: 'All-Rounder with Radar 3 (unlocks Emergency Alerts for ATC Errors), a Thunderstorm on a Week 4 Boss Day, and 2 Strikes already this Week. One more Crash loses the Run. Run until the game pauses with an Alert, then decide: intervene (second roll) or let it play out.',
+    setup: () => { const c = { ...defaultCfg('allrounder'), week: 4, dow: 6, twist: 'thunder', startStrikes: 2, seed: 7 }; c.airport.tower.radar = 3; c.airport.runways[0].surf = 'ils'; for (let i = 0; i < 2; i++) c.airport.stands.push({ size: 2, kind: 'contact', hub: 'cargo' }); return c; },
+    steps: [['Run until something happens', { type: 'untilEvent' }], ['Run until something happens', { type: 'untilEvent' }], ['Run until something happens', { type: 'untilEvent' }], ['Run until something happens', { type: 'untilEvent' }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '7 · Emergency Actions',
+    text: 'Week 3 Friday with all three Support Buildings. Late afternoon the single Cargo Hub Stand jams. When a cargo plane runs low on fuel, Rush Turnaround the plane blocking its Stand, give it Priority Landing, try Ground Stop, and when the next one runs low, Manual Divert it. Watch the cooldowns. Do these feel useful, or too weak / too strong?',
+    setup: () => { const c = { ...defaultCfg('allrounder'), week: 3, dow: 4, seed: 9 }; Object.assign(c.airport.support, { ramp: true, admin: true, airline: true }); return c; },
+    steps: [['Run to 16:00', { type: 'advance', minutes: 660 }], ['Run until something happens', { type: 'untilEvent' }], ['Rush Turnaround', { type: 'rush' }], ['Priority Landing', { type: 'priority' }], ['Ground Stop', { type: 'groundStop' }], ['Run until something happens', { type: 'untilEvent' }], ['Manual Divert', { type: 'divert' }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+  {
+    name: '8 · Curfew',
+    text: 'Heavy Day (Traffic Surge) in Week 4 on Saturday, with a Lit Runway so evening flights can still land. Last arrivals enter Holding before 22:00; anything still airborne at 24:00 is Diverted; aircraft left on Stands stay overnight. Watch the evening. Finding to judge: Fuel Reserves (40–55 min) are shorter than the 22:00→24:00 window, so the 24:00 divert almost never fires: late planes either land or run out of fuel first. Should the last arrival move later (e.g. 23:15), or should late Holding planes divert at 22:00?',
+    setup: () => { const c = { ...defaultCfg('allrounder'), week: 4, dow: 5, twist: 'surge', seed: 4 }; c.airport.runways[0].surf = 'lit'; for (let i = 0; i < 2; i++) c.airport.stands.push({ size: 2, kind: 'contact', hub: 'cargo' }); return c; },
+    steps: [['Run to 21:30', { type: 'advance', minutes: 990 }], ['Run to 22:30', { type: 'advance', minutes: 60 }], ['Run to end of Day', { type: 'toEnd' }]],
+  },
+];
+
+let activeTab = 0, stepIdx = 0;
+function renderTabs() {
+  $('tabs').innerHTML = SCENARIOS.map((sc, i) => `<button class="${i === activeTab ? 'on' : ''}" data-tab="${i}">${sc.name}</button>`).join('');
+  const sc = SCENARIOS[activeTab];
+  $('scenario').innerHTML = `<p>${sc.text}</p><div class="steps">
+    <button data-step="-1" class="${stepIdx === 0 ? 'next' : 'done'}">Start: reset to this scenario</button>
+    ${sc.steps.map(([l], i) => `<button data-step="${i}" class="${stepIdx === i + 1 ? 'next' : stepIdx > i + 1 ? 'done' : ''}">${i + 1}. ${l}</button>`).join('')}
+  </div>`;
+}
+$('tabs').onclick = (e) => { const i = e.target.dataset.tab; if (i == null) return; activeTab = +i; stepIdx = 0; renderTabs(); };
+$('scenario').onclick = (e) => {
+  const i = e.target.dataset.step; if (i == null) return;
+  const sc = SCENARIOS[activeTab];
+  if (+i === -1) { cfg = sc.setup(); restart(); stepIdx = 1; }
+  else {
+    if (stepIdx === 0) { cfg = sc.setup(); restart(); }
+    dispatch(sc.steps[+i][1]); stepIdx = +i + 2;
+  }
+  renderTabs();
+};
+
+fillSelects();
+cfg = defaultCfg();
+restart();
+renderTabs();
+</script>
+</body>
+</html>

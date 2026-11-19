@@ -1,0 +1,634 @@
+// ===================== Pure model: Live Day + Run loop (no DOM) =====================
+const LiveDay = (() => {
+  const SIZE = ['', 'Small', 'Medium', 'Large'];
+  const SURF = ['grass', 'asphalt', 'lit', 'ils'];
+  const SURF_NAME = { grass: 'Grass', asphalt: 'Asphalt', lit: 'Lit', ils: 'ILS' };
+  const LEN = ['', 'Short', 'Medium', 'Long'];
+
+  const AIRCRAFT = [
+    { id: 'C208', name: 'Cessna 208 Caravan', size: 1, purpose: 'pax', fee: 150, fuel: 40 },
+    { id: 'C208F', name: 'Cessna 208 Cargomaster', size: 1, purpose: 'cargo', fee: 160, fuel: 40 },
+    { id: 'Q400', name: 'Dash 8-Q400', size: 1, purpose: 'pax', fee: 300, fuel: 40 },
+    { id: 'A320', name: 'A320', size: 2, purpose: 'pax', fee: 600, fuel: 45 },
+    { id: 'B738', name: 'B737-800', size: 2, purpose: 'pax', fee: 600, fuel: 45 },
+    { id: 'B738F', name: 'B737-800BCF', size: 2, purpose: 'cargo', fee: 700, fuel: 45 },
+    { id: 'B77W', name: 'B777-300ER', size: 3, purpose: 'pax', fee: 1400, fuel: 55 },
+    { id: 'A350', name: 'A350', size: 3, purpose: 'pax', fee: 1400, fuel: 55 },
+    { id: 'B748F', name: 'B747-8F', size: 3, purpose: 'cargo', fee: 1800, fuel: 55 },
+  ];
+
+  // Twists: three families, Severity 1-4. Times in minutes since 00:00.
+  const TWISTS = {
+    none: { name: 'No Twist', short: '' },
+    windy: { name: 'Windy', family: 'Weather', sev: 1, short: '💨', from: 360, to: 1440, pilot: 1.5 },
+    rain: { name: 'Heavy Rain + Crosswind', family: 'Weather', sev: 2, short: '🌧', from: 600, to: 1080, pilot: 2, atc: 1.3, windShift: 840 },
+    storm: { name: 'Storm (ILS needed 13–17h)', family: 'Weather', sev: 3, short: '⛈', from: 780, to: 1020, pilot: 2.5, atc: 1.8, needILS: true, windShift: 900 },
+    thunder: { name: 'Thunderstorm (ILS needed 12–18h, all closed 14–15h)', family: 'Weather', sev: 4, short: '🌩', from: 720, to: 1080, pilot: 3, atc: 2.2, needILS: true, closeAll: [840, 900], windShift: 960 },
+    taxiworks: { name: 'Taxiway works (+3 min taxi)', family: 'Infrastructure', sev: 1, short: '🚧', taxiExtra: 3 },
+    inspection: { name: 'Runway inspection (R1 closed 10–12h)', family: 'Infrastructure', sev: 2, short: '🔍', closeFirst: [600, 720] },
+    closure: { name: 'Runway closure (R1 closed 9–15h)', family: 'Infrastructure', sev: 3, short: '⛔', closeFirst: [540, 900] },
+    outage: { name: 'Power outage (no lights/ILS 18–22h)', family: 'Infrastructure', sev: 4, short: '🔌', outage: [1080, 1320], closeFirst: [540, 720] },
+    surge1: { name: 'Busy day (+15% flights)', family: 'Traffic Surge', sev: 1, short: '📈', traffic: 1.15 },
+    surge2: { name: 'Holiday traffic (+25%, more Medium)', family: 'Traffic Surge', sev: 2, short: '📈', traffic: 1.25, mediumBoost: 0.1 },
+    surge3: { name: 'Heavy Day (+40%, many Large)', family: 'Traffic Surge', sev: 3, short: '📈', traffic: 1.4, largeBoost: 0.15 },
+    surge4: { name: 'Surprise rush hour (+50%, compressed peaks)', family: 'Traffic Surge', sev: 4, short: '📈', traffic: 1.5, largeBoost: 0.1, sharpPeaks: true },
+  };
+  const FAMILIES = { Weather: ['windy', 'rain', 'storm', 'thunder'], Infrastructure: ['taxiworks', 'inspection', 'closure', 'outage'], 'Traffic Surge': ['surge1', 'surge2', 'surge3', 'surge4'] };
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  const DT = 0.25; // simulation step in minutes (15 s)
+  const T = {
+    dayStart: 300, opsStart: 360, lastArrival: 1320, curfew: 1440, daylightEnd: 1200,
+    landMin: 3, takeoffMin: 2, taxiMin: 5, lowFuel: 10,
+    turnaround: [0, 25, 40, 60], remoteFactor: 1.5, unloadShare: 0.4,
+    incidentCost: 2000, groundIncidentCost: 1000,
+    cooldown: { groundStop: 480, priority: 90, divert: 60, rush: 90 },
+    groundStopMin: 10,
+    // Run-level tuning (first guesses)
+    demandBase: 30, demandPerWeek: 20, dayFactor: [1, 1.05, 1.1, 1.15, 1.2, 2.0, 1.6], quotaShare: 0.75, bossQuotaShare: 0.9,
+    crashBlock: 60, incidentBlock: 20, fireFactor: [1, 0.75, 0.55, 0.4, 0.3, 0.2],
+    crashFineBase: [0, 5000, 10000, 20000], crashFineStep: 0.5, crashFineCap: 3,
+    perStandDaily: [0, 10, 8, 6], // how many arrivals per Day one fitting Stand can absorb (Schedule cap)
+  };
+  const fmt = (t) => { const m = Math.floor(t); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+  const crosses = (s, at) => at != null && at >= s.t && at < s.t + DT;
+
+  function rngNext(state) {
+    let a = (state.seed = (state.seed + 0x6D2B79F5) | 0);
+    a = Math.imul(a ^ (a >>> 15), a | 1);
+    a ^= a + Math.imul(a ^ (a >>> 7), a | 61);
+    return ((a ^ (a >>> 14)) >>> 0) / 4294967296;
+  }
+
+  function log(s, text, kind = 'info', stop = false) { s.log.push({ t: s.t, text, kind, seq: s.log.length, stop: stop || kind === 'bad' }); }
+  function runwayCanServe(r, size) { return r.len >= size && (r.surf !== 'grass' || size === 1); }
+  function standFits(st, f) { return st.hub === f.purpose && st.size >= f.size; }
+  function canHandle(airport, size, purpose) {
+    return airport.runways.some(r => runwayCanServe(r, size)) && airport.stands.some(st => st.hub === purpose && st.size >= size);
+  }
+
+  // Schedule = difficulty curve filtered by what the airport can handle.
+  function makeSchedule(cfg, s) {
+    const tw = TWISTS[cfg.twist] || TWISTS.none;
+    const w = Math.min(cfg.week, 4), d = cfg.dow;
+    const count = Math.round((T.demandBase + T.demandPerWeek * (cfg.week - 1)) * T.dayFactor[d] * (tw.traffic || 1));
+    let pSmall = [0.6, 0.45, 0.35, 0.25][w - 1];
+    let pLarge = w === 1 ? 0 : w === 2 ? [0, 0, 0, 0.04, 0.06, 0.08, 0.12][d] : [0.15, 0.25][w - 3];
+    if (tw.largeBoost && w >= 2) { pLarge += tw.largeBoost; pSmall -= tw.largeBoost; }
+    if (tw.mediumBoost) { pSmall -= tw.mediumBoost; }
+    const hours = []; for (let h = 6; h <= 21; h++) hours.push(h);
+    const width = tw.sharpPeaks ? 1 : 4;
+    const wts = hours.map(h => 0.3 + Math.exp(-((h - 8.5) ** 2) / width) + Math.exp(-((h - 17.5) ** 2) / width));
+    const tot = wts.reduce((a, b) => a + b, 0);
+    const meta = { wanted: count, quota: Math.round((d === 6 ? T.bossQuotaShare : T.quotaShare) * 2 * count), swapped: 0, skipped: [0, 0, 0, 0], mix: [0, 0, 0, 0] };
+    const arrivals = [];
+    // Schedule cap: each Size Class (per Purpose) only sends as many flights as its fitting Stands can absorb.
+    const cap = {}, used = {};
+    for (const pu of ['pax', 'cargo']) for (let z = 1; z <= 3; z++) {
+      cap[pu + z] = s.airport.stands.filter(st => st.hub === pu && st.size >= z).length * T.perStandDaily[z]; used[pu + z] = 0;
+    }
+    const fits = (z, pu) => canHandle(s.airport, z, pu) && used[pu + z] < cap[pu + z];
+    meta.capped = [0, 0, 0, 0];
+    for (let i = 0; i < count; i++) {
+      const r = rngNext(s);
+      let size = r < pSmall ? 1 : r < 1 - pLarge ? 2 : 3;
+      const purpose = rngNext(s) < 0.25 ? 'cargo' : 'pax';
+      const pickR = rngNext(s), timeR = rngNext(s), minR = rngNext(s);
+      if (!fits(size, purpose)) {
+        const why = canHandle(s.airport, size, purpose) ? 'capped' : 'skipped';
+        if (w === 1 && fits(1, purpose)) { size = 1; meta.swapped++; }
+        else { meta[why][size]++; continue; }
+      }
+      used[purpose + size]++;
+      const opts = AIRCRAFT.filter(a => a.size === size && a.purpose === purpose);
+      const type = opts[Math.floor(pickR * opts.length)];
+      let rr = timeR * tot, h = hours[0];
+      for (let j = 0; j < hours.length; j++) { rr -= wts[j]; if (rr <= 0) { h = hours[j]; break; } }
+      arrivals.push({ t: Math.min(h * 60 + Math.floor(minR * 60), T.lastArrival - 1), type });
+      meta.mix[size]++;
+    }
+    arrivals.sort((a, b) => a.t - b.t);
+    return { arrivals, meta };
+  }
+
+  function newFlight(s, type) {
+    return { id: 'F' + (++s.nextId), type: type.id, name: type.name, size: type.size, purpose: type.purpose, fee: type.fee,
+      fuelMax: type.fuel, fuel: type.fuel, state: 'scheduled', priority: false, lowFuel: false };
+  }
+
+  function create(cfg) {
+    const base = cfg.airport;
+    const s = {
+      cfg, seed: cfg.seed | 0, t: T.dayStart, nextId: 0, twist: cfg.twist,
+      money: cfg.money, weekCrashes: cfg.weekCrashes || 0,
+      airport: {
+        runways: base.runways.map((r, i) => ({ ...r, id: 'R' + (i + 1), busyUntil: 0, blockedUntil: 0, use: null })),
+        stands: base.stands.map((st, i) => ({ ...st, id: 'S' + (i + 1), occupant: null })),
+        bays: (base.bays || []).map((b, i) => ({ ...b, id: 'B' + (i + 1), occupant: null })),
+        tower: { ...base.tower }, support: { ...base.support }, fire: base.fire || 0,
+      },
+      flights: [], log: [], pendingAlert: null, ended: false, runLost: false,
+      cooldowns: { groundStop: 0, priority: 0, divert: 0, rush: 0 }, groundStopUntil: 0,
+      stats: { landed: 0, departed: 0, arrivalFees: 0, departureFees: 0, crashes: 0, incidents: 0, goArounds: 0, diversions: 0, upkeep: 0, incidentCosts: 0, fuelAlerts: 0, emergencyAlerts: 0, crashFines: 0, closedDiversions: 0, closedMinutes: 0 },
+    };
+    const { arrivals, meta } = makeSchedule(cfg, s);
+    s.meta = meta;
+    for (const a of arrivals) { const f = newFlight(s, a.type); f.arriveAt = a.t; s.flights.push(f); }
+    // Overnight aircraft (prototype shortcut: generated, not carried over from yesterday)
+    const parkN = Math.round(arrivals.length * 0.12);
+    let parked = 0;
+    for (const st of s.airport.stands) {
+      if (parked >= parkN) break;
+      const opts = AIRCRAFT.filter(a => a.size <= st.size && a.purpose === st.hub && canHandle(s.airport, a.size, a.purpose));
+      if (!opts.length) continue;
+      const f = newFlight(s, opts[Math.floor(rngNext(s) * opts.length)]);
+      f.state = 'onStand'; f.standId = st.id; f.unloaded = true; f.readyAt = T.opsStart + Math.floor(rngNext(s) * 120);
+      st.occupant = f.id; s.flights.push(f); parked++;
+    }
+    s.meta.parked = parked;
+    log(s, `${DAYS[cfg.dow]}, Week ${cfg.week}. ${arrivals.length} arrivals, ${parked} parked overnight. Twist: ${(TWISTS[cfg.twist] || TWISTS.none).name}.`);
+    return s;
+  }
+
+  const tw = (s) => TWISTS[s.twist] || TWISTS.none;
+  const inWindow = (t, w) => w && t >= w[0] && t < w[1];
+  function weatherActive(s) { const x = tw(s); return x.from != null && s.t >= x.from && s.t < x.to; }
+  function weatherMult(s, key) {
+    if (!weatherActive(s)) return 1;
+    const m = tw(s)[key] || 1, ws = s.airport.tower.weather;
+    return 1 + (m - 1) * Math.max(0, 1 - 0.15 * (ws - 1));
+  }
+  function airborne(s) { return s.flights.filter(f => f.state === 'holding' || f.state === 'landing').length; }
+  function radarCap(s) { return 2 + 2 * s.airport.tower.radar; }
+  function errorChances(s, runway) {
+    const over = Math.max(0, airborne(s) - radarCap(s));
+    const atc = 0.025 * (1 - 0.15 * (s.airport.tower.training - 1)) * (1 + 0.4 * over) * weatherMult(s, 'atc');
+    let pilot = 0.015 * weatherMult(s, 'pilot');
+    if (runway && runway.surf === 'ils') pilot *= 0.6;
+    if (runway && runway.surf === 'grass') pilot *= 1.3;
+    return { atc, pilot, over };
+  }
+  function lightsWork(s) { return !inWindow(s.t, tw(s).outage); }
+  function runwayStatus(s, r, i) {
+    const x = tw(s);
+    if (s.t < T.opsStart) return { open: false, why: 'before 06:00' };
+    if (inWindow(s.t, x.closeAll)) return { open: false, why: 'closed by Thunderstorm' };
+    if (i === 0 && inWindow(s.t, x.closeFirst)) return { open: false, why: 'closed (Infrastructure Twist)' };
+    if (r.blockedUntil > s.t) return { open: false, why: 'blocked' };
+    const night = s.t >= T.daylightEnd;
+    const lit = (r.surf === 'lit' || r.surf === 'ils') && lightsWork(s);
+    if (night && !lit) return { open: false, why: 'dark' };
+    if (x.needILS && weatherActive(s) && !(r.surf === 'ils' && lightsWork(s))) return { open: false, why: 'weather: needs ILS' };
+    return { open: true };
+  }
+  function findStand(s, f) {
+    return s.airport.stands.filter(st => !st.occupant && standFits(st, f))
+      .sort((a, b) => (a.kind === 'contact' ? 0 : 1) - (b.kind === 'contact' ? 0 : 1) || a.size - b.size)[0];
+  }
+  function findBay(s, f) { return s.airport.bays.filter(b => !b.occupant && b.size >= f.size).sort((a, b) => a.size - b.size)[0]; }
+  function nightBlocks(s, f) {
+    return s.t >= T.daylightEnd && !s.airport.runways.some(r => runwayCanServe(r, f.size) && (r.surf === 'lit' || r.surf === 'ils') && lightsWork(s));
+  }
+  function holdReason(s, f) {
+    const fits = s.airport.runways.map((r, i) => ({ r, i })).filter(({ r }) => runwayCanServe(r, f.size));
+    if (!fits.some(({ r, i }) => runwayStatus(s, r, i).open)) return 'no fitting Runway open';
+    if (!findStand(s, f) && !findBay(s, f)) return 'no free Stand or Holding Bay';
+    return 'Runway busy';
+  }
+  function noFittingRunway(s, f) { return !s.airport.runways.some((r, i) => runwayCanServe(r, f.size) && runwayStatus(s, r, i).open); }
+  function airportClosed(s) { return s.t >= T.opsStart && !s.airport.runways.some((r, i) => runwayStatus(s, r, i).open); }
+  function alertCovers(s, cause) {
+    const r = s.airport.tower.radar;
+    return (cause === 'ATC' && r >= 3) || (cause === 'pilot' && r >= 4);
+  }
+  function freeSpots(s, f) {
+    if (f.standId) { const st = s.airport.stands.find(x => x.id === f.standId); if (st && st.occupant === f.id) st.occupant = null; f.standId = null; }
+    if (f.bayId) { const b = s.airport.bays.find(x => x.id === f.bayId); if (b && b.occupant === f.id) b.occupant = null; f.bayId = null; }
+  }
+
+  function blockFactor(s) { return T.fireFactor[s.airport.fire || 0]; }
+  function crash(s, f, cause, runway) {
+    f.state = 'crashed'; s.stats.crashes++; freeSpots(s, f);
+    const fine = Math.round(T.crashFineBase[f.size] * Math.min(T.crashFineCap, 1 + T.crashFineStep * s.weekCrashes)); s.weekCrashes++;
+    s.money -= fine; s.stats.crashFines += fine;
+    const block = Math.round(T.crashBlock * blockFactor(s));
+    if (runway) { runway.blockedUntil = s.t + block; runway.use = null; }
+    const why = { ATC: 'ATC Error', pilot: 'Pilot Error', fuel: 'out of fuel while Holding' }[cause];
+    log(s, `CRASH: ${f.name} — ${why}. Crash Fine −${fine} (Crash #${s.weekCrashes} this Week).${runway ? ` ${runway.id} blocked ${block} min.` : ''}`, 'bad');
+  }
+  function goAround(s, f, r) {
+    f.state = 'holding'; f.fuel = Math.max(1, f.fuel - 5); s.stats.goArounds++; f.noLandUntil = s.t + 5; freeSpots(s, f); r.use = null;
+    log(s, `Go-Around: ${f.name}.`, 'warn');
+  }
+  function rejectTakeoff(s, f, r) { f.state = 'queue'; f.queuedAt = s.t; r.use = null; r.busyUntil = s.t + 4; log(s, `Rejected takeoff: ${f.name}.`, 'warn'); }
+  function incident(s, f, r, phase) {
+    const block = Math.round(T.incidentBlock * blockFactor(s));
+    s.money -= T.incidentCost; s.stats.incidents++; s.stats.incidentCosts += T.incidentCost; r.blockedUntil = s.t + block;
+    log(s, `Incident during ${phase}: ${f.name}, ${r.id} blocked ${block} min, −${T.incidentCost}.`, 'warn');
+  }
+  function riskyMoment(s, f, r, phase) {
+    const p = errorChances(s, r);
+    const x = rngNext(s);
+    let cause = null;
+    if (x < p.atc) cause = 'ATC'; else if (x < p.atc + p.pilot) cause = 'pilot';
+    if (!cause) return;
+    const y = rngNext(s);
+    if (y < (phase === 'landing' ? 0.8 : 0.85)) { phase === 'landing' ? goAround(s, f, r) : rejectTakeoff(s, f, r); return; }
+    if (y < 0.99) { incident(s, f, r, phase); if (phase === 'takeoff') rejectTakeoff(s, f, r); return; }
+    if (alertCovers(s, cause)) { s.pendingAlert = { kind: 'crash', flightId: f.id, cause, phase, runwayId: r.id }; s.stats.emergencyAlerts++; log(s, `EMERGENCY ALERT: ${f.name} about to crash on ${phase}.`, 'bad'); return; }
+    crash(s, f, cause, r);
+  }
+  // Separation: Radar + Controller Training shorten how long a movement blocks a Runway.
+  function separation(s) {
+    const lvl = s.airport.tower.radar + s.airport.tower.training - 2; // 0..8
+    return { land: 4 - 0.25 * lvl, takeoff: 3 - 0.1875 * lvl };     // 4 → 2 min, 3 → 1.5 min
+  }
+  function startLanding(s, f, r) {
+    const st = findStand(s, f);
+    if (st) { f.standId = st.id; st.occupant = f.id; } else { const b = findBay(s, f); f.bayId = b.id; b.occupant = f.id; }
+    const sep = separation(s);
+    f.state = 'landing'; f.until = s.t + sep.land; f.runwayId = r.id; f.priority = false;
+    r.busyUntil = s.t + sep.land; r.use = f.id;
+    riskyMoment(s, f, r, 'landing');
+  }
+  function startTakeoff(s, f, r) {
+    const sep = separation(s);
+    f.state = 'takeoff'; f.until = s.t + sep.takeoff; f.runwayId = r.id; r.busyUntil = s.t + sep.takeoff; r.use = f.id;
+    riskyMoment(s, f, r, 'takeoff');
+  }
+  function taxiTime(s) { return T.taxiMin + (tw(s).taxiExtra || 0); }
+  function taxiIncident(s, f) {
+    if (s.groundStopUntil > s.t) return;
+    const moving = s.flights.filter(x => x.state === 'taxiIn' || x.state === 'taxiOut').length;
+    const p = 0.004 * (1 + 0.3 * moving) * Math.max(0.2, 1 - 0.15 * (s.airport.tower.ground - 1)) * (tw(s).taxiExtra ? 1.5 : 1);
+    if (rngNext(s) < p) { s.money -= T.groundIncidentCost; s.stats.incidents++; s.stats.incidentCosts += T.groundIncidentCost; f.until += Math.round(10 * blockFactor(s)); log(s, `Ground Incident on a Taxiway: ${f.name}, −${T.groundIncidentCost}.`, 'warn'); }
+  }
+  function divertFlight(s, f, why) { f.state = 'diverted'; s.stats.diversions++; freeSpots(s, f); log(s, `Diversion: ${f.name} — ${why}.`, 'warn'); }
+
+  function tick(s) {
+    const x = tw(s);
+    const closed = airportClosed(s);
+    if (closed) s.stats.closedMinutes += DT;
+    if (closed && !s.wasClosed) log(s, 'AIRPORT CLOSED: no usable Runway.', 'warn', true);
+    if (!closed && s.wasClosed) log(s, 'Airport reopened.', 'good');
+    s.wasClosed = closed;
+    if (crosses(s, x.windShift)) { for (const r of s.airport.runways) r.blockedUntil = Math.max(r.blockedUntil, s.t + 15); log(s, 'Wind Shift: Runways switch Active Direction (15 min).', 'warn', true); }
+    for (const f of s.flights) {
+      if (f.state === 'scheduled' && f.arriveAt <= s.t) {
+        if (nightBlocks(s, f)) divertFlight(s, f, 'dark and no working Lit/ILS Runway');
+        else { f.state = 'holding'; f.holdSince = s.t; }
+      }
+    }
+    for (const f of s.flights) {
+      if (f.state !== 'holding') continue;
+      if (nightBlocks(s, f)) { divertFlight(s, f, 'still Holding at dusk, no working Lit/ILS Runway'); continue; }
+      f.fuel -= DT;
+      if (!f.lowFuel && f.fuel <= T.lowFuel) {
+        f.lowFuel = true;
+        log(s, `Low fuel: ${f.name} (waiting: ${holdReason(s, f)}).`, 'warn', true);
+        if (s.airport.tower.radar >= 3) { s.pendingAlert = { kind: 'fuel', flightId: f.id }; s.stats.fuelAlerts++; log(s, `FUEL ALERT: ${f.name} has ${Math.round(f.fuel)} min left.`, 'warn', true); return; }
+      }
+      if (f.fuel <= 0) {
+        if (noFittingRunway(s, f)) { s.stats.closedDiversions++; divertFlight(s, f, airportClosed(s) ? 'Airport Closed at minimum fuel' : `no usable Runway for a ${SIZE[f.size]} aircraft at minimum fuel`); continue; }
+        log(s, `${f.name} never got down: ${holdReason(s, f)}.`, 'bad'); crash(s, f, 'fuel', null);
+      }
+    }
+    const gs = s.groundStopUntil > s.t;
+    for (const f of s.flights) {
+      if (f.state === 'landing' && s.t >= f.until) {
+        s.airport.runways.find(r => r.id === f.runwayId).use = null;
+        f.state = 'taxiIn'; f.until = s.t + taxiTime(s); s.stats.landed++; taxiIncident(s, f);
+      } else if (f.state === 'taxiIn' && (gs ? (f.until += DT, false) : s.t >= f.until)) {
+        if (f.standId) {
+          const st = s.airport.stands.find(x => x.id === f.standId);
+          const ta = Math.round(T.turnaround[f.size] * (st.kind === 'remote' ? T.remoteFactor : 1));
+          f.state = 'onStand'; f.unloadAt = s.t + Math.round(ta * T.unloadShare); f.readyAt = s.t + ta; f.unloaded = false;
+        } else { f.state = 'inBay'; f.landedAt = f.landedAt || s.t; }
+      } else if (f.state === 'onStand') {
+        if (!f.unloaded && s.t >= f.unloadAt) { f.unloaded = true; s.money += f.fee; s.stats.arrivalFees += f.fee; }
+        if (s.t >= f.readyAt && s.t >= T.opsStart) { freeSpots(s, f); f.state = 'taxiOut'; f.until = s.t + taxiTime(s); taxiIncident(s, f); }
+      } else if (f.state === 'taxiOut' && (gs ? (f.until += DT, false) : s.t >= f.until)) {
+        f.state = 'queue'; f.queuedAt = s.t;
+      } else if (f.state === 'takeoff' && s.t >= f.until) {
+        s.airport.runways.find(r => r.id === f.runwayId).use = null;
+        f.state = 'departed'; s.money += f.fee; s.stats.departureFees += f.fee; s.stats.departed++;
+      }
+    }
+    // Holding Bay → Stand, in landing order
+    for (const f of s.flights.filter(f => f.state === 'inBay').sort((a, b) => a.landedAt - b.landedAt)) {
+      const st = findStand(s, f); if (!st) continue;
+      freeSpots(s, f); f.standId = st.id; st.occupant = f.id; f.state = 'taxiIn'; f.until = s.t + 3;
+    }
+    s.airport.runways.forEach((r, i) => {
+      if (s.pendingAlert || s.runLost) return;
+      if (r.busyUntil > s.t || !runwayStatus(s, r, i).open) return;
+      const holding = s.flights.filter(f => f.state === 'holding' && !(f.noLandUntil > s.t) && runwayCanServe(r, f.size) && (findStand(s, f) || findBay(s, f)))
+        .sort((a, b) => (b.priority - a.priority) || (b.lowFuel - a.lowFuel) || (a.holdSince - b.holdSince));
+      const queue = s.flights.filter(f => f.state === 'queue' && runwayCanServe(r, f.size)).sort((a, b) => a.queuedAt - b.queuedAt);
+      const urgent = holding[0] && (holding[0].priority || holding[0].lowFuel);
+      if (urgent) return startLanding(s, holding[0], r);
+      if (queue[0] && (!holding[0] || s.t - queue[0].queuedAt >= 3)) return startTakeoff(s, queue[0], r);
+      if (holding[0]) return startLanding(s, holding[0], r);
+    });
+  }
+
+  function endOfDay(s) {
+    for (const f of s.flights) if (f.state === 'holding' || f.state === 'scheduled') divertFlight(s, f, 'Curfew at 24:00');
+    s.ended = true;
+  }
+  const stopped = (s) => s.ended || s.runLost || !!s.pendingAlert;
+  function advance(s, minutes) {
+    const end = s.t + minutes;
+    while (s.t < end && !stopped(s)) {
+      if (s.t >= T.curfew) { endOfDay(s); break; }
+      tick(s); s.t += DT;
+      if (s.t >= T.curfew && !stopped(s)) { endOfDay(s); break; }
+    }
+  }
+  function holdingTarget(s) { return s.flights.filter(f => f.state === 'holding').sort((a, b) => a.fuel - b.fuel)[0]; }
+
+  function reduce(prev, action) {
+    const s = structuredClone(prev);
+    const cd = s.cooldowns;
+    switch (action.type) {
+      case 'toEnd': advance(s, 99999); break;
+      case 'priority': {
+        if (!s.airport.support.airline || cd.priority > s.t) break;
+        const f = holdingTarget(s); if (!f) break;
+        f.priority = true; cd.priority = s.t + T.cooldown.priority; log(s, `Priority Landing: ${f.name}.`, 'good'); break;
+      }
+      case 'divert': {
+        if (!s.airport.support.admin || cd.divert > s.t) break;
+        const f = holdingTarget(s); if (!f) break;
+        cd.divert = s.t + T.cooldown.divert; divertFlight(s, f, 'Manual Divert'); break;
+      }
+      case 'dismissAlert': s.pendingAlert = null; break;
+      case 'resolveAlert': {
+        const a = s.pendingAlert; if (!a) break;
+        s.pendingAlert = null;
+        const f = s.flights.find(x => x.id === a.flightId);
+        const r = s.airport.runways.find(x => x.id === a.runwayId);
+        const pSave = 0.5 + 0.1 * (s.airport.tower.training - 1);
+        if (action.intervene && rngNext(s) < pSave) { log(s, 'Emergency Alert: intervention worked.', 'good'); a.phase === 'landing' ? goAround(s, f, r) : rejectTakeoff(s, f, r); }
+        else { log(s, 'Emergency Alert: intervention failed.', 'bad'); crash(s, f, a.cause, r); }
+        break;
+      }
+    }
+    return s;
+  }
+
+  return { create, reduce, makeSchedule, canHandle, runwayCanServe, TWISTS, FAMILIES, DAYS, AIRCRAFT, SIZE, LEN, SURF, SURF_NAME, fmt, rngNext };
+})();
+
+// ---------------------------------------------------------------------------
+const RunLoop = (() => {
+  const L = LiveDay;
+  const STARTS = {
+    allrounder: { name: 'Starting Airport', money: 20000, mult: 1, plots: 2,
+      airport: { runways: [{ len: 2, surf: 'asphalt' }],
+        stands: [{ size: 2, kind: 'contact', hub: 'pax' }, { size: 2, kind: 'contact', hub: 'pax' }, { size: 1, kind: 'contact', hub: 'pax' }, { size: 1, kind: 'contact', hub: 'pax' },
+          { size: 2, kind: 'contact', hub: 'cargo' }, { size: 2, kind: 'contact', hub: 'cargo' }, { size: 2, kind: 'remote', hub: 'pax' }, { size: 2, kind: 'remote', hub: 'pax' }],
+        bays: [{ size: 2 }], fire: 0, tower: { radar: 1, ground: 1, weather: 1, training: 1 }, support: { ramp: false, admin: false, airline: false } } },
+  };
+
+  // ---- Prices, Upkeep and space (first guesses) ----
+  const P = {
+    runway: [0, 30000, 80000, 160000],          // new Asphalt runway by length
+    surface: { asphalt: 16000, lit: 30000, ils: 80000 }, // upgrade TO this surface
+    stand: [0, 8000, 16000, 36000],             // contact; remote = 50%
+    bay: [0, 4000, 8000, 16000],
+    tower: (lvl) => 12000 * lvl,                // from lvl to lvl+1
+    support: 24000,
+    fire: (lvl) => lvl === 0 ? 20000 : 12000 * lvl, upFireLvl: 300,
+    plot: (owned) => 24000 * owned,
+    copyFactor: 1.25,                           // each extra copy of the same kind costs 25% more
+    upRunway: [0, 800, 1500, 2500], upSurface: { grass: 0, asphalt: 200, lit: 500, ils: 1000 },
+    upStand: 250, upRemote: 120, upBay: 80, upTowerLvl: 200, upSupport: 400,
+    space: { runway: [0, 6, 8, 10], stand: 1, bay: 1, support: 1 }, plotSize: 12,
+  };
+  const SURF_ORDER = ['grass', 'asphalt', 'lit', 'ils'];
+
+  function upkeep(a) {
+    let u = 0;
+    for (const r of a.runways) u += P.upRunway[r.len] + P.upSurface[r.surf];
+    for (const s of a.stands) u += s.kind === 'contact' ? P.upStand : P.upRemote;
+    u += a.bays.length * P.upBay;
+    for (const k in a.tower) u += a.tower[k] * P.upTowerLvl;
+    for (const k in a.support) if (a.support[k]) u += P.upSupport;
+    u += (a.fire || 0) * P.upFireLvl;
+    return u;
+  }
+  function spaceUsed(a) {
+    return a.runways.reduce((n, r) => n + P.space.runway[r.len], 0) + a.stands.length * P.space.stand + a.bays.length * P.space.bay
+      + Object.values(a.support).filter(Boolean).length * P.space.support + (a.fire ? P.space.support : 0);
+  }
+
+  function rngFor(seed) { return { seed }; }
+  function newRun({ start = 'allrounder', seed = 1 }) {
+    const st = STARTS[start];
+    const r = rngFor(seed * 7919 + 13);
+    const twists = [];
+    for (let w = 1; w <= 4; w++) {
+      const fams = Object.keys(L.FAMILIES);
+      for (let d = 0; d < 7; d++) {
+        if (d === 6) twists.push(L.FAMILIES[fams[Math.floor(L.rngNext(r) * fams.length)]][w - 1]);
+        else twists.push(L.rngNext(r) < 0.2 ? L.FAMILIES[fams[Math.floor(L.rngNext(r) * fams.length)]][0] : 'none');
+      }
+    }
+    return {
+      start, seed, startName: st.name, mult: st.mult,
+      week: 1, dow: 0, money: st.money, weekCrashes: 0, plots: st.plots,
+      airport: structuredClone(st.airport), twists, history: [], spent: 0,
+      totals: { flights: 0, fees: 0, crashes: 0, diversions: 0, fines: 0 }, over: false, won: false, lost: false, lastReport: null, notes: [],
+    };
+  }
+  const dayIndex = (run) => (run.week - 1) * 7 + run.dow;
+  function dayCfg(run, idx = dayIndex(run)) {
+    const week = Math.floor(idx / 7) + 1, dow = idx % 7;
+    return { week, dow, twist: run.twists[idx], seed: run.seed * 1000 + idx, weekCrashes: run.weekCrashes, airport: run.airport, money: run.money };
+  }
+  // Forecast with the airport as it is now.
+  function forecast(run, idx = dayIndex(run)) {
+    const s = L.create(dayCfg(run, idx));
+    return { flights: s.flights.filter(f => f.state === 'scheduled').length, parked: s.meta.parked, meta: s.meta, twist: run.twists[idx], week: Math.floor(idx / 7) + 1, dow: idx % 7 };
+  }
+
+  // ---- Shop ----
+  function shop(run) {
+    const a = run.airport, items = [];
+    const free = run.plots * P.plotSize - spaceUsed(a);
+    const add = (key, group, label, cost, space, extra = {}) => items.push({ key, group, label, cost, space, ...extra });
+    const nRunways = a.runways.length;
+    for (let len = 1; len <= 3; len++) add('runway:' + len, 'Runways', `New ${L.LEN[len]} Asphalt Runway`, Math.round(P.runway[len] * P.copyFactor ** (nRunways - 1) / 100) * 100, P.space.runway[len]);
+    a.runways.forEach((r, i) => {
+      const si = SURF_ORDER.indexOf(r.surf);
+      if (si < 3) { const next = SURF_ORDER[si + 1]; add(`surface:${i}`, 'Runways', `R${i + 1}: ${L.SURF_NAME[r.surf]} → ${L.SURF_NAME[next]}`, P.surface[next], 0); }
+      if (r.len < 3) add(`lengthen:${i}`, 'Runways', `R${i + 1}: lengthen ${L.LEN[r.len]} → ${L.LEN[r.len + 1]}`, P.runway[r.len + 1] - P.runway[r.len], P.space.runway[r.len + 1] - P.space.runway[r.len]);
+    });
+    for (const hub of ['pax', 'cargo']) for (let size = 1; size <= 3; size++) {
+      const nC = a.stands.filter(x => x.hub === hub && x.size === size && x.kind === 'contact').length;
+      const nR = a.stands.filter(x => x.hub === hub && x.size === size && x.kind === 'remote').length;
+      add(`stand:${hub}:contact:${size}`, hub === 'pax' ? 'Terminal Stands' : 'Cargo Hub Stands', `${L.SIZE[size]} Contact Stand${nC ? ` (#${nC + 1})` : ''}`, Math.round(P.stand[size] * P.copyFactor ** nC / 100) * 100, 1);
+      add(`stand:${hub}:remote:${size}`, hub === 'pax' ? 'Terminal Stands' : 'Cargo Hub Stands', `${L.SIZE[size]} Remote Stand (slower)${nR ? ` (#${nR + 1})` : ''}`, Math.round(P.stand[size] / 2 * P.copyFactor ** nR / 100) * 100, 1);
+    }
+    for (let size = 1; size <= 3; size++) { const n = a.bays.filter(b => b.size === size).length; add('bay:' + size, 'Holding Bays', `${L.SIZE[size]} Holding Bay${n ? ` (#${n + 1})` : ''}`, Math.round(P.bay[size] * P.copyFactor ** n / 100) * 100, 1); }
+    for (const [k, n] of [['radar', 'Radar'], ['ground', 'Ground Radar'], ['weather', 'Weather Station'], ['training', 'Controller Training']])
+      if (a.tower[k] < 5) add('tower:' + k, 'ATC Tower', `${n} ${a.tower[k]} → ${a.tower[k] + 1}`, P.tower(a.tower[k]), 0,
+        { hint: [k === 'radar' && a.tower[k] === 2 ? 'Level 3 unlocks Fuel & Emergency Alerts' : '',
+          (k === 'radar' || k === 'training') ? 'shortens Runway Separation (landing −15 s, takeoff −11 s)' : ''].filter(Boolean).join(' · ') });
+    if ((a.fire || 0) < 5) add('fire', 'Safety', a.fire ? `Fire & Rescue Station ${a.fire} → ${a.fire + 1}` : 'Build Fire & Rescue Station (level 1)', P.fire(a.fire || 0), a.fire ? 0 : P.space.support,
+      { hint: `Crash blockage ${Math.round(60 * [1, 0.75, 0.55, 0.4, 0.3, 0.2][a.fire || 0])} → ${Math.round(60 * [1, 0.75, 0.55, 0.4, 0.3, 0.2][(a.fire || 0) + 1])} min` });
+    for (const [k, n, act] of [['ramp', 'Ramp Agent Station', 'Rush Turnaround'], ['admin', 'Admin Office', 'Manual Divert'], ['airline', 'Airline Office', 'Priority Landing']])
+      if (!a.support[k]) add('support:' + k, 'Support Buildings', `${n} (${act})`, P.support, P.space.support);
+    add('plot', 'Land', `Buy Land Plot (+${P.plotSize} space)`, P.plot(run.plots), 0);
+    for (const it of items) {
+      it.ok = !run.over && run.money >= it.cost && it.space <= free;
+      it.why = run.over ? '' : run.money < 0 ? 'in Debt' : run.money < it.cost ? 'not enough Money' : it.space > free ? 'no space: buy Land' : '';
+      it.upkeep = upkeepDelta(run, it.key);
+    }
+    return items;
+  }
+  function applyBuild(a, run, key) {
+    const [kind, x, y, z] = key.split(':');
+    if (kind === 'runway') a.runways.push({ len: +x, surf: 'asphalt' });
+    else if (kind === 'surface') { const r = a.runways[+x]; r.surf = SURF_ORDER[SURF_ORDER.indexOf(r.surf) + 1]; }
+    else if (kind === 'lengthen') a.runways[+x].len++;
+    else if (kind === 'stand') a.stands.push({ hub: x, kind: y, size: +z });
+    else if (kind === 'bay') a.bays.push({ size: +x });
+    else if (kind === 'tower') a.tower[x]++;
+    else if (kind === 'support') a.support[x] = true;
+    else if (kind === 'plot') run.plots++;
+    else if (kind === 'fire') a.fire = (a.fire || 0) + 1;
+  }
+  function upkeepDelta(run, key) { const a = structuredClone(run.airport); applyBuild(a, { plots: 0 }, key); return upkeep(a) - upkeep(run.airport); }
+
+  function structures(run) {
+    const a = run.airport, list = [];
+    a.runways.forEach((r, i) => list.push({ key: 'runway:' + i, label: `R${i + 1} ${L.LEN[r.len]} ${L.SURF_NAME[r.surf]} Runway`,
+      refund: Math.round((P.runway[r.len] + SURF_ORDER.slice(2, SURF_ORDER.indexOf(r.surf) + 1).reduce((n, s) => n + P.surface[s], 0)) / 2) }));
+    a.stands.forEach((s, i) => list.push({ key: 'stand:' + i, label: `${L.SIZE[s.size]} ${s.kind === 'contact' ? 'Contact' : 'Remote'} Stand (${s.hub === 'pax' ? 'Terminal' : 'Cargo Hub'})`,
+      refund: Math.round(P.stand[s.size] * (s.kind === 'remote' ? 0.5 : 1) / 2) }));
+    a.bays.forEach((b, i) => list.push({ key: 'bay:' + i, label: `${L.SIZE[b.size]} Holding Bay`, refund: P.bay[b.size] / 2 }));
+    for (const k of ['ramp', 'admin', 'airline']) if (a.support[k]) list.push({ key: 'support:' + k, label: { ramp: 'Ramp Agent Station', admin: 'Admin Office', airline: 'Airline Office' }[k], refund: P.support / 2 });
+    return list;
+  }
+
+  function playOneDay(run) {
+    const idx = dayIndex(run);
+    const cfg = dayCfg(run, idx);
+    let s = L.create(cfg);
+    const moneyBefore = run.money;
+    let guard = 0;
+    while (!s.ended && !s.runLost && guard++ < 500) {
+      s = L.reduce(s, { type: 'toEnd' });
+      if (s.pendingAlert) {
+        // Auto-play policy (prototype): Fuel Alert → Manual Divert if available, else Priority Landing, else wait.
+        // Emergency Alert → always intervene.
+        if (s.pendingAlert.kind === 'fuel') {
+          const before = s.stats.diversions;
+          s = L.reduce(s, { type: 'divert' });
+          if (s.stats.diversions === before) s = L.reduce(s, { type: 'priority' });
+          s = L.reduce(s, { type: 'dismissAlert' });
+        } else s = L.reduce(s, { type: 'resolveAlert', intervene: true });
+      }
+    }
+    const up = upkeep(run.airport);
+    const report = {
+      idx, week: cfg.week, dow: cfg.dow, twist: cfg.twist, stats: s.stats, meta: s.meta, upkeep: s.runLost ? 0 : up,
+      fees: s.stats.arrivalFees + s.stats.departureFees, movements: s.stats.landed + s.stats.departed, quota: s.meta.quota,
+      weekCrashesAfter: s.weekCrashes,
+      events: s.log.filter(e => e.kind === 'bad' || /FUEL ALERT|Manual Divert|Priority Landing|Wind Shift|AIRPORT CLOSED|reopened/.test(e.text)).map(e => `${L.fmt(e.t)} ${e.text}`),
+      diversionsByReason: s.log.filter(e => e.text.startsWith('Diversion')).length,
+    };
+    report.lost = report.movements < report.quota;
+    if (report.lost) report.upkeep = 0;
+    run.money = s.money - report.upkeep;
+    report.net = run.money - moneyBefore;
+    run.weekCrashes = s.weekCrashes;
+    run.totals.flights += report.movements; run.totals.fees += report.fees; run.totals.crashes += s.stats.crashes; run.totals.diversions += s.stats.diversions; run.totals.fines += s.stats.crashFines;
+    run.history[idx] = report; run.lastReport = report;
+    if (report.lost) { run.over = true; run.lost = true; return; }
+    run.dow++;
+    if (run.dow === 7) {
+      run.dow = 0; run.week++; run.weekCrashes = 0;
+      if (run.week > 4) { run.over = true; run.won = true; }
+    }
+  }
+
+  function score(run) {
+    const days = run.history.filter(Boolean).length - (run.lost ? 1 : 0);
+    const raw = days * 1000 + run.totals.flights * 50 + Math.max(0, run.totals.fees);
+    const s = Math.round(raw * run.mult);
+    return { days, raw, score: s, airMiles: Math.round(s / 100) };
+  }
+
+
+  // ---- Prototype helper: a simple "autopilot" builder so walkthroughs can fast-forward. Not a game feature. ----
+  function autoBuild(run, calendarAware) {
+    const a = run.airport, w = run.week;
+    const cnt = (hub, size) => a.stands.filter(x => x.hub === hub && x.size === size && x.kind === 'contact').length;
+    let plan = [
+      ['lengthen:0', a.runways[0].len < 3],
+      ['stand:pax:contact:3', cnt('pax', 3) < 2 * w],
+      ['stand:cargo:contact:3', cnt('cargo', 3) < w],
+      ['bay:3', a.bays.filter(b => b.size === 3).length < w - 1],
+      ['stand:pax:contact:2', cnt('pax', 2) < 2 + 2 * w],
+      ['stand:cargo:contact:2', cnt('cargo', 2) < 2 + w],
+      ['bay:2', a.bays.length < 1 + w],
+      ['runway:2', a.runways.length < 2 && w >= 2],
+      ['tower:radar', a.tower.radar < 3],
+      ['fire', (a.fire || 0) < Math.min(3, w)],
+      ['support:admin', w >= 2],
+      ['surface:0', a.runways[0].surf === 'asphalt' && w >= 2],
+      ['tower:training', a.tower.training < 1 + w],
+    ].filter(([, c]) => c).map(([k]) => k);
+    if (a.runways[0].len < 3 && (w >= 2 || run.dow >= 4)) plan = ['lengthen:0'];
+    if (a.runways[0].len < 3) plan = plan.filter(k => !k.endsWith(':3'));
+    if (calendarAware) {
+      const boss = run.twists[run.week * 7 - 1], need = [];
+      if (['storm', 'thunder'].includes(boss) && !a.runways.some(r => r.surf === 'ils')) need.push('surface:0');
+      if (['inspection', 'closure', 'outage'].includes(boss) && a.runways.length < 2) need.push('runway:2');
+      if (need.length) plan = need;
+    }
+    for (let k = 0; k < 6; k++) {
+      const items = shop(run);
+      const it = plan.map(p => items.find(i => i.key === p && i.ok && run.money - i.cost > 5000)).find(Boolean);
+      if (!it) {
+        const blocked = plan.some(p => { const i = items.find(x => x.key === p); return i && i.why === 'no space: buy Land'; });
+        const pl = items.find(i => i.key === 'plot' && i.ok && run.money - i.cost > 5000);
+        if (blocked && pl) { run.money -= pl.cost; run.spent += pl.cost; run.plots++; continue; }
+        break;
+      }
+      run.money -= it.cost; run.spent += it.cost; applyBuild(run.airport, run, it.key);
+      plan = plan.filter(p => p !== it.key || p.startsWith('stand') || p.startsWith('bay'));
+    }
+  }
+
+  function reduce(prev, action) {
+    const run = structuredClone(prev);
+    switch (action.type) {
+      case 'build': {
+        const it = shop(run).find(i => i.key === action.key);
+        if (!it || !it.ok) break;
+        run.money -= it.cost; run.spent += it.cost; applyBuild(run.airport, run, action.key); break;
+      }
+      case 'demolish': {
+        const it = structures(run).find(i => i.key === action.key); if (!it || run.over) break;
+        const [kind, x] = action.key.split(':');
+        if (kind === 'runway') { if (run.airport.runways.length <= 1) break; run.airport.runways.splice(+x, 1); }
+        else if (kind === 'stand') run.airport.stands.splice(+x, 1);
+        else if (kind === 'bay') run.airport.bays.splice(+x, 1);
+        else if (kind === 'support') run.airport.support[x] = false;
+        run.money += it.refund; break;
+      }
+      case 'playDay': if (!run.over) playOneDay(run); break;
+      case 'playWeek': { if (run.over) break; const w = run.week; do { playOneDay(run); } while (!run.over && run.week === w); break; }
+      case 'playRun': while (!run.over) playOneDay(run); break;
+      case 'autopilotWeek': { if (run.over) break; const w = run.week; do { autoBuild(run, action.calendarAware); playOneDay(run); } while (!run.over && run.week === w); break; }
+    }
+    return run;
+  }
+
+  return { newRun, reduce, shop, structures, forecast, upkeep, spaceUsed, score, dayIndex, P, STARTS, autoBuild };
+})();
+// ===================== END MODEL =====================
