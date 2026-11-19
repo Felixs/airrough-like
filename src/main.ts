@@ -73,6 +73,10 @@ async function start(): Promise<void> {
         run = buyUpgrade(run, id);
         return run;
       },
+      onBuilt(next) {
+        run = next;
+        mountAirfield();
+      },
       onStartDay: beginDay,
     });
   };

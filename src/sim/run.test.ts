@@ -6,10 +6,11 @@ import { stepSimulation } from './simulation';
 describe('Upkeep', () => {
   it('is paid for Runways, Surfaces, Stands, Holding Bays, Tower Modules and Fire & Rescue', () => {
     const run = startRun(1);
-    // Medium Asphalt Runway 600 + 6 Medium Stands × 100 + 1 Medium Holding Bay 60; Tower Modules at level 1 are free
-    expect(upkeep(run)).toBe(1_260);
+    // Medium Asphalt Runway 600 + 6 Medium Stands × 100 + 1 Medium Holding Bay 60 + 255 Taxiway tiles × 2;
+    // Tower Modules at level 1 are free
+    expect(upkeep(run)).toBe(1_770);
     const upgraded: RunState = { ...run, towerModules: { ...run.towerModules, radar: 3 }, fireRescueLevel: 2 };
-    expect(upkeep(upgraded)).toBe(1_260 + 2 * 150 + 2 * 150);
+    expect(upkeep(upgraded)).toBe(1_770 + 2 * 150 + 2 * 150);
   });
 });
 
@@ -23,7 +24,7 @@ describe('End of Day', () => {
     const run = startRun(1);
     const next = finish(run, dayPlan(run).quota, run.money + 20_000);
     expect(next.status).toBe('planning');
-    expect(next.money).toBe(run.money + 20_000 - 1_260);
+    expect(next.money).toBe(run.money + 20_000 - 1_770);
     expect(next.weekday).toBe(1);
     expect(next.stats.daysSurvived).toBe(1);
   });
@@ -39,7 +40,7 @@ describe('End of Day', () => {
     const run = startRun(1);
     const next = finish(run, dayPlan(run).quota, -5_000);
     expect(next.status).toBe('planning');
-    expect(next.money).toBe(-6_260);
+    expect(next.money).toBe(-6_770);
     expect(next.inDebt).toBe(true);
   });
 

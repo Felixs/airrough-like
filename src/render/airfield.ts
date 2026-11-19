@@ -1,5 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { TILE_SIZE, type AirportLayout, type Structure } from '../sim/layout';
+import { holdShortLines, taxiwayEdgeLights } from '../sim/markings';
+import { drawCentreLines } from './taxiLines';
 
 /** Colours from the accepted UI baseline (ATC Console, night palette). Full art comes with the art pass. */
 const COLOURS = {
@@ -14,6 +16,9 @@ const COLOURS = {
   wall: 0x151c19,
   glass: 0x2c6f69,
   label: 0x7f9a92,
+  edgeLight: 0x4f8cff,
+  signRed: 0xb3261e,
+  signText: 0xf2f2f2,
 } as const;
 
 const T = TILE_SIZE;
@@ -50,8 +55,6 @@ function drawStructure(g: Graphics, s: Structure, labels: Container): void {
     }
     case 'taxiway': {
       g.rect(x, y, w, h).fill(COLOURS.asphalt);
-      if (w >= h) g.rect(x, y + h / 2 - 0.3, w, 0.6).fill(COLOURS.taxiLine);
-      else g.rect(x + w / 2 - 0.3, y, 0.6, h).fill(COLOURS.taxiLine);
       break;
     }
     case 'terminal':
@@ -97,6 +100,37 @@ function drawStructure(g: Graphics, s: Structure, labels: Container): void {
   }
 }
 
+/** Centre lines, hold-short lines with "09-27" signs, and blue edge lights. */
+function drawTaxiMarkings(g: Graphics, layout: AirportLayout, labels: Container): void {
+  drawCentreLines(g, layout, COLOURS.taxiLine);
+  for (const h of holdShortLines(layout)) {
+    const across = h.side === 'north' || h.side === 'south';
+    // two solid lines on the Taxiway side, two dashed on the Runway side
+    const towardRunway = h.side === 'north' || h.side === 'west' ? 1 : -1;
+    const base = across ? (h.side === 'north' ? h.y * T : (h.y + 1) * T) : h.side === 'west' ? h.x * T : (h.x + 1) * T;
+    const offsets = [1.6, 2.6, 4.2, 5.2].map((o) => base + towardRunway * o);
+    offsets.forEach((o, i) => {
+      const dashed = i >= 2;
+      const len = (across ? h.w : h.h) * T;
+      const start = (across ? h.x : h.y) * T;
+      for (let p = 0; p < len; p += dashed ? 2.4 : len) {
+        const seg = dashed ? 1.4 : len;
+        if (across) g.rect(start + p, o - 0.25, seg, 0.5).fill(COLOURS.taxiLine);
+        else g.rect(o - 0.25, start + p, 0.5, seg).fill(COLOURS.taxiLine);
+      }
+    });
+    const sx = across ? h.x * T - 7.5 : (h.side === 'west' ? h.x * T - 7.5 : (h.x + 1) * T + 0.5);
+    const sy = across ? (h.side === 'north' ? h.y * T + 1 : h.y * T + 3) : h.y * T - 4;
+    g.rect(sx, sy, 7, 3.4).fill(COLOURS.signRed);
+    const text = new Text({ text: h.sign, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 2.4, fontWeight: '700', fill: COLOURS.signText } });
+    text.resolution = 6;
+    text.anchor.set(0.5);
+    text.position.set(sx + 3.5, sy + 1.75);
+    labels.addChild(text);
+  }
+  for (const l of taxiwayEdgeLights(layout)) g.circle(l.x * T, l.y * T, 0.45).fill(COLOURS.edgeLight);
+}
+
 /** Builds a container drawing the layout in world units (1 tile = TILE_SIZE units). */
 export function drawAirfield(layout: AirportLayout): Container {
   const root = new Container();
@@ -106,7 +140,10 @@ export function drawAirfield(layout: AirportLayout): Container {
   const labels = new Container();
   // Paved surfaces first, buildings and markings on top.
   const order: Structure['kind'][] = ['taxiway', 'runway', 'holdingBay', 'stand', 'terminal', 'cargoHub', 'supportBuilding', 'atcTower'];
-  for (const kind of order) for (const s of layout.structures) if (s.kind === kind) drawStructure(g, s, labels);
+  for (const kind of order) {
+    for (const s of layout.structures) if (s.kind === kind) drawStructure(g, s, labels);
+    if (kind === 'runway') drawTaxiMarkings(g, layout, labels);
+  }
   root.addChild(ground, g, labels);
   return root;
 }

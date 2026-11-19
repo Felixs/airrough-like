@@ -90,6 +90,11 @@ function shortestPath(network: TaxiNetwork, from: Tile, to: Tile): Tile[] {
   return path.reverse();
 }
 
+/** Shortest route between two Taxiway tiles (inclusive). */
+export function taxiRoute(network: TaxiNetwork, from: Tile, to: Tile): Tile[] {
+  return shortestPath(network, from, to);
+}
+
 export function routeToStand(network: TaxiNetwork, from: Tile, stand: Spot): Tile[] {
   const { entry, centre } = standAccess(network, stand);
   return [...shortestPath(network, from, entry), ...walkInto(entry, centre)];
