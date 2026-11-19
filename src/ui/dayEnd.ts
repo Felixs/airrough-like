@@ -9,8 +9,7 @@ export function dayName(week: number, weekday: number): string {
 }
 
 /**
- * The end-of-Day overlay: the Day report with "Next Day", or the Score Screen when the Run is lost.
- * Plan Mode (#11) replaces the plain report.
+ * The Score Screen when the Run is lost (a plain Day report otherwise; Plan Mode normally shows that).
  */
 export function showDayEnd(root: HTMLElement, run: RunState, onNext: () => void, onNewRun: () => void): void {
   const report = run.history[run.history.length - 1];

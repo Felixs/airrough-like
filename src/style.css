@@ -138,3 +138,45 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 .alert-banner b { color: var(--amber); }
 .alert-banner.emergency b { color: var(--red); }
 .alert-banner button { flex: none; height: 32px; padding: 0 12px; border: 1px solid currentColor; border-radius: 4px; background: transparent; color: var(--text); font: 600 12px var(--mono); cursor: pointer; }
+
+/* Plan Mode */
+.plan { position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column; background: var(--bg); font-family: var(--mono); }
+.plan-head { height: 56px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 4px; }
+.tabs button { height: 34px; padding: 0 14px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--mute); font: 600 12px var(--mono); }
+.tabs button[aria-selected='true'] { border-color: var(--teal); color: var(--teal); background: #12302a; }
+.tabs button:disabled { opacity: 0.5; }
+.plan-head .next { font-size: 13px; color: var(--mute); }
+.plan-head .next b { color: var(--text); }
+.plan-head .money { font-size: 15px; font-weight: 700; color: var(--text); }
+.plan-head .money.debt { color: var(--red); }
+.start { height: 40px; padding: 0 18px; border-radius: 4px; border: 1px solid var(--teal); background: var(--teal); color: #06231c; font: 700 14px var(--mono); cursor: pointer; }
+.start:focus-visible, .offer:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.plan-body { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: minmax(240px, 1fr) minmax(360px, 1.6fr) minmax(260px, 1fr); gap: 12px; padding: 12px; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card { padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.card dl { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; margin: 0; font-size: 12px; }
+.card dt { color: var(--mute); }
+.card dt.sub { padding-left: 10px; }
+.card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.card .warn { color: var(--amber); font-size: 12px; margin: 10px 0 0; }
+.week { display: grid; grid-template-columns: 34px repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+.week .wk { align-self: center; color: var(--mute); font-size: 11px; }
+.day { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; font-variant-numeric: tabular-nums; cursor: help; }
+.day small { font-size: 9px; color: var(--mute); }
+.day.done { opacity: 0.55; }
+.day.today { border-color: var(--teal); color: var(--teal); }
+.day.rush { border-style: dashed; }
+.day.boss { border-color: var(--red); color: var(--red); }
+.day.missed { background: #2a1715; }
+.week.locked .day { opacity: 0.35; }
+.boss-card p { font-size: 12px; margin: 0; color: var(--mute); }
+.boss-card b { color: var(--red); }
+.tips { margin: 0; padding-left: 16px; font-size: 12px; display: grid; gap: 4px; }
+.offers { display: grid; gap: 6px; }
+.offer { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 10px; border: 1px solid var(--teal); border-radius: 4px; background: transparent; color: var(--text); font: 12px var(--mono); text-align: left; cursor: pointer; }
+.offer span { color: var(--teal); font-weight: 700; }
+.offer small { grid-column: 1 / -1; color: var(--amber); font-size: 10px; }
+.offer:disabled { border-color: var(--line); color: var(--mute); cursor: not-allowed; }
+.offer:disabled span { color: var(--mute); }
+.card .msg:not(:empty) { color: var(--amber); font-size: 11px; margin: 8px 0 0; }
