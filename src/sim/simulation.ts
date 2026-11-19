@@ -18,15 +18,28 @@ export const TIMINGS = {
   unloadShare: 0.4,
 } as const;
 
+/** ATC rules *(first guess, from the prototypes)*. */
+export const ATC = {
+  fuelReserveMinutes: { small: 40, medium: 45, large: 55 },
+  /** Below this an aircraft is low-fuel and gets landing priority. */
+  lowFuelMinutes: 10,
+  /** A departure that has held short this long goes before normal arrivals. */
+  departureMaxWaitMinutes: 3,
+  radarBase: 2,
+  radarPerLevel: 2,
+} as const;
+
 export interface ScheduledFlight {
   readonly id: string;
   readonly type: AircraftTypeId;
   readonly arrivalMinute: number;
   /** Parked overnight: starts the Day on a Stand with unloading done. */
   readonly overnight?: boolean;
+  /** Fuel Reserve on arrival in minutes; defaults by Size Class. */
+  readonly fuelMinutes?: number;
 }
 
-export type FlightPhase = 'scheduled' | 'landing' | 'taxiIn' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed';
+export type FlightPhase = 'scheduled' | 'holding' | 'landing' | 'taxiIn' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed' | 'crashed';
 
 export interface Point {
   readonly x: number;
@@ -42,6 +55,8 @@ export interface Flight extends ScheduledFlight {
   /** Tiles travelled along `route`. */
   readonly routeProgress: number;
   readonly unloaded: boolean;
+  /** Fuel Reserve left; counts down while Holding. */
+  readonly fuelMinutes: number;
   /** World position (units) and heading in degrees (0 = north, 90 = east); null when not on the airfield. */
   readonly position: Point | null;
   readonly heading: number;
@@ -55,6 +70,8 @@ export interface Simulation {
   readonly money: number;
   /** Landings and takeoffs handled today. */
   readonly movements: number;
+  readonly crashes: number;
+  readonly radarLevel: number;
   readonly runwayBusyUntil: number;
   /** Stand id → flight id currently using (or reserved for) it. */
   readonly standOccupant: Readonly<Record<string, string>>;
@@ -66,6 +83,8 @@ export interface SimulationSetup {
   readonly schedule: readonly ScheduledFlight[];
   readonly seed: number;
   readonly money?: number;
+  /** Radar Tower Module level, 1–5. */
+  readonly radarLevel?: number;
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -79,6 +98,8 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     seed: setup.seed,
     money: setup.money ?? 0,
     movements: 0,
+    crashes: 0,
+    radarLevel: setup.radarLevel ?? 1,
     runwayBusyUntil: 0,
     standOccupant: {},
     flights: [],
@@ -86,6 +107,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
   sim.flights = setup.schedule.map((f) => {
     const flight: Mutable<Flight> = {
       ...f, phase: 'scheduled', phaseStart: 0, standId: null, route: [], routeProgress: 0, unloaded: false, position: null, heading: 90,
+      fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size],
     };
     const stand = f.overnight ? freeFittingStand(sim, flight) : undefined;
     if (stand) {
@@ -138,28 +160,69 @@ export function stepSimulation(prev: Simulation): Simulation {
   const sim: MutableSim = { ...prev, standOccupant: { ...prev.standOccupant }, flights: [] };
   const now = prev.clock.minute;
   const flights = prev.flights.map((f) => stepFlight(sim, { ...f }, now));
+  assignRunway(sim, flights, now);
+  for (const f of flights) place(sim, f, now + STEP_MINUTES);
   sim.flights = flights;
   sim.clock = { ...prev.clock, minute: now + STEP_MINUTES };
   return sim;
 }
 
-function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Flight {
+const isLowFuel = (f: Flight) => f.fuelMinutes < ATC.lowFuelMinutes;
+
+/** The ATC Tower gives the Runway to one aircraft at a time. */
+function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number): void {
+  if (sim.runwayBusyUntil > now) return;
+  const holding = flights
+    .filter((f) => f.phase === 'holding')
+    .sort((a, b) => Number(isLowFuel(b)) - Number(isLowFuel(a)) || (isLowFuel(a) ? a.fuelMinutes - b.fuelMinutes : 0) || a.phaseStart - b.phaseStart);
+  const departures = flights.filter((f) => f.phase === 'holdShort' && f.phaseStart < now).sort((a, b) => a.phaseStart - b.phaseStart);
+  const departure = departures[0];
+  const landable = holding.find((f) => freeFittingStand(sim, f));
+  const urgent = landable && isLowFuel(landable) ? landable : undefined;
+  const departureDue = departure && now - departure.phaseStart >= ATC.departureMaxWaitMinutes;
+
+  const next = urgent ?? (departureDue ? departure : (landable ?? departure));
+  if (!next) return;
+  if (next.phase === 'holding') {
+    const stand = freeFittingStand(sim, next)!;
+    sim.standOccupant[stand.id] = next.id;
+    next.standId = stand.id;
+    next.phase = 'landing';
+    sim.runwayBusyUntil = now + TIMINGS.landingMinutes;
+  } else {
+    next.phase = 'takeoff';
+    sim.runwayBusyUntil = now + TIMINGS.takeoffMinutes;
+  }
+  next.phaseStart = now;
+}
+
+/** Aircraft in the air near the airport against what the Radar can track. */
+export function radarLoad(sim: Simulation): { airborne: number; capacity: number; over: number } {
+  const airborne = sim.flights.filter((f) => f.phase === 'holding' || f.phase === 'landing' || f.phase === 'takeoff').length;
+  const capacity = ATC.radarBase + ATC.radarPerLevel * sim.radarLevel;
+  return { airborne, capacity, over: Math.max(0, airborne - capacity) };
+}
+
+function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<Flight> {
   const stand = f.standId ? sim.layout.stands.find((s) => s.id === f.standId) : undefined;
   const enter = (phase: FlightPhase) => {
     f.phase = phase;
     f.phaseStart = now;
   };
   switch (f.phase) {
-    case 'scheduled': {
-      if (now < f.arrivalMinute || sim.runwayBusyUntil > now) break;
-      const target = freeFittingStand(sim, f);
-      if (!target) break;
-      sim.standOccupant[target.id] = f.id;
-      f.standId = target.id;
-      sim.runwayBusyUntil = now + TIMINGS.landingMinutes;
-      enter('landing');
+    case 'scheduled':
+      if (now < f.arrivalMinute) break;
+      enter('holding');
+      f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
       break;
-    }
+    case 'holding':
+      if (f.fuelMinutes <= 0) {
+        sim.crashes += 1;
+        enter('crashed');
+        break;
+      }
+      f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
+      break;
     case 'landing': {
       if (now < f.phaseStart + TIMINGS.landingMinutes) break;
       sim.movements += 1;
@@ -190,12 +253,8 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Flight {
       enter('taxiOut');
       break;
     }
-    case 'holdShort': {
-      if (sim.runwayBusyUntil > now) break;
-      sim.runwayBusyUntil = now + TIMINGS.takeoffMinutes;
-      enter('takeoff');
+    case 'holdShort':
       break;
-    }
     case 'takeoff': {
       if (now < f.phaseStart + TIMINGS.takeoffMinutes) break;
       sim.money += AIRCRAFT_TYPES[f.type].fee;
@@ -204,9 +263,9 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Flight {
       break;
     }
     case 'departed':
+    case 'crashed':
       break;
   }
-  place(sim, f, now + STEP_MINUTES);
   return f;
 }
 
@@ -232,6 +291,14 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
       const stand = sim.layout.stands.find((s) => s.id === f.standId)!;
       f.position = { x: (stand.x + stand.w / 2) * T, y: (stand.y + stand.h / 2) * T };
       f.heading = 0;
+      break;
+    }
+    case 'holding': {
+      // Placeholder Holding pattern: a circle over the field's south-west corner, aircraft spread around it.
+      const r = 2.5 * T;
+      const a = ((t - f.phaseStart) / 4) * 2 * Math.PI + (Number.parseInt(f.id.replace(/\D/g, ''), 10) || 0);
+      f.position = { x: 3 * T + Math.cos(a) * r, y: 12 * T + Math.sin(a) * r };
+      f.heading = ((a * 180) / Math.PI + 180) % 360;
       break;
     }
     case 'holdShort':
