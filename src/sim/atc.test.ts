@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { startingAirport } from './layout';
+import { createLayout, startingAirport, type Structure } from './layout';
 import { createSimulation, radarLoad, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 const runUntil = (sim: Simulation, minute: number) => {
@@ -46,8 +46,10 @@ describe('Runway assignment and Holding', () => {
   });
 
   it('Crashes an aircraft whose Fuel Reserve runs out', () => {
-    // The Starting Airport has no Large Stand, so the B777 can never land
-    const end = runUntil(sim([{ id: 'L', type: 'B77W', arrivalMinute: 360 }]), 420);
+    // A long Runway but no Large Stand: the B777 could land but never gets a Stand
+    const base = startingAirport();
+    const layout = createLayout(base.width, base.height, base.structures.map((s): Structure => (s.kind === 'runway' ? { ...s, length: 'long' } : s)));
+    const end = runUntil(createSimulation({ layout, seed: 1, schedule: [{ id: 'L', type: 'B77W', arrivalMinute: 360 }] }), 420);
     expect(flight(end, 'L').phase).toBe('crashed');
     expect(flight(end, 'L').phaseStart).toBe(415);
     expect(flight(end, 'L').position).toBe(null);
