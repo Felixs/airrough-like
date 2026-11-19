@@ -1,0 +1,33 @@
+:root {
+  --bg: #0b1210;
+  --panel: #111a17;
+  --line: #22302b;
+  --text: #d6e9e3;
+  --mute: #8fa8a0;
+  --teal: #38d0b0;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+.top-bar {
+  height: 52px; flex: none; display: flex; align-items: center; gap: 24px; padding: 0 16px;
+  border-bottom: 1px solid var(--line); font-family: var(--mono);
+}
+.clock { font-size: 22px; font-weight: 700; color: var(--teal); font-variant-numeric: tabular-nums; }
+.day-status { font-size: 12px; color: var(--mute); }
+.spacer { flex: 1; }
+.speed { display: flex; gap: 4px; }
+.speed button {
+  height: 36px; min-width: 44px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--line);
+  background: transparent; color: var(--text); font: 12px var(--mono); cursor: pointer;
+}
+.speed button[aria-pressed='true'] { border-color: var(--teal); background: #12302a; color: var(--teal); }
+.speed button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.map canvas { display: block; }
+.map { flex: 1; min-height: 0; margin: 10px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }

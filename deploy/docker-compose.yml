@@ -1,0 +1,10 @@
+# Runs the game on a Raspberry Pi (or any Docker host) on your home network.
+# Set GITLAB_IMAGE in a .env file next to this file, e.g.
+#   GITLAB_IMAGE=registry.gitlab.com/<your-namespace>/<your-project>
+services:
+  game:
+    image: ${GITLAB_IMAGE:?set GITLAB_IMAGE in .env}:latest
+    container_name: airport-auto-battler
+    ports:
+      - "8080:80"
+    restart: unless-stopped

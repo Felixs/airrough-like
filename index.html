@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Airport Auto Battler</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="top-bar" class="top-bar">
+        <span id="clock" class="clock" aria-live="off">05:00</span>
+        <span id="day-status" class="day-status"></span>
+        <span class="spacer"></span>
+        <div class="speed" role="group" aria-label="Simulation speed">
+          <button type="button" data-speed="0" aria-label="Pause">❚❚</button>
+          <button type="button" data-speed="1">1×</button>
+          <button type="button" data-speed="2">2×</button>
+          <button type="button" data-speed="4">4×</button>
+        </div>
+      </header>
+      <main id="map" class="map" aria-label="Airfield"></main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
