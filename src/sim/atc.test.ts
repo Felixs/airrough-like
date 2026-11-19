@@ -24,8 +24,9 @@ describe('Runway assignment and Holding', () => {
       { id: 'C', type: 'Q400', arrivalMinute: 359 },
     ]);
     expect(whenPhase(s, 'C', 'landing')).toBe(359);
-    expect(whenPhase(s, 'A', 'landing')).toBe(362);
-    expect(whenPhase(s, 'B', 'landing')).toBe(365);
+    // Runway Separation at Radar 1 + Controller Training 1: 4 minutes per landing
+    expect(whenPhase(s, 'A', 'landing')).toBe(363);
+    expect(whenPhase(s, 'B', 'landing')).toBe(367);
     expect(flight(runUntil(s, 361), 'B').phase).toBe('holding');
   });
 
@@ -36,7 +37,7 @@ describe('Runway assignment and Holding', () => {
       { id: 'LOW', type: 'A320', arrivalMinute: 360, fuelMinutes: 8 },
     ]);
     expect(whenPhase(s, 'LOW', 'landing')).toBe(360);
-    expect(whenPhase(s, 'A', 'landing')).toBe(363);
+    expect(whenPhase(s, 'A', 'landing')).toBe(364);
   });
 
   it('counts down the Fuel Reserve by Size Class while Holding', () => {
@@ -53,13 +54,14 @@ describe('Runway assignment and Holding', () => {
     expect(end.crashes).toBe(1);
   });
 
-  it('only starts a landing when a fitting Stand can be reserved', () => {
-    // Four terminal Stands: the fifth A320 waits for the first to leave
-    const five = ['1', '2', '3', '4', '5'].map((id): ScheduledFlight => ({ id, type: 'A320', arrivalMinute: 360, fuelMinutes: 120 }));
-    const s = sim(five);
+  it('only starts a landing when a fitting Stand or Holding Bay is free', () => {
+    // Four terminal Stands and one Holding Bay: the sixth A320 waits in Holding for the first to leave
+    const six = ['1', '2', '3', '4', '5', '6'].map((id): ScheduledFlight => ({ id, type: 'A320', arrivalMinute: 360, fuelMinutes: 120 }));
+    const s = sim(six);
     const firstOff = whenPhase(s, '1', 'taxiOut');
-    expect(whenPhase(s, '5', 'landing')).toBeGreaterThanOrEqual(firstOff);
-    expect(flight(runUntil(s, 24 * 60), '5').phase).toBe('departed');
+    expect(whenPhase(s, '5', 'landing')).toBeLessThan(firstOff);
+    expect(whenPhase(s, '6', 'landing')).toBeGreaterThanOrEqual(firstOff);
+    expect(flight(runUntil(s, 24 * 60), '6').phase).toBe('departed');
   });
 
   it('lets a waiting departure take the Runway after 3 minutes even with arrivals queued', () => {

@@ -39,6 +39,7 @@ export interface Stand extends TileRect {
 }
 export interface HoldingBay extends TileRect {
   readonly kind: 'holdingBay';
+  readonly id: string;
   readonly size: SizeClass;
 }
 export interface AtcTower extends TileRect {
@@ -102,7 +103,7 @@ export function startingAirport(): AirportLayout {
     stand('4', 17, 'terminal'),
     stand('C1', 26, 'cargoHub'),
     stand('C2', 29, 'cargoHub'),
-    { kind: 'holdingBay', x: 38, y: 6, w: 3, h: 3, size: 'medium' },
+    { kind: 'holdingBay', id: 'B1', x: 38, y: 6, w: 3, h: 3, size: 'medium' },
     // Taxiway along the Stands, links down to Taxiway A, Taxiway A, connectors onto the Runway
     { kind: 'taxiway', x: 7, y: 9, w: 35, h: 3 },
     { kind: 'taxiway', x: 12, y: 12, w: 3, h: 4 },
