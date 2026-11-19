@@ -209,6 +209,9 @@ export interface Simulation {
   readonly fireRescueLevel: number;
   /** Multiplies error chances (Twists, tests). */
   readonly riskMultiplier: number;
+  readonly windows: readonly RunwayWindow[];
+  readonly noLights: boolean;
+  readonly taxiSpeedFactor: number;
   /** Per Runway (layout order): can't be used before this minute (Crash, Incident, Twist). */
   readonly runwayBlockedUntil: readonly number[];
   /** Everything notable that happened today, oldest first. */
@@ -228,6 +231,15 @@ export interface Simulation {
   /** Holding Bay id → flight id using (or reserved for) it. */
   readonly bayOccupant: Readonly<Record<string, string>>;
   readonly flights: readonly Flight[];
+}
+
+/** A stretch of the Day when Runways are closed, or take landings only with ILS (Twists). */
+export interface RunwayWindow {
+  readonly kind: 'closed' | 'ilsOnly';
+  readonly from: number;
+  readonly to: number;
+  /** Runway index; all Runways when left out. */
+  readonly runway?: number;
 }
 
 export interface SimEvent {
@@ -255,6 +267,11 @@ export interface SimulationSetup {
   readonly riskMultiplier?: number;
   /** Closes every Runway until this minute. */
   readonly runwayBlockedUntil?: number;
+  readonly windows?: readonly RunwayWindow[];
+  /** Runway lights and ILS out (Power outage). */
+  readonly noLights?: boolean;
+  /** Multiplies taxi speed (Taxiway works). */
+  readonly taxiSpeedFactor?: number;
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -283,6 +300,9 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     groundRadarLevel: setup.groundRadarLevel ?? 1,
     fireRescueLevel: setup.fireRescueLevel ?? 0,
     riskMultiplier: setup.riskMultiplier ?? 1,
+    windows: setup.windows ?? [],
+    noLights: setup.noLights ?? false,
+    taxiSpeedFactor: setup.taxiSpeedFactor ?? 1,
     runwayBlockedUntil: setup.layout.runways.map(() => setup.runwayBlockedUntil ?? 0),
     events: [],
     cooldownUntil: { groundStop: 0, rushTurnaround: 0, manualDivert: 0, priorityLanding: 0 },
@@ -430,12 +450,18 @@ export function riskMeter(sim: Simulation, runwayIndex?: number): { atc: number;
 
 const blockMinutes = (sim: Simulation, base: number) => base * (SAFETY.fireRescueFactor[sim.fireRescueLevel] ?? 1);
 export const isDark = (now: number) => now >= HOURS.dusk;
-const litSurface = (a: RunwayAccess) => a.runway.surface === 'lit' || a.runway.surface === 'ils';
+const lit = (sim: Simulation, a: RunwayAccess) => !sim.noLights && (a.runway.surface === 'lit' || a.runway.surface === 'ils');
+const hasIls = (sim: Simulation, a: RunwayAccess) => !sim.noLights && a.runway.surface === 'ils';
 /** Whether any usable Runway can operate at night. */
-export const nightCapable = (sim: Simulation) => sim.network.runways.some(litSurface);
+export const nightCapable = (sim: Simulation) => sim.network.runways.some((a) => lit(sim, a));
+const inWindow = (sim: Simulation, a: RunwayAccess, now: number, kind: RunwayWindow['kind']) =>
+  sim.windows.some((w) => w.kind === kind && (w.runway === undefined || w.runway === a.index) && now >= w.from && now < w.to);
 /** Whether a Runway can take a Movement right now (open, operating hours, light). */
 const usable = (sim: Simulation, a: RunwayAccess, now: number) =>
-  now >= (sim.runwayBlockedUntil[a.index] ?? 0) && now >= HOURS.operationsStart && (!isDark(now) || litSurface(a));
+  now >= (sim.runwayBlockedUntil[a.index] ?? 0) && now >= HOURS.operationsStart && (!isDark(now) || lit(sim, a)) && !inWindow(sim, a, now, 'closed');
+/** Whether a Runway can take a landing right now (usable, and ILS when the weather demands it). */
+const landingUsable = (sim: Simulation, a: RunwayAccess, now: number) =>
+  usable(sim, a, now) && (!inWindow(sim, a, now, 'ilsOnly') || hasIls(sim, a));
 /** Whether a Runway is long enough and of a surface that takes this aircraft (Grass: Small only). */
 const fits = (a: RunwayAccess, f: Flight) => {
   const size = sizeRank(AIRCRAFT_TYPES[f.type].size);
@@ -443,9 +469,9 @@ const fits = (a: RunwayAccess, f: Flight) => {
 };
 const fittingRunways = (sim: Simulation, f: Flight) => sim.network.runways.filter((a) => fits(a, f));
 /** Some Runway that fits the aircraft is usable now. */
-const runwayUsableFor = (sim: Simulation, f: Flight, now: number) => fittingRunways(sim, f).some((a) => usable(sim, a, now));
+const runwayUsableFor = (sim: Simulation, f: Flight, now: number) => fittingRunways(sim, f).some((a) => landingUsable(sim, a, now));
 /** Some Runway that fits the aircraft works after dark. */
-const nightRunwayFor = (sim: Simulation, f: Flight) => fittingRunways(sim, f).some(litSurface);
+const nightRunwayFor = (sim: Simulation, f: Flight) => fittingRunways(sim, f).some((a) => lit(sim, a));
 
 /** The Runway a departure taxis to: a fitting one, the one with the shortest queue first. */
 function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight): RunwayAccess | undefined {
@@ -528,7 +554,7 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
   for (const access of sim.network.runways) {
     if ((sim.runwayBusyUntil[access.index] ?? 0) > now || !usable(sim, access, now)) continue;
     const holding = flights
-      .filter((f) => f.phase === 'holding' && fits(access, f))
+      .filter((f) => f.phase === 'holding' && fits(access, f) && landingUsable(sim, access, now))
       .sort((a, b) => Number(b.priority) - Number(a.priority) || Number(isLowFuel(b)) - Number(isLowFuel(a)) || (isLowFuel(a) ? a.fuelMinutes - b.fuelMinutes : 0) || a.phaseStart - b.phaseStart);
     const departures = flights.filter((f) => f.phase === 'holdShort' && f.runway === access.index && f.phaseStart < now).sort((a, b) => a.phaseStart - b.phaseStart);
     const departure = departures[0];
@@ -642,7 +668,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     case 'taxiIn':
     case 'taxiOut': {
       if (now < f.stoppedUntil || now < sim.groundStopUntil) break;
-      f.routeProgress = Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * STEP_MINUTES);
+      f.routeProgress = Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * sim.taxiSpeedFactor * STEP_MINUTES);
       if (f.routeProgress < f.route.length - 1) break;
       if (f.phase === 'taxiOut') enter('holdShort');
       else enter(f.standId ? 'onStand' : 'inBay');

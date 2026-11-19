@@ -6,6 +6,7 @@ import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId, type Purpose } from './a
 import type { AirportLayout, RunwayLength, SizeClass } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
 import type { ScheduledFlight } from './simulation';
+import { trafficEffects, type TrafficEffects, type TwistRef } from './twists';
 
 /** Mon..Sun; Saturday is the Rush Day, Sunday the Boss Day. */
 export const DAY_FACTORS = [1, 1.05, 1.1, 1.15, 1.2, 2.0, 1.6] as const;
@@ -73,6 +74,8 @@ export interface DayPlanSetup {
    * first Day, because last night's real aircraft carry over.
    */
   readonly includeOvernight?: boolean;
+  /** The Day's Twist; a Traffic Surge changes Demand, mix and peaks. */
+  readonly twist?: TwistRef | null;
 }
 
 export function demandFor(week: number, weekday: number): number {
@@ -97,11 +100,12 @@ function pickSize(rng: Random, mix: Record<SizeClass, number>): SizeClass {
 }
 
 /** Morning and evening peaks with some traffic all day. */
-function arrivalMinute(rng: Random): number {
+function arrivalMinute(rng: Random, traffic: TrafficEffects): number {
   const { firstArrivalMinute: lo, lastArrivalMinute: hi } = SCHEDULE_RULES;
+  const { peakShare: p, peakSpread: sd } = traffic;
   for (;;) {
     const r = rng.next();
-    const m = r < 0.4 ? 8.5 * 60 + rng.normal() * 75 : r < 0.8 ? 17.75 * 60 + rng.normal() * 75 : lo + rng.next() * (hi - lo);
+    const m = r < p ? 8.5 * 60 + rng.normal() * sd : r < 2 * p ? 17.75 * 60 + rng.normal() * sd : lo + rng.next() * (hi - lo);
     if (m >= lo && m < hi) return Math.floor(m);
   }
 }
@@ -109,9 +113,16 @@ function arrivalMinute(rng: Random): number {
 export function planDay(setup: DayPlanSetup): DayPlan {
   const { layout, week, weekday } = setup;
   const rng = createRandom(mixSeed(setup.seed, week, weekday));
-  const demand = demandFor(week, weekday);
+  const traffic = trafficEffects(setup.twist);
+  const demand = Math.round(demandFor(week, weekday) * traffic.demandFactor);
   const quota = quotaFor(demand, weekday);
-  const mix = trafficMix(week, weekday);
+  const baseMix = trafficMix(week, weekday);
+  const shift = Math.min(baseMix.small - 0.05, traffic.mediumShift + traffic.largeShift);
+  const mix = {
+    small: baseMix.small - shift,
+    medium: baseMix.medium + Math.min(shift, traffic.mediumShift),
+    large: baseMix.large + Math.max(0, shift - traffic.mediumShift),
+  };
 
   const longestRunway = Math.max(0, ...layout.runways.map((r) => RUNWAY_FITS[r.length]));
   const fittingStands = (size: SizeClass, purpose: Purpose) =>
@@ -128,7 +139,7 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     let size = pickSize(rng, mix);
     const purpose: Purpose = rng.next() < SCHEDULE_RULES.cargoShare ? 'cargo' : 'passenger';
     const overnightRoll = rng.next();
-    const minute = arrivalMinute(rng);
+    const minute = arrivalMinute(rng, traffic);
     const typeRoll = rng.next();
 
     let reason = reasonAgainst(size, purpose);

@@ -5,6 +5,7 @@
 import { startingAirport, type AirportLayout, type Structure } from './layout';
 import { mixSeed } from './random';
 import { planDay, type DayPlan } from './schedule';
+import { simulationEffects, twistFor, type Twist } from './twists';
 import { carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
@@ -136,8 +137,15 @@ export function upkeep(run: RunState): number {
   );
 }
 
+/** The current Day's Twist, if any. */
+export function dayTwist(run: RunState): Twist | null {
+  return twistFor(run.seed, run.week, run.weekday);
+}
+
 export function dayPlan(run: RunState): DayPlan {
-  return planDay({ layout: run.layout, week: run.week, weekday: run.weekday, seed: run.seed, includeOvernight: run.dayIndex === 0 });
+  return planDay({
+    layout: run.layout, week: run.week, weekday: run.weekday, seed: run.seed, includeOvernight: run.dayIndex === 0, twist: dayTwist(run),
+  });
 }
 
 /** The Live Day simulation for the current Day: last night's aircraft plus today's Schedule. */
@@ -145,7 +153,12 @@ export function startLiveDay(run: RunState): Simulation {
   const plan = dayPlan(run);
   // On the first Day the Schedule's overnight aircraft stand in for "last night"; afterwards the real ones carry over.
   const today = plan.schedule.map((f) => ({ ...f, id: `D${run.dayIndex + 1}-${f.id}` }));
+  const effects = simulationEffects(dayTwist(run), mixSeed(run.seed, run.dayIndex), run.towerModules.weatherStation);
   return createSimulation({
+    riskMultiplier: effects.riskMultiplier,
+    windows: effects.windows,
+    noLights: effects.noLights,
+    taxiSpeedFactor: effects.taxiSpeedFactor,
     layout: run.layout,
     schedule: [...run.overnight, ...today],
     seed: mixSeed(run.seed, run.dayIndex, 0x5eed),

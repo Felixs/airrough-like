@@ -1,11 +1,13 @@
 import { upgradeOffers, runCalendar, suggestions, type UpgradeId } from '../sim/plan';
-import { dayPlan, upkeep, type RunState } from '../sim/run';
+import { dayPlan, dayTwist, upkeep, type RunState } from '../sim/run';
+import { FAMILY_NAME, type Twist } from '../sim/twists';
 import { WEEKDAY_NAMES } from '../sim/schedule';
 import { mountBuildMode, type BuildModeView } from './buildMode';
 import { dayName } from './dayEnd';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
+const ICON: Record<Twist['family'], string> = { weather: '☁', infrastructure: '⚠', surge: '▲' };
 const REASON: Record<string, string> = { noFittingRunway: 'Runway too short', noFittingStand: 'No Stand of their size', standCapacity: 'Not enough Stands' };
 
 export interface PlanModeHandlers {
@@ -39,6 +41,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
     const offers = upgradeOffers(run);
     const tips = suggestions(run);
     const turned = Object.entries(f.turnedAway).filter(([k, v]) => k !== 'total' && v > 0);
+    const twist = dayTwist(run);
 
     el.innerHTML = `
       <header class="plan-head">
@@ -60,6 +63,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             <dt>Fines & Incidents</dt><dd>${money(-last.penalties)}</dd>
             <dt>Crashes · Diversions</dt><dd>${last.crashes} · ${last.diversions}</dd></dl></div>` : ''}
           <div class="card"><h3>Forecast · ${dayName(run.week, run.weekday)}</h3><dl>
+            ${twist ? `<dt>Twist</dt><dd class="twist" title="${esc(twist.description)}">${ICON[twist.family]} ${esc(twist.name)}</dd>` : ''}
             <dt>Daily Quota</dt><dd><b>${f.quota}</b> Movements</dd>
             <dt>Demand</dt><dd>${f.demand} flights</dd>
             <dt>Arriving</dt><dd>S ${f.arrivalsBySize.small} · M ${f.arrivalsBySize.medium} · L ${f.arrivalsBySize.large}</dd>
@@ -72,11 +76,12 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
           <div class="card"><h3>Run Calendar</h3>
             ${calendar.map((w) => `<div class="week${w.locked ? ' locked' : ''}"><span class="wk">W${w.week}</span>${w.days.map((d) => {
               const cls = ['day', d.state, d.boss ? 'boss' : '', d.rush ? 'rush' : '', d.result && !d.result.quotaMet ? 'missed' : ''].join(' ');
-              const tip = w.locked ? 'Locked' : `${WEEKDAY_NAMES[d.weekday]} · Quota ${d.quota} · Demand ${d.demand}${d.boss ? ' · Boss Day' : d.rush ? ' · Rush Day' : ''}${d.result ? ` · done ${d.result.movements}/${d.result.quota}` : ''}`;
-              return `<span class="${cls}" title="${esc(tip)}"><small>${WEEKDAY_NAMES[d.weekday]}</small>${w.locked ? '🔒' : d.quota}</span>`;
+              const tip = w.locked ? 'Locked' : `${WEEKDAY_NAMES[d.weekday]} · Quota ${d.quota} · Demand ${d.demand}${d.boss ? ' · Boss Day' : d.rush ? ' · Rush Day' : ''}${d.twist ? ` · ${d.twist.name}: ${d.twist.description}` : ''}${d.result ? ` · done ${d.result.movements}/${d.result.quota}` : ''}`;
+              return `<span class="${cls}" title="${esc(tip)}"><small>${WEEKDAY_NAMES[d.weekday]}${d.twist ? ` ${ICON[d.twist.family]}` : ''}</small>${w.locked ? '🔒' : d.quota}</span>`;
             }).join('')}</div>`).join('')}
           </div>
-          ${boss ? `<div class="card boss-card"><h3>Boss Day · Sunday W${run.week}</h3><p>Quota <b>${boss.quota}</b> (90% of Demand ${boss.demand} × 2). Boss Twists come with the Twists ticket.</p></div>` : ''}
+          ${boss ? `<div class="card boss-card"><h3>Boss Day · Sunday W${run.week}</h3><p>Quota <b>${boss.quota}</b> (90% of Demand ${boss.demand} × 2).</p>
+            ${boss.twist ? `<p class="boss-twist">${ICON[boss.twist.family]} <b>${esc(boss.twist.name)}</b> · ${FAMILY_NAME[boss.twist.family]} Severity ${boss.twist.severity}<br>${esc(boss.twist.description)}</p>` : ''}</div>` : ''}
           <div class="card"><h3>Suggested</h3><ul class="tips">${tips.map((t) => `<li>${esc(t.text)}</li>`).join('') || '<li>Looking good.</li>'}</ul></div>
         </section>
         <section class="col">

@@ -72,7 +72,7 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 .chips { position: absolute; top: 8px; left: 8px; z-index: 1; display: flex; gap: 6px; pointer-events: none; }
 .chip { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line); background: rgb(11 18 16 / 0.85); font: 600 11px var(--mono); pointer-events: auto; }
 .chip.open { color: var(--green); border-color: #2c5a3c; }
-.chip.blocked, .chip.dark { color: var(--red); border-color: #5a2c2c; }
+.chip.blocked, .chip.dark, .chip.ilsOnly { color: var(--red); border-color: #5a2c2c; }
 .chip.curfew, .chip.unconnected { color: var(--mute); }
 .chip-group { display: flex; gap: 6px; }
 
@@ -209,3 +209,6 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .tool-options { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; color: var(--mute); }
 .tool-options label { display: grid; gap: 2px; }
 .tool-options select { height: 30px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--text); font: 12px var(--mono); }
+
+.card dd.twist { color: var(--amber); cursor: help; }
+.boss-card .boss-twist { margin-top: 8px; color: var(--text); }
