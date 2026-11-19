@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { startingAirport } from './layout';
+import { planDay } from './schedule';
 import { createSimulation, stepSimulation, type Simulation } from './simulation';
 
 const runUntil = (sim: Simulation, minute: number) => {
@@ -7,6 +8,18 @@ const runUntil = (sim: Simulation, minute: number) => {
   while (s.clock.minute < minute) s = stepSimulation(s);
   return s;
 };
+
+describe('Overnight aircraft', () => {
+  it('start the Day parked on a Stand and depart without an Arrival Fee', () => {
+    let sim = createSimulation({ layout: startingAirport(), schedule: [{ id: 'N1', type: 'A320', arrivalMinute: 0, overnight: true }], seed: 1 });
+    expect(sim.flights[0]!.phase).toBe('onStand');
+    expect(sim.flights[0]!.standId).not.toBe(null);
+    sim = runUntil(sim, 24 * 60);
+    expect(sim.flights[0]!.phase).toBe('departed');
+    expect(sim.money).toBe(600);
+    expect(sim.movements).toBe(1);
+  });
+});
 
 describe('One flight end to end', () => {
   const start = () => createSimulation({ layout: startingAirport(), schedule: [{ id: 'DLH1', type: 'A320', arrivalMinute: 6 * 60 }], seed: 1 });
@@ -55,5 +68,14 @@ describe('One flight end to end', () => {
     while (sim.flights[0]!.phase !== 'taxiIn') sim = stepSimulation(sim);
     expect(sim.flights[0]!.position).not.toBe(null);
     expect(runUntil(sim, 24 * 60).flights[0]!.position).toBe(null);
+  });
+});
+
+describe('A planned Day', () => {
+  it('runs a full Week 1 Monday Schedule on the Starting Airport', () => {
+    const layout = startingAirport();
+    const plan = planDay({ layout, week: 1, weekday: 0, seed: 4 });
+    const end = runUntil(createSimulation({ layout, schedule: plan.schedule, seed: 4 }), 24 * 60);
+    expect(end.movements).toBeGreaterThanOrEqual(plan.quota);
   });
 });

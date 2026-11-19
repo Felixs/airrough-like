@@ -2,7 +2,7 @@ import { parseSpeed, type Speed } from '../sim/clock';
 
 export interface TopBar {
   showClock(text: string, dayOver: boolean): void;
-  showStats(money: number, movements: number): void;
+  showStats(money: number, movements: number, quota: number): void;
 }
 
 /** Wires the top bar's speed buttons and returns a small view to update the clock. */
@@ -28,9 +28,10 @@ export function mountTopBar(root: HTMLElement, initial: Speed, onSpeed: (speed: 
       clock.textContent = text;
       status.textContent = dayOver ? 'Day over' : '';
     },
-    showStats(m, mv) {
+    showStats(m, mv, q) {
       money.textContent = Math.round(m).toLocaleString('en-US');
-      movements.textContent = String(mv);
+      movements.textContent = `${mv} / ${q}`;
+      movements.classList.toggle('met', mv >= q);
     },
   };
 }
