@@ -163,6 +163,8 @@ export interface Simulation {
   readonly movements: number;
   /** Arrival and Departure Fees earned today. */
   readonly fees: number;
+  /** Movements by hour of the Day (index 0–23). */
+  readonly movementsByHour: readonly number[];
   /** Crashes today. */
   readonly crashes: number;
   /** Crashes earlier this Week (for Crash Fines). */
@@ -189,7 +191,7 @@ export interface Simulation {
 
 export interface SimEvent {
   readonly minute: number;
-  readonly kind: 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion';
+  readonly kind: 'lowFuel' | 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion';
   readonly flightId: string;
   /** Money paid (Crash Fine, Incident cost). */
   readonly cost: number;
@@ -229,6 +231,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     money: setup.money ?? 0,
     movements: 0,
     fees: 0,
+    movementsByHour: new Array<number>(24).fill(0),
     crashes: 0,
     earlierCrashesThisWeek: setup.earlierCrashesThisWeek ?? 0,
     diversions: 0,
@@ -359,6 +362,8 @@ function releaseBays(sim: MutableSim, flights: Mutable<Flight>[], now: number): 
   return blocked;
 }
 
+export { turnaroundMinutes };
+
 export function separationOf(sim: Simulation) {
   return runwaySeparation(sim.radarLevel, sim.controllerTrainingLevel);
 }
@@ -374,8 +379,8 @@ export function riskMeter(sim: Simulation): { atc: number; pilot: number; total:
 }
 
 const blockMinutes = (sim: Simulation, base: number) => base * (SAFETY.fireRescueFactor[sim.fireRescueLevel] ?? 1);
-const isDark = (now: number) => now >= HOURS.dusk;
-const nightCapable = (sim: Simulation) => sim.network.runway.surface === 'lit' || sim.network.runway.surface === 'ils';
+export const isDark = (now: number) => now >= HOURS.dusk;
+export const nightCapable = (sim: Simulation) => sim.network.runway.surface === 'lit' || sim.network.runway.surface === 'ils';
 /** Whether the Runway can take any Movement right now (open, operating hours, light). */
 const runwayUsable = (sim: Simulation, now: number) =>
   now >= sim.runwayBlockedUntil && now >= HOURS.operationsStart && (!isDark(now) || nightCapable(sim));
@@ -391,6 +396,14 @@ function divert(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   releaseSpots(sim, f);
   f.phase = 'diverted';
   f.phaseStart = now;
+}
+
+function countMovement(sim: MutableSim, now: number): void {
+  sim.movements += 1;
+  const byHour = [...sim.movementsByHour];
+  const hour = Math.min(23, Math.floor(now / 60));
+  byHour[hour] = (byHour[hour] ?? 0) + 1;
+  sim.movementsByHour = byHour;
 }
 
 function earnFee(sim: MutableSim, f: Flight): void {
@@ -488,6 +501,12 @@ export function radarLoad(sim: Simulation): { airborne: number; capacity: number
   return { airborne, capacity, over: Math.max(0, airborne - capacity) };
 }
 
+function burnFuel(sim: MutableSim, f: Mutable<Flight>, now: number): void {
+  const before = f.fuelMinutes;
+  f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
+  if (before >= ATC.lowFuelMinutes && f.fuelMinutes < ATC.lowFuelMinutes) logEvent(sim, now, 'lowFuel', f);
+}
+
 function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<Flight> {
   const stand = standById(sim, f.standId);
   const enter = (phase: FlightPhase) => {
@@ -502,7 +521,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
         break;
       }
       enter('holding');
-      f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
+      burnFuel(sim, f, now);
       break;
     case 'holding':
       const nightfall = isDark(now) && !nightCapable(sim);
@@ -514,7 +533,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
         crash(sim, f, now, true);
         break;
       }
-      f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
+      burnFuel(sim, f, now);
       break;
     case 'landing': {
       if (now < f.phaseStart + separationOf(sim).landing) break;
@@ -532,7 +551,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
         break;
       }
       if (outcome === 'incident') sim.runwayBlockedUntil = Math.max(sim.runwayBlockedUntil, incident(sim, f, now, 'incident'));
-      sim.movements += 1;
+      countMovement(sim, now);
       f.route = routeToStand(sim.network, sim.network.runwayExit, stand ?? bayById(sim, f.bayId)!);
       f.routeProgress = 0;
       enter('taxiIn');
@@ -580,7 +599,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
         break;
       }
       earnFee(sim, f);
-      sim.movements += 1;
+      countMovement(sim, now);
       enter('departed');
       break;
     }
@@ -615,14 +634,6 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
       const stand = (standById(sim, f.standId) ?? bayById(sim, f.bayId))!;
       f.position = { x: (stand.x + stand.w / 2) * T, y: (stand.y + stand.h / 2) * T };
       f.heading = 0;
-      break;
-    }
-    case 'holding': {
-      // Placeholder Holding pattern: a circle over the field's south-west corner, aircraft spread around it.
-      const r = 2.5 * T;
-      const a = ((t - f.phaseStart) / 4) * 2 * Math.PI + (Number.parseInt(f.id.replace(/\D/g, ''), 10) || 0);
-      f.position = { x: 3 * T + Math.cos(a) * r, y: 12 * T + Math.sin(a) * r };
-      f.heading = ((a * 180) / Math.PI + 180) % 360;
       break;
     }
     case 'holdShort':

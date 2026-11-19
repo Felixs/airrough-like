@@ -6,6 +6,7 @@ import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { dayPlan, endDay, startLiveDay, startRun, type RunState } from './sim/run';
 import { runTo, type Simulation } from './sim/simulation';
 import { dayName, showDayEnd } from './ui/dayEnd';
+import { mountLiveDay } from './ui/liveDay';
 import { mountTopBar } from './ui/topBar';
 
 async function start(): Promise<void> {
@@ -38,6 +39,7 @@ async function start(): Promise<void> {
   let speed: Speed = 1;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => (speed = s));
   const dayLabel = document.querySelector<HTMLElement>('#day-name')!;
+  const liveDay = mountLiveDay(document.querySelector<HTMLElement>('#app')!);
 
   const beginDay = () => {
     sim = startLiveDay(run);
@@ -52,7 +54,7 @@ async function start(): Promise<void> {
     if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, speed));
     flightLayer.update(sim.flights);
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
-    topBar.showStats(sim.money, sim.movements, quota);
+    liveDay.update(sim, quota);
     if (!ended && isDayOver(sim.clock)) {
       ended = true;
       run = endDay(run, sim);
