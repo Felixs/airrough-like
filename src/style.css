@@ -180,3 +180,26 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 .offer:disabled { border-color: var(--line); color: var(--mute); cursor: not-allowed; }
 .offer:disabled span { color: var(--mute); }
 .card .msg:not(:empty) { color: var(--amber); font-size: 11px; margin: 8px 0 0; }
+
+/* Build Mode */
+.plan-build { flex: 1; min-height: 0; padding: 12px; }
+.build { height: 100%; display: grid; grid-template-columns: 150px 1fr 280px; gap: 12px; }
+.palette { display: flex; flex-direction: column; gap: 4px; }
+.palette button { display: flex; justify-content: space-between; align-items: center; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text); font: 12px var(--mono); }
+.palette button[aria-pressed='true'] { border-color: var(--teal); color: var(--teal); background: #12302a; }
+.palette button:disabled { color: var(--mute); opacity: 0.6; }
+kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 10px var(--mono); color: var(--mute); }
+.build-map { position: relative; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; cursor: crosshair; }
+.build-map canvas { position: absolute; inset: 0; display: block; }
+.build-side { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.candidate p { margin: 0 0 6px; font-size: 12px; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12px; }
+.checks .ok { color: var(--green); }
+.checks .bad { color: var(--red); }
+.pending { margin: 0 0 8px; padding-left: 16px; font-size: 12px; display: grid; gap: 3px; }
+.pending span { float: right; color: var(--mute); }
+.build-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.build-buttons button { height: 36px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text); font: 12px var(--mono); cursor: pointer; }
+.build-buttons .confirm:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+.build-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
+.hint { margin: 0; font-size: 11px; color: var(--mute); }

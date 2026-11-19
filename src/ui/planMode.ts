@@ -1,6 +1,7 @@
 import { upgradeOffers, runCalendar, suggestions, type UpgradeId } from '../sim/plan';
 import { dayPlan, upkeep, type RunState } from '../sim/run';
 import { WEEKDAY_NAMES } from '../sim/schedule';
+import { mountBuildMode, type BuildModeView } from './buildMode';
 import { dayName } from './dayEnd';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -10,6 +11,8 @@ const REASON: Record<string, string> = { noFittingRunway: 'Runway too short', no
 export interface PlanModeHandlers {
   /** Buys an upgrade and returns the updated Run (or throws with a reason). */
   onBuy(id: UpgradeId): RunState;
+  /** Build Mode confirmed changes. */
+  onBuilt(run: RunState): void;
   onStartDay(): void;
 }
 
@@ -22,8 +25,12 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
   el.setAttribute('aria-modal', 'true');
   el.setAttribute('aria-label', 'Plan Mode');
   root.appendChild(el);
+  let tab: 'overview' | 'build' = 'overview';
+  let build: BuildModeView | null = null;
 
   const render = (focusId?: string) => {
+    build?.destroy();
+    build = null;
     const plan = dayPlan(run);
     const f = plan.forecast;
     const last = run.history[run.history.length - 1];
@@ -36,15 +43,15 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
     el.innerHTML = `
       <header class="plan-head">
         <div class="tabs" role="tablist">
-          <button type="button" role="tab" aria-selected="true">Overview</button>
-          <button type="button" role="tab" aria-selected="false" disabled title="Build Mode comes with the build tickets">Build</button>
+          <button type="button" role="tab" data-tab="overview" aria-selected="${tab === 'overview'}">Overview</button>
+          <button type="button" role="tab" data-tab="build" aria-selected="${tab === 'build'}">Build</button>
         </div>
         <span class="next">Next: <b>${dayName(run.week, run.weekday)}</b>${plan.weekday === 6 ? ' · Boss Day' : plan.weekday === 5 ? ' · Rush Day' : ''}</span>
         <span class="spacer"></span>
         <span class="money${run.inDebt ? ' debt' : ''}" title="Upkeep ${money(upkeep(run))} per Day, paid at 24:00">${money(run.money)}</span>
         <button type="button" class="start">Start Day ▶</button>
       </header>
-      <div class="plan-body">
+      ${tab === 'build' ? '<div class="plan-build"></div>' : `<div class="plan-body">
         <section class="col">
           ${last ? `<div class="card"><h3>Last Day · ${dayName(last.week, last.weekday)}</h3><dl>
             <dt>Movements / Quota</dt><dd>${last.movements} / ${last.quota}</dd>
@@ -80,12 +87,32 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
               ${o.reason && o.nextLevel !== null ? `<small>${esc(o.reason)}</small>` : ''}</button>`).join('')}
           </div><p class="msg" role="status"></p></div>
         </section>
-      </div>`;
+      </div>`}`;
 
     el.querySelector<HTMLButtonElement>('.start')!.addEventListener('click', () => {
+      build?.destroy();
       el.remove();
       handlers.onStartDay();
     });
+    for (const b of el.querySelectorAll<HTMLButtonElement>('button[data-tab]')) {
+      b.addEventListener('click', () => {
+        tab = b.dataset.tab as typeof tab;
+        render();
+      });
+    }
+    if (tab === 'build') {
+      void mountBuildMode(el.querySelector<HTMLElement>('.plan-build')!, run, {
+        onConfirmed(next) {
+          run = next;
+          handlers.onBuilt(next);
+          el.querySelector('.plan-head .money')!.textContent = money(next.money);
+        },
+      }).then((view) => {
+        if (tab === 'build' && el.isConnected) build = view;
+        else view.destroy();
+      });
+      return;
+    }
     for (const b of el.querySelectorAll<HTMLButtonElement>('button[data-buy]')) {
       b.addEventListener('click', () => {
         try {

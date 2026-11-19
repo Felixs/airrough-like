@@ -5,6 +5,9 @@
 
 export const TILE_SIZE = 8;
 
+/** The whole map in tiles, split into Land Plots; the Run starts owning the north-west 3 × 2 plots. */
+export const WORLD = { width: 80, height: 42, plotW: 16, plotH: 14 } as const;
+
 export interface TileRect {
   readonly x: number;
   readonly y: number;
@@ -99,7 +102,7 @@ const stand = (id: string, x: number, serves: Stand['serves']): Stand => ({
 
 /** The layout every Run begins with. */
 export function startingAirport(): AirportLayout {
-  return createLayout(48, 28, [
+  return createLayout(WORLD.width, WORLD.height, [
     { kind: 'atcTower', x: 2, y: 2, w: 3, h: 4 },
     { kind: 'terminal', x: 7, y: 2, w: 15, h: 4 },
     { kind: 'cargoHub', x: 25, y: 2, w: 10, h: 4 },

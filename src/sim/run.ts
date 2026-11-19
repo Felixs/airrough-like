@@ -7,6 +7,11 @@ import { mixSeed } from './random';
 import { planDay, type DayPlan } from './schedule';
 import { carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
+export interface LandPlot {
+  readonly px: number;
+  readonly py: number;
+}
+
 export interface TowerModules {
   readonly radar: number;
   readonly groundRadar: number;
@@ -52,6 +57,8 @@ export interface RunState {
   readonly weekday: number;
   readonly status: RunStatus;
   readonly layout: AirportLayout;
+  /** Land Plots owned, by plot column/row (see WORLD). */
+  readonly ownedPlots: readonly LandPlot[];
   readonly towerModules: TowerModules;
   /** 0 = no Fire & Rescue Station. */
   readonly fireRescueLevel: number;
@@ -76,6 +83,7 @@ export const UPKEEP = {
   /** Per Fire & Rescue Station level. */
   fireRescueLevel: 150,
   supportBuilding: 200,
+  taxiwayPerTile: 2,
 } as const;
 
 export const STARTING_MONEY = 30_000;
@@ -90,6 +98,7 @@ export function startRun(seed: number): RunState {
     weekday: 0,
     status: 'planning',
     layout: startingAirport(),
+    ownedPlots: [0, 1, 2].flatMap((px) => [0, 1].map((py) => ({ px, py }))),
     towerModules: { radar: 1, groundRadar: 1, weatherStation: 1, controllerTraining: 1 },
     fireRescueLevel: 0,
     money: STARTING_MONEY,
@@ -111,6 +120,8 @@ function structureUpkeep(s: Structure): number {
       return UPKEEP.holdingBay[s.size];
     case 'supportBuilding':
       return UPKEEP.supportBuilding;
+    case 'taxiway':
+      return UPKEEP.taxiwayPerTile * s.w * s.h;
     default:
       return 0;
   }
