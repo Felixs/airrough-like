@@ -4,8 +4,9 @@
  */
 import { createLayout } from './layout';
 import type { RunState } from './run';
+import { emptyMeta, type MetaState } from './meta';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const KEYS = { run: 'aab.run', meta: 'aab.meta' } as const;
 
 /** The part of localStorage the game uses (so tests can pass a fake). */
@@ -97,4 +98,15 @@ export function clearRun(store: KeyValueStore): void {
   } catch {
     // ignore: storage is unavailable
   }
+}
+
+/** Meta-progression is saved separately and always. */
+export function saveMeta(store: KeyValueStore, meta: MetaState): boolean {
+  return writeSave(store, KEYS.meta, meta);
+}
+
+export function loadMeta(store: KeyValueStore): MetaState {
+  const r = readSave(store, KEYS.meta);
+  if (r.kind !== 'ok' || !r.data || typeof r.data !== 'object') return emptyMeta();
+  return { ...emptyMeta(), ...(r.data as Partial<MetaState>) };
 }

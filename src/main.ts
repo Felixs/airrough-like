@@ -10,7 +10,9 @@ import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
-import { browserStore, clearRun, loadRun, saveRun } from './sim/save';
+import { browserStore, clearRun, loadMeta, loadRun, saveMeta, saveRun } from './sim/save';
+import { awardRun } from './sim/meta';
+import { showMetaShop } from './ui/metaShop';
 import { showNotice, showResume } from './ui/resume';
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 31);
@@ -22,7 +24,9 @@ async function start(): Promise<void> {
   await app.init({ resizeTo: mapEl, background: '#0b1210', antialias: true, autoDensity: true, resolution: window.devicePixelRatio });
   mapEl.appendChild(app.canvas);
 
-  let run: RunState = startRun(newSeed());
+  const store = browserStore();
+  let meta = loadMeta(store);
+  let run: RunState = startRun(newSeed(), meta);
   let sim: Simulation = startLiveDay(run);
   let quota = dayPlan(run).quota;
   let ended = true; // the Run opens in Plan Mode
@@ -69,7 +73,6 @@ async function start(): Promise<void> {
     dayLabel.title = twists.map((t) => `${t.name}: ${t.description}`).join('\n');
     mountAirfield();
   };
-  const store = browserStore();
   const openPlan = () => {
     saveRun(store, run);
     dayLabel.textContent = dayName(run.week, run.weekday);
@@ -88,17 +91,30 @@ async function start(): Promise<void> {
       onStartDay: beginDay,
     });
   };
-  const showScore = () =>
+  const showScore = () => {
+    meta = awardRun(meta, run);
+    saveMeta(store, meta);
     showScoreScreen(appEl, run, {
       onNewRun() {
-        run = startRun(newSeed());
-        openPlan();
+        clearRun(store);
+        showMetaShop(appEl, meta, {
+          onChange(next) {
+            meta = next;
+            saveMeta(store, meta);
+          },
+          onStartRun(next) {
+            meta = next;
+            run = startRun(newSeed(), meta);
+            openPlan();
+          },
+        });
       },
       onEndless() {
         run = continueEndless(run);
         openPlan();
       },
     });
+  };
 
   const saved = loadRun(store);
   if (saved.kind === 'discarded') showNotice(appEl, saved.reason);
@@ -109,6 +125,7 @@ async function start(): Promise<void> {
       else openPlan();
     }, () => {
       clearRun(store);
+      run = startRun(newSeed(), meta);
       openPlan();
     });
   } else {

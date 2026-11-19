@@ -212,6 +212,8 @@ export interface Simulation {
   readonly windows: readonly RunwayWindow[];
   readonly noLights: boolean;
   readonly taxiSpeedFactor: number;
+  readonly feeFactor: number;
+  readonly cooldownFactor: number;
   /** Per Runway (layout order): can't be used before this minute (Crash, Incident, Twist). */
   readonly runwayBlockedUntil: readonly number[];
   /** Everything notable that happened today, oldest first. */
@@ -272,6 +274,10 @@ export interface SimulationSetup {
   readonly noLights?: boolean;
   /** Multiplies taxi speed (Taxiway works). */
   readonly taxiSpeedFactor?: number;
+  /** Boosts from meta-progression. */
+  readonly feeFactor?: number;
+  readonly fuelBonusMinutes?: number;
+  readonly cooldownFactor?: number;
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -303,6 +309,8 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     windows: setup.windows ?? [],
     noLights: setup.noLights ?? false,
     taxiSpeedFactor: setup.taxiSpeedFactor ?? 1,
+    feeFactor: setup.feeFactor ?? 1,
+    cooldownFactor: setup.cooldownFactor ?? 1,
     runwayBlockedUntil: setup.layout.runways.map(() => setup.runwayBlockedUntil ?? 0),
     events: [],
     cooldownUntil: { groundStop: 0, rushTurnaround: 0, manualDivert: 0, priorityLanding: 0 },
@@ -318,7 +326,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
   sim.flights = setup.schedule.map((f) => {
     const flight: Mutable<Flight> = {
       ...f, phase: 'scheduled', phaseStart: 0, standId: null, bayId: null, landedSeq: 0, route: [], routeProgress: 0, unloaded: false, position: null, heading: 90,
-      fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size],
+      fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size] + (setup.fuelBonusMinutes ?? 0),
       pendingOutcome: null,
       runway: -1,
       stoppedUntil: 0,
@@ -496,8 +504,9 @@ function countMovement(sim: MutableSim, now: number): void {
 }
 
 function earnFee(sim: MutableSim, f: Flight): void {
-  sim.money += AIRCRAFT_TYPES[f.type].fee;
-  sim.fees += AIRCRAFT_TYPES[f.type].fee;
+  const fee = Math.round(AIRCRAFT_TYPES[f.type].fee * sim.feeFactor);
+  sim.money += fee;
+  sim.fees += fee;
 }
 
 function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, cost = 0): void {
@@ -822,7 +831,7 @@ export function useAction(prev: Simulation, id: ActionId, targetId?: string): Si
   const now = prev.clock.minute;
   const sim: MutableSim = {
     ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, events: [...prev.events],
-    flights: prev.flights.map((f) => ({ ...f })), cooldownUntil: { ...prev.cooldownUntil, [id]: now + ACTIONS[id].cooldownMinutes },
+    flights: prev.flights.map((f) => ({ ...f })), cooldownUntil: { ...prev.cooldownUntil, [id]: now + ACTIONS[id].cooldownMinutes * prev.cooldownFactor },
     runwayBusyUntil: [...prev.runwayBusyUntil], runwayBlockedUntil: [...prev.runwayBlockedUntil],
   };
   const flights = sim.flights as Mutable<Flight>[];

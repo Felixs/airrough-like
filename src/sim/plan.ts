@@ -7,6 +7,7 @@ import { createLayout } from './layout';
 import { dayPlan, upkeep, type DayReport, type RunState, type TowerModules } from './run';
 import { BOSS_DAY, RUSH_DAY, planDay } from './schedule';
 import { twistsFor, type Twist } from './twists';
+import { milestoneName, type MilestoneId } from './meta';
 
 /** Prices *(first guess)*. */
 export const PRICES = {
@@ -56,9 +57,19 @@ function applyUpgrade(run: RunState, id: UpgradeId): RunState {
   return { ...run, towerModules: { ...run.towerModules, [id]: run.towerModules[id] + 1 } };
 }
 
+/** Milestone needed for an upgrade level, if any. */
+function lockFor(run: RunState, id: UpgradeId, nextLevel: number, nextSurface?: RunwaySurface): string | null {
+  const has = (m: MilestoneId) => run.modifiers.unlocks.includes(m);
+  if (id === 'surface' && nextSurface === 'ils' && !has('surviveWeek2')) return `Unlock: ${milestoneName('surviveWeek2')}`;
+  if (id !== 'surface' && id !== 'fireRescue' && nextLevel >= 5 && !has('land100Large')) return `Unlock: ${milestoneName('land100Large')}`;
+  return null;
+}
+
 export function upgradeOffers(run: RunState): UpgradeOffer[] {
   const make = (id: UpgradeId, label: string, effect: string, level: number, maxed: boolean, cost: number): UpgradeOffer => {
-    const reason = maxed ? 'Max level' : run.inDebt ? 'In Debt: pay it off first' : run.money < cost ? 'Not enough Money' : null;
+    const surface = run.layout.runways[0]!.surface;
+    const locked = maxed ? null : lockFor(run, id, level + 1, SURFACE_ORDER[SURFACE_ORDER.indexOf(surface) + 1]);
+    const reason = maxed ? 'Max level' : locked ? locked : run.inDebt ? 'In Debt: pay it off first' : run.money < cost ? 'Not enough Money' : null;
     return {
       id, label, effect, level, nextLevel: maxed ? null : level + 1, cost,
       upkeepDelta: maxed ? 0 : upkeep(applyUpgrade(run, id)) - upkeep(run), available: reason === null, reason,

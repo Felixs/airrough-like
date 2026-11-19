@@ -6,6 +6,8 @@ import { startingAirport, type AirportLayout, type Structure } from './layout';
 import { mixSeed } from './random';
 import { planDay, type DayPlan } from './schedule';
 import { simulationEffects, twistsFor, type Twist } from './twists';
+import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
+import { AIRCRAFT_TYPES } from './aircraft';
 import { carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
@@ -29,6 +31,7 @@ export interface RunStats {
   readonly spending: number;
   readonly crashes: number;
   readonly diversions: number;
+  readonly largeLandings: number;
 }
 
 export interface DayReport {
@@ -65,6 +68,10 @@ export interface RunState {
   readonly layout: AirportLayout;
   /** Land Plots owned, by plot column/row (see WORLD). */
   readonly ownedPlots: readonly LandPlot[];
+  /** Land Plots the Run started with (they don't count towards the next plot's price). */
+  readonly startingPlots: number;
+  /** Boosts and Milestone unlocks from meta-progression, fixed when the Run starts. */
+  readonly modifiers: RunModifiers;
   readonly towerModules: TowerModules;
   /** 0 = no Fire & Rescue Station. */
   readonly fireRescueLevel: number;
@@ -96,7 +103,22 @@ export const STARTING_MONEY = 30_000;
 
 export const SCORE = { perDay: 1_000, perMovement: 50, milesPerScore: 1 / 100 } as const;
 
-export function startRun(seed: number): RunState {
+export function startRun(seed: number, meta: MetaState = emptyMeta()): RunState {
+  const perks = new Set(meta.perks);
+  const plots: LandPlot[] = [0, 1, 2].flatMap((px) => [0, 1].map((py) => ({ px, py })));
+  if (perks.has('largerLand')) plots.push({ px: 3, py: 0 });
+  const run = baseRun(seed);
+  return {
+    ...run,
+    money: run.money + (perks.has('extraCash') ? 15_000 : 0),
+    ownedPlots: plots,
+    startingPlots: plots.length,
+    towerModules: { ...run.towerModules, radar: perks.has('upgradedTower') ? 2 : 1 },
+    modifiers: modifiersFrom(meta),
+  };
+}
+
+function baseRun(seed: number): RunState {
   return {
     seed,
     dayIndex: 0,
@@ -106,13 +128,15 @@ export function startRun(seed: number): RunState {
     endless: false,
     layout: startingAirport(),
     ownedPlots: [0, 1, 2].flatMap((px) => [0, 1].map((py) => ({ px, py }))),
+    startingPlots: 6,
+    modifiers: modifiersFrom(emptyMeta()),
     towerModules: { radar: 1, groundRadar: 1, weatherStation: 1, controllerTraining: 1 },
     fireRescueLevel: 0,
     money: STARTING_MONEY,
     inDebt: false,
     crashesThisWeek: 0,
     overnight: [],
-    stats: { daysSurvived: 0, movements: 0, fees: 0, spending: 0, crashes: 0, diversions: 0 },
+    stats: { daysSurvived: 0, movements: 0, fees: 0, spending: 0, crashes: 0, diversions: 0, largeLandings: 0 },
     history: [],
   };
 }
@@ -136,11 +160,10 @@ function structureUpkeep(s: Structure): number {
 
 export function upkeep(run: RunState): number {
   const modules = Object.values(run.towerModules).reduce((n, level) => n + Math.max(0, level - 1), 0);
-  return (
-    run.layout.structures.reduce((n, s) => n + structureUpkeep(s), 0) +
+  const total = run.layout.structures.reduce((n, s) => n + structureUpkeep(s), 0) +
     modules * UPKEEP.towerModuleLevel +
-    run.fireRescueLevel * UPKEEP.fireRescueLevel
-  );
+    run.fireRescueLevel * UPKEEP.fireRescueLevel;
+  return Math.round(total * (run.modifiers?.upkeepFactor ?? 1));
 }
 
 /** The current Day's Twists (Endless Boss Days stack several). */
@@ -179,6 +202,9 @@ export function startLiveDay(run: RunState): Simulation {
     groundRadarLevel: run.towerModules.groundRadar,
     fireRescueLevel: run.fireRescueLevel,
     earlierCrashesThisWeek: run.crashesThisWeek,
+    feeFactor: run.modifiers.feeFactor,
+    fuelBonusMinutes: run.modifiers.fuelBonusMinutes,
+    cooldownFactor: run.modifiers.cooldownFactor,
   });
 }
 
@@ -212,6 +238,8 @@ export function endDay(run: RunState, sim: Simulation): RunState {
       spending: run.stats.spending + cost + penalties,
       crashes: run.stats.crashes + sim.crashes,
       diversions: run.stats.diversions + sim.diversions,
+      largeLandings: run.stats.largeLandings + sim.flights.filter((f) =>
+        AIRCRAFT_TYPES[f.type].size === 'large' && f.landedSeq > 0 && f.phase !== 'holding' && f.phase !== 'landing' && f.phase !== 'crashed' && f.phase !== 'diverted').length,
     },
     history: [...run.history, report],
   };

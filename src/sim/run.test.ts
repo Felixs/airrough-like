@@ -57,7 +57,7 @@ describe('End of Day', () => {
 
 describe('Score', () => {
   it('is Days × 1000 + Movements × 50 + fees; Air Miles are Score / 100', () => {
-    const run: RunState = { ...startRun(1), stats: { daysSurvived: 3, movements: 150, fees: 54_321, spending: 999, crashes: 0, diversions: 0 } };
+    const run: RunState = { ...startRun(1), stats: { daysSurvived: 3, movements: 150, fees: 54_321, spending: 999, crashes: 0, diversions: 0, largeLandings: 0 } };
     expect(runScore(run)).toBe(3_000 + 7_500 + 54_321);
     expect(airMiles(run)).toBe(648);
   });

@@ -219,3 +219,11 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .plan-head .endless { color: var(--amber); }
 
 .notice { position: fixed; right: 16px; bottom: 16px; z-index: 20; max-width: 360px; padding: 10px 14px; border: 1px solid var(--amber); border-radius: 6px; background: #2a2214; color: var(--text); font: 12px var(--mono); }
+
+.meta-card { width: min(760px, calc(100vw - 32px)); }
+.meta-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.offer .effect { grid-column: 1 / -1; color: var(--mute); font-size: 10px; }
+.ms { margin-top: 14px; }
+.milestones { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; color: var(--mute); }
+.milestones .done { color: var(--green); }
+.milestones small { color: var(--mute); }
