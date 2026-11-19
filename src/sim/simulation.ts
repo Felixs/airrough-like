@@ -4,7 +4,8 @@
  */
 import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
-import { TILE_SIZE, type AirportLayout, type HoldingBay, type Stand } from './layout';
+import { TILE_SIZE, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand } from './layout';
+import { createRandom, mixSeed, type Random } from './random';
 import { buildTaxiNetwork, routeBetween, routeFromStand, routeToStand, type TaxiNetwork, type Tile } from './taxi';
 
 /** Timings *(first guess, from the prototypes)*. */
@@ -28,7 +29,63 @@ export const ATC = {
   /** Runway Separation at the lowest and highest Tower levels. */
   separation: { landing: [4, 2], takeoff: [3, 1.5] },
   maxModuleLevel: 5,
+  /** A Holding aircraft this low on fuel is Diverted if no Runway that fits it is usable. */
+  minimumFuelMinutes: 5,
 } as const;
+
+/** Errors and safety *(first guess, from the prototypes)*. */
+export const SAFETY = {
+  atcErrorChance: 0.025,
+  /** ATC Error chance drops this share per Controller Training level above 1. */
+  trainingReduction: 0.15,
+  /** ATC Error chance rises this share per aircraft over Radar capacity. */
+  overRadarIncrease: 0.4,
+  pilotErrorChance: 0.015,
+  surfacePilotFactor: { grass: 1.3, asphalt: 1, lit: 1, ils: 0.6 },
+  landingOutcomes: { goAround: 0.8, incident: 0.19 },
+  takeoffOutcomes: { rejectedTakeoff: 0.85, incident: 0.14 },
+  crashFine: { small: 5_000, medium: 10_000, large: 20_000 },
+  crashFineIncreasePerCrash: 0.5,
+  crashFineCap: 3,
+  incidentCost: { small: 1_000, medium: 2_000, large: 4_000 },
+  crashBlockMinutes: 60,
+  incidentBlockMinutes: 20,
+  /** Blockage multiplier by Fire & Rescue Station level 0–5. */
+  fireRescueFactor: [1, 0.75, 0.55, 0.4, 0.3, 0.2],
+  /** Taxiway Incident chance per step for each extra aircraft taxiing at the same time. */
+  taxiIncidentPerAircraft: 0.0005,
+  /** Ground Radar lowers Taxiway Incidents by this share per level above 1. */
+  groundRadarReduction: 0.15,
+} as const;
+
+const RUNWAY_FITS: Record<RunwayLength, number> = { short: 1, medium: 2, long: 3 };
+
+export type LandingOutcome = 'goAround' | 'incident' | 'crash';
+export type TakeoffOutcome = 'rejectedTakeoff' | 'incident' | 'crash';
+
+/** What an error at landing becomes, for a uniform roll in [0, 1). */
+export function landingOutcome(roll: number): LandingOutcome {
+  const o = SAFETY.landingOutcomes;
+  return roll < o.goAround ? 'goAround' : roll < o.goAround + o.incident - 1e-12 ? 'incident' : 'crash';
+}
+
+/** What an error at takeoff becomes, for a uniform roll in [0, 1). */
+export function takeoffOutcome(roll: number): TakeoffOutcome {
+  const o = SAFETY.takeoffOutcomes;
+  return roll < o.rejectedTakeoff ? 'rejectedTakeoff' : roll < o.rejectedTakeoff + o.incident - 1e-12 ? 'incident' : 'crash';
+}
+
+/** Crash Fine for a Crash after `earlierCrashesThisWeek` others in the same Week. */
+export function crashFine(size: SizeClass, earlierCrashesThisWeek: number): number {
+  const factor = Math.min(SAFETY.crashFineCap, 1 + SAFETY.crashFineIncreasePerCrash * earlierCrashesThisWeek);
+  return SAFETY.crashFine[size] * factor;
+}
+
+/** Chance per step of a Taxiway Incident with `taxiing` aircraft on the Taxiways. */
+export function taxiIncidentChance(taxiing: number, groundRadarLevel: number): number {
+  const reduction = Math.max(0, 1 - SAFETY.groundRadarReduction * (groundRadarLevel - 1));
+  return Math.max(0, taxiing - 1) * SAFETY.taxiIncidentPerAircraft * reduction;
+}
 
 /**
  * Runway Separation in minutes: how long a landing or takeoff occupies the Runway.
@@ -51,7 +108,7 @@ export interface ScheduledFlight {
   readonly fuelMinutes?: number;
 }
 
-export type FlightPhase = 'scheduled' | 'holding' | 'landing' | 'taxiIn' | 'inBay' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed' | 'crashed';
+export type FlightPhase = 'scheduled' | 'holding' | 'landing' | 'taxiIn' | 'inBay' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed' | 'crashed' | 'diverted';
 
 export interface Point {
   readonly x: number;
@@ -73,6 +130,10 @@ export interface Flight extends ScheduledFlight {
   readonly unloaded: boolean;
   /** Fuel Reserve left; counts down while Holding. */
   readonly fuelMinutes: number;
+  /** Error result rolled when the current landing or takeoff started. */
+  readonly pendingOutcome: LandingOutcome | TakeoffOutcome | null;
+  /** Stopped on the Taxiway by an Incident until this minute. */
+  readonly stoppedUntil: number;
   /** World position (units) and heading in degrees (0 = north, 90 = east); null when not on the airfield. */
   readonly position: Point | null;
   readonly heading: number;
@@ -86,8 +147,20 @@ export interface Simulation {
   readonly money: number;
   /** Landings and takeoffs handled today. */
   readonly movements: number;
+  /** Crashes today. */
   readonly crashes: number;
+  /** Crashes earlier this Week (for Crash Fines). */
+  readonly earlierCrashesThisWeek: number;
+  readonly diversions: number;
   readonly landings: number;
+  readonly groundRadarLevel: number;
+  readonly fireRescueLevel: number;
+  /** Multiplies error chances (Twists, tests). */
+  readonly riskMultiplier: number;
+  /** The Runway can't be used before this minute (Crash, Incident, Twist). */
+  readonly runwayBlockedUntil: number;
+  /** Everything notable that happened today, oldest first. */
+  readonly events: readonly SimEvent[];
   readonly radarLevel: number;
   readonly controllerTrainingLevel: number;
   readonly runwayBusyUntil: number;
@@ -96,6 +169,14 @@ export interface Simulation {
   /** Holding Bay id → flight id using (or reserved for) it. */
   readonly bayOccupant: Readonly<Record<string, string>>;
   readonly flights: readonly Flight[];
+}
+
+export interface SimEvent {
+  readonly minute: number;
+  readonly kind: 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion';
+  readonly flightId: string;
+  /** Money paid (Crash Fine, Incident cost). */
+  readonly cost: number;
 }
 
 export interface SimulationSetup {
@@ -107,12 +188,20 @@ export interface SimulationSetup {
   readonly radarLevel?: number;
   /** Controller Training Tower Module level, 1–5. */
   readonly controllerTrainingLevel?: number;
+  /** Ground Radar Tower Module level, 1–5. */
+  readonly groundRadarLevel?: number;
+  /** Fire & Rescue Station level, 0 (none) to 5. */
+  readonly fireRescueLevel?: number;
+  readonly earlierCrashesThisWeek?: number;
+  readonly riskMultiplier?: number;
+  readonly runwayBlockedUntil?: number;
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
-type MutableSim = Omit<Mutable<Simulation>, 'standOccupant' | 'bayOccupant'> & {
+type MutableSim = Omit<Mutable<Simulation>, 'standOccupant' | 'bayOccupant' | 'events'> & {
   standOccupant: Record<string, string>;
   bayOccupant: Record<string, string>;
+  events: SimEvent[];
 };
 
 export function createSimulation(setup: SimulationSetup): Simulation {
@@ -124,7 +213,14 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     money: setup.money ?? 0,
     movements: 0,
     crashes: 0,
+    earlierCrashesThisWeek: setup.earlierCrashesThisWeek ?? 0,
+    diversions: 0,
     landings: 0,
+    groundRadarLevel: setup.groundRadarLevel ?? 1,
+    fireRescueLevel: setup.fireRescueLevel ?? 0,
+    riskMultiplier: setup.riskMultiplier ?? 1,
+    runwayBlockedUntil: setup.runwayBlockedUntil ?? 0,
+    events: [],
     radarLevel: setup.radarLevel ?? 1,
     controllerTrainingLevel: setup.controllerTrainingLevel ?? 1,
     runwayBusyUntil: 0,
@@ -136,6 +232,8 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     const flight: Mutable<Flight> = {
       ...f, phase: 'scheduled', phaseStart: 0, standId: null, bayId: null, landedSeq: 0, route: [], routeProgress: 0, unloaded: false, position: null, heading: 90,
       fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size],
+      pendingOutcome: null,
+      stoppedUntil: 0,
     };
     const stand = f.overnight ? freeFittingStand(sim, flight) : undefined;
     if (stand) {
@@ -196,11 +294,15 @@ const bayById = (sim: Simulation, id: string | null) => (id ? sim.layout.holding
 /** Advances the simulation by one fixed step (15 in-game seconds). */
 export function stepSimulation(prev: Simulation): Simulation {
   if (isDayOver(prev.clock)) return prev;
-  const sim: MutableSim = { ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, flights: [] };
+  const sim: MutableSim = {
+    ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, events: [...prev.events], flights: [],
+  };
   const now = prev.clock.minute;
+  const rng = createRandom(mixSeed(prev.seed, Math.round(now / STEP_MINUTES)));
   const flights = prev.flights.map((f) => stepFlight(sim, { ...f }, now));
+  rollTaxiIncident(sim, flights, now, rng);
   const blocked = releaseBays(sim, flights, now);
-  assignRunway(sim, flights, now, blocked);
+  assignRunway(sim, flights, now, blocked, rng);
   for (const f of flights) place(sim, f, now + STEP_MINUTES);
   sim.flights = flights;
   sim.clock = { ...prev.clock, minute: now + STEP_MINUTES };
@@ -240,11 +342,69 @@ export function separationOf(sim: Simulation) {
   return runwaySeparation(sim.radarLevel, sim.controllerTrainingLevel);
 }
 
+/** Current error chances at a risky moment on the Runway; shown as the Risk Meter. */
+export function riskMeter(sim: Simulation): { atc: number; pilot: number; total: number } {
+  const training = Math.max(0, 1 - SAFETY.trainingReduction * (sim.controllerTrainingLevel - 1));
+  const radar = 1 + SAFETY.overRadarIncrease * radarLoad(sim).over;
+  const surface = sim.network.runway.surface;
+  const atc = Math.min(1, SAFETY.atcErrorChance * training * radar * sim.riskMultiplier);
+  const pilot = Math.min(1, SAFETY.pilotErrorChance * SAFETY.surfacePilotFactor[surface] * sim.riskMultiplier);
+  return { atc, pilot, total: 1 - (1 - atc) * (1 - pilot) };
+}
+
+const blockMinutes = (sim: Simulation, base: number) => base * (SAFETY.fireRescueFactor[sim.fireRescueLevel] ?? 1);
+const runwayUsable = (sim: Simulation, now: number) => now >= sim.runwayBlockedUntil;
+const runwayFits = (sim: Simulation, f: Flight) => RUNWAY_FITS[sim.network.runway.length] >= sizeRank(AIRCRAFT_TYPES[f.type].size);
+
+function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, cost = 0): void {
+  sim.money -= cost;
+  sim.events.push({ minute: now, kind, flightId: f.id, cost });
+}
+
+function releaseSpots(sim: MutableSim, f: Mutable<Flight>): void {
+  if (f.standId) delete sim.standOccupant[f.standId];
+  if (f.bayId) delete sim.bayOccupant[f.bayId];
+  f.standId = null;
+  f.bayId = null;
+}
+
+function crash(sim: MutableSim, f: Mutable<Flight>, now: number, blocksRunway: boolean): void {
+  const fine = crashFine(AIRCRAFT_TYPES[f.type].size, sim.earlierCrashesThisWeek + sim.crashes);
+  sim.crashes += 1;
+  logEvent(sim, now, 'crash', f, fine);
+  releaseSpots(sim, f);
+  f.phase = 'crashed';
+  f.phaseStart = now;
+  if (blocksRunway) sim.runwayBlockedUntil = Math.max(sim.runwayBlockedUntil, now + blockMinutes(sim, SAFETY.crashBlockMinutes));
+}
+
+function incident(sim: MutableSim, f: Flight, now: number, kind: 'incident' | 'taxiIncident'): number {
+  logEvent(sim, now, kind, f, SAFETY.incidentCost[AIRCRAFT_TYPES[f.type].size]);
+  return now + blockMinutes(sim, SAFETY.incidentBlockMinutes);
+}
+
+/** More aircraft taxiing at once means more chance two of them meet; the Incident stops one of them. */
+function rollTaxiIncident(sim: MutableSim, flights: Mutable<Flight>[], now: number, rng: Random): void {
+  const taxiing = flights.filter((f) => (f.phase === 'taxiIn' || f.phase === 'taxiOut') && f.stoppedUntil <= now);
+  if (rng.next() >= taxiIncidentChance(taxiing.length, sim.groundRadarLevel)) return;
+  const f = rng.pick(taxiing);
+  f.stoppedUntil = incident(sim, f, now, 'taxiIncident');
+}
+
+/** Rolls ATC and Pilot Error for a landing or takeoff starting now. */
+function rollError(sim: Simulation, rng: Random): number | null {
+  const risk = riskMeter(sim);
+  const atc = rng.next() < risk.atc;
+  const pilot = rng.next() < risk.pilot;
+  const outcomeRoll = rng.next();
+  return atc || pilot ? outcomeRoll : null;
+}
+
 /** The ATC Tower gives the Runway to one aircraft at a time. */
-function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, blocked: ReadonlySet<string>): void {
-  if (sim.runwayBusyUntil > now) return;
+function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, blocked: ReadonlySet<string>, rng: Random): void {
+  if (sim.runwayBusyUntil > now || !runwayUsable(sim, now)) return;
   const holding = flights
-    .filter((f) => f.phase === 'holding')
+    .filter((f) => f.phase === 'holding' && runwayFits(sim, f))
     .sort((a, b) => Number(isLowFuel(b)) - Number(isLowFuel(a)) || (isLowFuel(a) ? a.fuelMinutes - b.fuelMinutes : 0) || a.phaseStart - b.phaseStart);
   const departures = flights.filter((f) => f.phase === 'holdShort' && f.phaseStart < now).sort((a, b) => a.phaseStart - b.phaseStart);
   const departure = departures[0];
@@ -255,7 +415,9 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
   const next = urgent ?? (departureDue ? departure : (landable ?? departure));
   if (!next) return;
   const separation = separationOf(sim);
+  const errorRoll = rollError(sim, rng);
   if (next.phase === 'holding') {
+    next.pendingOutcome = errorRoll === null ? null : landingOutcome(errorRoll);
     const stand = freeFittingStand(sim, next, blocked);
     if (stand) {
       sim.standOccupant[stand.id] = next.id;
@@ -270,6 +432,7 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
     next.phase = 'landing';
     sim.runwayBusyUntil = now + separation.landing;
   } else {
+    next.pendingOutcome = errorRoll === null ? null : takeoffOutcome(errorRoll);
     next.phase = 'takeoff';
     sim.runwayBusyUntil = now + separation.takeoff;
   }
@@ -296,15 +459,34 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
       break;
     case 'holding':
+      if (f.fuelMinutes <= ATC.minimumFuelMinutes && (!runwayUsable(sim, now) || !runwayFits(sim, f))) {
+        sim.diversions += 1;
+        logEvent(sim, now, 'diversion', f);
+        enter('diverted');
+        break;
+      }
       if (f.fuelMinutes <= 0) {
-        sim.crashes += 1;
-        enter('crashed');
+        crash(sim, f, now, true);
         break;
       }
       f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
       break;
     case 'landing': {
       if (now < f.phaseStart + separationOf(sim).landing) break;
+      const outcome = f.pendingOutcome;
+      f.pendingOutcome = null;
+      if (outcome === 'crash') {
+        crash(sim, f, now, true);
+        break;
+      }
+      if (outcome === 'goAround') {
+        logEvent(sim, now, 'goAround', f);
+        releaseSpots(sim, f);
+        f.landedSeq = 0;
+        enter('holding');
+        break;
+      }
+      if (outcome === 'incident') sim.runwayBlockedUntil = Math.max(sim.runwayBlockedUntil, incident(sim, f, now, 'incident'));
       sim.movements += 1;
       f.route = routeToStand(sim.network, sim.network.runwayExit, stand ?? bayById(sim, f.bayId)!);
       f.routeProgress = 0;
@@ -313,6 +495,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     }
     case 'taxiIn':
     case 'taxiOut': {
+      if (now < f.stoppedUntil) break;
       f.routeProgress = Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * STEP_MINUTES);
       if (f.routeProgress < f.route.length - 1) break;
       if (f.phase === 'taxiOut') enter('holdShort');
@@ -338,6 +521,18 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       break;
     case 'takeoff': {
       if (now < f.phaseStart + separationOf(sim).takeoff) break;
+      const outcome = f.pendingOutcome;
+      f.pendingOutcome = null;
+      if (outcome === 'crash') {
+        crash(sim, f, now, true);
+        break;
+      }
+      if (outcome === 'rejectedTakeoff' || outcome === 'incident') {
+        logEvent(sim, now, 'rejectedTakeoff', f);
+        if (outcome === 'incident') sim.runwayBlockedUntil = Math.max(sim.runwayBlockedUntil, incident(sim, f, now, 'incident'));
+        enter('holdShort');
+        break;
+      }
       sim.money += AIRCRAFT_TYPES[f.type].fee;
       sim.movements += 1;
       enter('departed');
@@ -345,6 +540,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     }
     case 'departed':
     case 'crashed':
+    case 'diverted':
       break;
   }
   return f;
