@@ -10,6 +10,8 @@ import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
+import { browserStore, clearRun, loadRun, saveRun } from './sim/save';
+import { showNotice, showResume } from './ui/resume';
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 31);
 
@@ -67,22 +69,51 @@ async function start(): Promise<void> {
     dayLabel.title = twists.map((t) => `${t.name}: ${t.description}`).join('\n');
     mountAirfield();
   };
+  const store = browserStore();
   const openPlan = () => {
+    saveRun(store, run);
     dayLabel.textContent = dayName(run.week, run.weekday);
     mountAirfield();
     showPlanMode(appEl, run, {
       onBuy(id) {
         run = buyUpgrade(run, id);
+        saveRun(store, run);
         return run;
       },
       onBuilt(next) {
         run = next;
+        saveRun(store, run);
         mountAirfield();
       },
       onStartDay: beginDay,
     });
   };
-  openPlan();
+  const showScore = () =>
+    showScoreScreen(appEl, run, {
+      onNewRun() {
+        run = startRun(newSeed());
+        openPlan();
+      },
+      onEndless() {
+        run = continueEndless(run);
+        openPlan();
+      },
+    });
+
+  const saved = loadRun(store);
+  if (saved.kind === 'discarded') showNotice(appEl, saved.reason);
+  if (saved.kind === 'run') {
+    showResume(appEl, saved.run, () => {
+      run = saved.run;
+      if (run.status === 'won') showScore();
+      else openPlan();
+    }, () => {
+      clearRun(store);
+      openPlan();
+    });
+  } else {
+    openPlan();
+  }
 
   app.ticker.add((ticker) => {
     if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, speed));
@@ -92,17 +123,10 @@ async function start(): Promise<void> {
     if (!ended && isDayOver(sim.clock)) {
       ended = true;
       run = endDay(run, sim);
+      if (run.status === 'lost') clearRun(store);
+      if (run.status === 'won') saveRun(store, run);
       if (run.status === 'lost' || run.status === 'won') {
-        showScoreScreen(appEl, run, {
-          onNewRun() {
-            run = startRun(newSeed());
-            openPlan();
-          },
-          onEndless() {
-            run = continueEndless(run);
-            openPlan();
-          },
-        });
+        showScore();
       } else {
         openPlan();
       }
