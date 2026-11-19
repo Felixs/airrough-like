@@ -7,7 +7,14 @@ export const STEP_MINUTES = 0.25;
 /** At 1× the simulation runs 30 steps per real second (a Day lasts about 2.5 real minutes). */
 const STEPS_PER_REAL_SECOND = 30;
 
-export type Speed = 0 | 1 | 2 | 4;
+export const SPEEDS = [0, 1, 2, 4] as const;
+export type Speed = (typeof SPEEDS)[number];
+
+export function parseSpeed(value: string | undefined): Speed | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const n = Number(value);
+  return SPEEDS.find((s) => s === n);
+}
 
 export interface Day {
   /** Minutes since 00:00. */

@@ -1,4 +1,4 @@
-import type { Speed } from '../sim/clock';
+import { parseSpeed, type Speed } from '../sim/clock';
 
 export interface TopBar {
   showClock(text: string, dayOver: boolean): void;
@@ -14,7 +14,10 @@ export function mountTopBar(root: HTMLElement, initial: Speed, onSpeed: (speed: 
     for (const b of buttons) b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === speed));
     onSpeed(speed);
   };
-  for (const b of buttons) b.addEventListener('click', () => select(Number(b.dataset.speed) as Speed));
+  for (const b of buttons) {
+    const speed = parseSpeed(b.dataset.speed);
+    if (speed !== undefined) b.addEventListener('click', () => select(speed));
+  }
   select(initial);
 
   return {

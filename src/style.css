@@ -29,4 +29,5 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .speed button[aria-pressed='true'] { border-color: var(--teal); background: #12302a; color: var(--teal); }
 .speed button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 
+.map canvas { display: block; }
 .map { flex: 1; min-height: 0; margin: 10px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }

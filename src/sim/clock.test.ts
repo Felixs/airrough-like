@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advance, createDay, formatClock, isDayOver } from './clock';
+import { advance, createDay, formatClock, isDayOver, parseSpeed } from './clock';
 
 describe('Day clock', () => {
   it('starts a Day at 05:00', () => {
@@ -34,5 +34,15 @@ describe('Day clock', () => {
     expect(formatClock(over)).toBe('24:00');
     expect(isDayOver(over)).toBe(true);
     expect(advance(over, 1000, 4).minute).toBe(1440);
+  });
+});
+
+describe('parseSpeed', () => {
+  it('accepts only pause, 1×, 2× and 4×', () => {
+    expect(parseSpeed('0')).toBe(0);
+    expect(parseSpeed('4')).toBe(4);
+    expect(parseSpeed('3')).toBe(undefined);
+    expect(parseSpeed('')).toBe(undefined);
+    expect(parseSpeed(undefined)).toBe(undefined);
   });
 });

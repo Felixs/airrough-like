@@ -103,7 +103,7 @@ export function startingAirport(): AirportLayout {
     stand('C1', 26, 'cargoHub'),
     stand('C2', 29, 'cargoHub'),
     { kind: 'holdingBay', x: 38, y: 6, w: 3, h: 3, size: 'medium' },
-    // apron taxilane, links down to Taxiway A, Taxiway A, connectors onto the Runway
+    // Taxiway along the Stands, links down to Taxiway A, Taxiway A, connectors onto the Runway
     { kind: 'taxiway', x: 7, y: 9, w: 35, h: 3 },
     { kind: 'taxiway', x: 12, y: 12, w: 3, h: 4 },
     { kind: 'taxiway', x: 29, y: 12, w: 3, h: 4 },
