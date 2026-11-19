@@ -119,3 +119,22 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
   font: 600 14px var(--mono); cursor: pointer;
 }
 .primary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* Emergency Actions */
+.action-list { display: grid; gap: 4px; }
+.action { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--mute); font: 11px var(--mono); text-align: left; cursor: not-allowed; }
+.action b { font-weight: 600; }
+.action span { font-size: 10px; }
+.action.ready { border-color: var(--teal); color: var(--text); cursor: pointer; }
+.action.ready span { color: var(--teal); }
+.action:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+#action-msg:not(:empty) { margin-top: 6px; color: var(--amber); }
+.strips[data-group='holding'] .strip { cursor: pointer; }
+.strip.selected { outline: 1px solid var(--teal); }
+
+/* Fuel / Emergency Alert banner */
+.alert-banner { position: absolute; left: 50%; top: 48px; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 12px; max-width: min(640px, 90%); padding: 10px 14px; border-radius: 6px; font: 12px var(--mono); background: #2a2214; border: 1px solid var(--amber); color: var(--text); }
+.alert-banner.emergency { background: #2a1715; border-color: var(--red); }
+.alert-banner b { color: var(--amber); }
+.alert-banner.emergency b { color: var(--red); }
+.alert-banner button { flex: none; height: 32px; padding: 0 12px; border: 1px solid currentColor; border-radius: 4px; background: transparent; color: var(--text); font: 600 12px var(--mono); cursor: pointer; }

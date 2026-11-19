@@ -4,7 +4,7 @@
  */
 import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
-import { TILE_SIZE, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand } from './layout';
+import { TILE_SIZE, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
 import { buildTaxiNetwork, routeBetween, routeFromStand, routeToStand, type TaxiNetwork, type Tile } from './taxi';
 
@@ -69,6 +69,32 @@ export const SAFETY = {
   /** Ground Radar lowers Taxiway Incidents by this share per level above 1. */
   groundRadarReduction: 0.15,
 } as const;
+
+/** Emergency Actions *(first guess)*. */
+export const ACTIONS = {
+  groundStop: { cooldownMinutes: 8 * 60, needs: null },
+  rushTurnaround: { cooldownMinutes: 90, needs: 'rampAgentStation' },
+  manualDivert: { cooldownMinutes: 60, needs: 'adminOffice' },
+  priorityLanding: { cooldownMinutes: 90, needs: 'airlineOffice' },
+} as const satisfies Record<string, { cooldownMinutes: number; needs: SupportRole | null }>;
+export type ActionId = keyof typeof ACTIONS;
+export const ACTION_IDS = Object.keys(ACTIONS) as ActionId[];
+/** How long a Ground Stop freezes taxiing, and how much a Rush Turnaround keeps. */
+export const ACTION_EFFECTS = { groundStopMinutes: 5, rushTurnaroundFactor: 0.5 } as const;
+
+/** Radar levels that unlock the automatic pauses. */
+export const ALERTS = { fuelAlertRadar: 3, atcEmergencyRadar: 3, pilotEmergencyRadar: 4, secondRollBase: 0.5, secondRollPerTraining: 0.1 } as const;
+
+/** Chance the Emergency Alert's second roll avoids the Crash. */
+export function secondRollChance(controllerTrainingLevel: number): number {
+  return Math.min(1, ALERTS.secondRollBase + ALERTS.secondRollPerTraining * (controllerTrainingLevel - 1));
+}
+
+export interface PendingAlert {
+  readonly kind: 'fuel' | 'emergency';
+  readonly flightId: string;
+  readonly minute: number;
+}
 
 const RUNWAY_FITS: Record<RunwayLength, number> = { short: 1, medium: 2, long: 3 };
 
@@ -148,6 +174,12 @@ export interface Flight extends ScheduledFlight {
   readonly pendingOutcome: LandingOutcome | TakeoffOutcome | null;
   /** Stopped on the Taxiway by an Incident until this minute. */
   readonly stoppedUntil: number;
+  /** Which error caused the pending outcome. */
+  readonly pendingCause: 'atc' | 'pilot' | null;
+  /** Priority Landing: first in the landing queue. */
+  readonly priority: boolean;
+  /** Rush Turnaround: shorter Turnaround on its Stand. */
+  readonly rushed: boolean;
   /** World position (units) and heading in degrees (0 = north, 90 = east); null when not on the airfield. */
   readonly position: Point | null;
   readonly heading: number;
@@ -179,6 +211,12 @@ export interface Simulation {
   readonly runwayBlockedUntil: number;
   /** Everything notable that happened today, oldest first. */
   readonly events: readonly SimEvent[];
+  /** Minute each Emergency Action is ready again. */
+  readonly cooldownUntil: Readonly<Record<ActionId, number>>;
+  /** Taxiing is frozen until this minute (Ground Stop). */
+  readonly groundStopUntil: number;
+  /** A Fuel or Emergency Alert waiting for the Player; the Day is paused until it is handled. */
+  readonly pendingAlert: PendingAlert | null;
   readonly radarLevel: number;
   readonly controllerTrainingLevel: number;
   readonly runwayBusyUntil: number;
@@ -241,6 +279,9 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     riskMultiplier: setup.riskMultiplier ?? 1,
     runwayBlockedUntil: setup.runwayBlockedUntil ?? 0,
     events: [],
+    cooldownUntil: { groundStop: 0, rushTurnaround: 0, manualDivert: 0, priorityLanding: 0 },
+    groundStopUntil: 0,
+    pendingAlert: null,
     radarLevel: setup.radarLevel ?? 1,
     controllerTrainingLevel: setup.controllerTrainingLevel ?? 1,
     runwayBusyUntil: 0,
@@ -254,6 +295,9 @@ export function createSimulation(setup: SimulationSetup): Simulation {
       fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size],
       pendingOutcome: null,
       stoppedUntil: 0,
+      pendingCause: null,
+      priority: false,
+      rushed: false,
     };
     const stand = f.overnight ? freeFittingStand(sim, flight) : undefined;
     if (stand) {
@@ -290,7 +334,8 @@ function runwayLine(sim: Simulation) {
 
 function turnaroundMinutes(flight: Flight, stand: Stand): number {
   const base = TIMINGS.turnaroundMinutes[AIRCRAFT_TYPES[flight.type].size];
-  return stand.placement === 'remote' ? base * TIMINGS.remoteStandFactor : base;
+  const placed = stand.placement === 'remote' ? base * TIMINGS.remoteStandFactor : base;
+  return flight.rushed ? placed * ACTION_EFFECTS.rushTurnaroundFactor : placed;
 }
 
 /** A Stand fits aircraft of its Size Class or smaller and of its Purpose; the smallest fitting free Stand is used. */
@@ -316,7 +361,7 @@ const bayById = (sim: Simulation, id: string | null) => (id ? sim.layout.holding
 
 /** Advances the simulation by one fixed step (15 in-game seconds). */
 export function stepSimulation(prev: Simulation): Simulation {
-  if (isDayOver(prev.clock)) return prev;
+  if (isDayOver(prev.clock) || prev.pendingAlert) return prev;
   const sim: MutableSim = {
     ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, events: [...prev.events], flights: [],
   };
@@ -440,6 +485,7 @@ function incident(sim: MutableSim, f: Flight, now: number, kind: 'incident' | 't
 
 /** More aircraft taxiing at once means more chance two of them meet; the Incident stops one of them. */
 function rollTaxiIncident(sim: MutableSim, flights: Mutable<Flight>[], now: number, rng: Random): void {
+  if (now < sim.groundStopUntil) return;
   const taxiing = flights.filter((f) => (f.phase === 'taxiIn' || f.phase === 'taxiOut') && f.stoppedUntil <= now);
   if (rng.next() >= taxiIncidentChance(taxiing.length, sim.groundRadarLevel)) return;
   const f = rng.pick(taxiing);
@@ -447,12 +493,12 @@ function rollTaxiIncident(sim: MutableSim, flights: Mutable<Flight>[], now: numb
 }
 
 /** Rolls ATC and Pilot Error for a landing or takeoff starting now. */
-function rollError(sim: Simulation, rng: Random): number | null {
+function rollError(sim: Simulation, rng: Random): { roll: number; cause: 'atc' | 'pilot' } | null {
   const risk = riskMeter(sim);
   const atc = rng.next() < risk.atc;
   const pilot = rng.next() < risk.pilot;
-  const outcomeRoll = rng.next();
-  return atc || pilot ? outcomeRoll : null;
+  const roll = rng.next();
+  return atc ? { roll, cause: 'atc' } : pilot ? { roll, cause: 'pilot' } : null;
 }
 
 /** The ATC Tower gives the Runway to one aircraft at a time. */
@@ -460,19 +506,20 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
   if (sim.runwayBusyUntil > now || !runwayUsable(sim, now)) return;
   const holding = flights
     .filter((f) => f.phase === 'holding' && runwayFits(sim, f))
-    .sort((a, b) => Number(isLowFuel(b)) - Number(isLowFuel(a)) || (isLowFuel(a) ? a.fuelMinutes - b.fuelMinutes : 0) || a.phaseStart - b.phaseStart);
+    .sort((a, b) => Number(b.priority) - Number(a.priority) || Number(isLowFuel(b)) - Number(isLowFuel(a)) || (isLowFuel(a) ? a.fuelMinutes - b.fuelMinutes : 0) || a.phaseStart - b.phaseStart);
   const departures = flights.filter((f) => f.phase === 'holdShort' && f.phaseStart < now).sort((a, b) => a.phaseStart - b.phaseStart);
   const departure = departures[0];
   const landable = holding.find((f) => freeFittingStand(sim, f, blocked) ?? freeFittingBay(sim, f));
-  const urgent = landable && isLowFuel(landable) ? landable : undefined;
+  const urgent = landable && (isLowFuel(landable) || landable.priority) ? landable : undefined;
   const departureDue = departure && now - departure.phaseStart >= ATC.departureMaxWaitMinutes;
 
   const next = urgent ?? (departureDue ? departure : (landable ?? departure));
   if (!next) return;
   const separation = separationOf(sim);
-  const errorRoll = rollError(sim, rng);
+  const error = rollError(sim, rng);
+  next.pendingCause = error?.cause ?? null;
   if (next.phase === 'holding') {
-    next.pendingOutcome = errorRoll === null ? null : landingOutcome(errorRoll);
+    next.pendingOutcome = error === null ? null : landingOutcome(error.roll);
     const stand = freeFittingStand(sim, next, blocked);
     if (stand) {
       sim.standOccupant[stand.id] = next.id;
@@ -487,11 +534,15 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
     next.phase = 'landing';
     sim.runwayBusyUntil = now + separation.landing;
   } else {
-    next.pendingOutcome = errorRoll === null ? null : takeoffOutcome(errorRoll);
+    next.pendingOutcome = error === null ? null : takeoffOutcome(error.roll);
     next.phase = 'takeoff';
     sim.runwayBusyUntil = now + separation.takeoff;
   }
   next.phaseStart = now;
+  if (next.pendingOutcome === 'crash') {
+    const radarNeeded = next.pendingCause === 'atc' ? ALERTS.atcEmergencyRadar : ALERTS.pilotEmergencyRadar;
+    if (sim.radarLevel >= radarNeeded) sim.pendingAlert = { kind: 'emergency', flightId: next.id, minute: now };
+  }
 }
 
 /** Aircraft in the air near the airport against what the Radar can track. */
@@ -504,7 +555,10 @@ export function radarLoad(sim: Simulation): { airborne: number; capacity: number
 function burnFuel(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   const before = f.fuelMinutes;
   f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
-  if (before >= ATC.lowFuelMinutes && f.fuelMinutes < ATC.lowFuelMinutes) logEvent(sim, now, 'lowFuel', f);
+  if (before >= ATC.lowFuelMinutes && f.fuelMinutes < ATC.lowFuelMinutes) {
+    logEvent(sim, now, 'lowFuel', f);
+    if (sim.radarLevel >= ALERTS.fuelAlertRadar) sim.pendingAlert = { kind: 'fuel', flightId: f.id, minute: now };
+  }
 }
 
 function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<Flight> {
@@ -559,7 +613,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     }
     case 'taxiIn':
     case 'taxiOut': {
-      if (now < f.stoppedUntil) break;
+      if (now < f.stoppedUntil || now < sim.groundStopUntil) break;
       f.routeProgress = Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * STEP_MINUTES);
       if (f.routeProgress < f.route.length - 1) break;
       if (f.phase === 'taxiOut') enter('holdShort');
@@ -654,7 +708,8 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
 /** Runs as many steps as `newClock` is ahead of the simulation's clock (see clock.advance). */
 export function runTo(sim: Simulation, newClock: Day): Simulation {
   let s = sim;
-  while (s.clock.minute + 1e-9 < newClock.minute && !isDayOver(s.clock)) s = stepSimulation(s);
+  while (s.clock.minute + 1e-9 < newClock.minute && !isDayOver(s.clock) && !s.pendingAlert) s = stepSimulation(s);
+  if (s.pendingAlert) return { ...s, clock: { ...s.clock, pendingRealMs: 0 } };
   return { ...s, clock: { ...s.clock, pendingRealMs: newClock.pendingRealMs } };
 }
 
@@ -664,4 +719,102 @@ export function carryOver(sim: Simulation): ScheduledFlight[] {
   return sim.flights
     .filter((f) => onGround.includes(f.phase))
     .map((f) => ({ id: f.id, type: f.type, arrivalMinute: 0, overnight: true, arrivalFeePaid: f.unloaded }));
+}
+
+// ---------------------------------------------------------------- Emergency Actions and Alerts
+
+export interface ActionStatus {
+  readonly ready: boolean;
+  /** Minutes until the cooldown ends (0 when ready). */
+  readonly cooldownLeft: number;
+  /** Support Building the action needs but the airport lacks. */
+  readonly missing: SupportRole | null;
+}
+
+export function actionAvailability(sim: Simulation): Record<ActionId, ActionStatus> {
+  const roles = new Set(sim.layout.structures.flatMap((s) => (s.kind === 'supportBuilding' ? [s.role] : [])));
+  const now = sim.clock.minute;
+  const out = {} as Record<ActionId, ActionStatus>;
+  for (const id of ACTION_IDS) {
+    const needs = ACTIONS[id].needs;
+    const missing = needs && !roles.has(needs) ? needs : null;
+    const cooldownLeft = Math.max(0, sim.cooldownUntil[id] - now);
+    out[id] = { ready: !missing && cooldownLeft === 0, cooldownLeft, missing };
+  }
+  return out;
+}
+
+/** The Holding aircraft most in need: lowest Fuel Reserve. */
+export function mostUrgentHolding(sim: Simulation): Flight | undefined {
+  return sim.flights.filter((f) => f.phase === 'holding').sort((a, b) => a.fuelMinutes - b.fuelMinutes)[0];
+}
+
+/** Uses an Emergency Action; throws if it isn't ready or has no valid target. */
+export function useAction(prev: Simulation, id: ActionId, targetId?: string): Simulation {
+  const status = actionAvailability(prev)[id];
+  if (!status.ready) throw new Error(status.missing ? `Needs a ${status.missing}` : `On cooldown for ${Math.ceil(status.cooldownLeft)} min`);
+  const now = prev.clock.minute;
+  const sim: MutableSim = {
+    ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, events: [...prev.events],
+    flights: prev.flights.map((f) => ({ ...f })), cooldownUntil: { ...prev.cooldownUntil, [id]: now + ACTIONS[id].cooldownMinutes },
+  };
+  const flights = sim.flights as Mutable<Flight>[];
+  const holdingTarget = () => {
+    const target = targetId ? flights.find((f) => f.id === targetId) : (mostUrgentHolding(sim) as Mutable<Flight> | undefined);
+    if (!target || target.phase !== 'holding') throw new Error('No Holding aircraft to target');
+    return flights.find((f) => f.id === target.id)!;
+  };
+  switch (id) {
+    case 'groundStop':
+      sim.groundStopUntil = now + ACTION_EFFECTS.groundStopMinutes;
+      break;
+    case 'priorityLanding':
+      holdingTarget().priority = true;
+      break;
+    case 'manualDivert':
+      divert(sim, holdingTarget(), now);
+      break;
+    case 'rushTurnaround': {
+      // The Stand the most urgent Holding aircraft waits for: of the Stands that fit it, the one that frees first.
+      const waiting = holdingTarget();
+      const remaining = (f: Flight) => f.phaseStart + turnaroundMinutes(f, standById(sim, f.standId)!) - now;
+      const occupant = flights
+        .filter((f) => f.phase === 'onStand' && !f.rushed && f.standId)
+        .filter((f) => {
+          const stand = standById(sim, f.standId)!;
+          return freeFittingStandAmong(waiting, [stand]);
+        })
+        .sort((a, b) => remaining(a) - remaining(b))[0];
+      if (!occupant) throw new Error('No Stand to rush for that aircraft');
+      occupant.rushed = true;
+      break;
+    }
+  }
+  return sim;
+}
+
+function freeFittingStandAmong(flight: Flight, stands: readonly Stand[]): boolean {
+  const type = AIRCRAFT_TYPES[flight.type];
+  const serves = type.purpose === 'passenger' ? 'terminal' : 'cargoHub';
+  return stands.some((s) => s.serves === serves && sizeRank(s.size) >= sizeRank(type.size));
+}
+
+/** Emergency Alert: the Player intervenes and gets a second roll to avoid the Crash. */
+export function resolveEmergency(prev: Simulation): Simulation {
+  const alert = prev.pendingAlert;
+  if (!alert || alert.kind !== 'emergency') return prev;
+  const rng = createRandom(mixSeed(prev.seed, Math.round(prev.clock.minute / STEP_MINUTES), 0xe1));
+  const saved = rng.next() < secondRollChance(prev.controllerTrainingLevel);
+  return {
+    ...prev,
+    pendingAlert: null,
+    flights: prev.flights.map((f) =>
+      f.id !== alert.flightId || !saved ? f : { ...f, pendingOutcome: f.phase === 'landing' ? 'goAround' : 'rejectedTakeoff' }),
+  };
+}
+
+/** Clears a pending Alert so the Day can go on. An Emergency Alert takes its second roll. */
+export function acknowledgeAlert(sim: Simulation): Simulation {
+  if (sim.pendingAlert?.kind === 'emergency') return resolveEmergency(sim);
+  return { ...sim, pendingAlert: null };
 }

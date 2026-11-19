@@ -4,7 +4,7 @@ import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { dayPlan, endDay, startLiveDay, startRun, type RunState } from './sim/run';
-import { runTo, type Simulation } from './sim/simulation';
+import { acknowledgeAlert, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showDayEnd } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { mountTopBar } from './ui/topBar';
@@ -39,7 +39,19 @@ async function start(): Promise<void> {
   let speed: Speed = 1;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => (speed = s));
   const dayLabel = document.querySelector<HTMLElement>('#day-name')!;
-  const liveDay = mountLiveDay(document.querySelector<HTMLElement>('#app')!);
+  const liveDay = mountLiveDay(document.querySelector<HTMLElement>('#app')!, {
+    onAction(id, targetId) {
+      try {
+        sim = useAction(sim, id, targetId);
+        liveDay.message('');
+      } catch (e) {
+        liveDay.message((e as Error).message);
+      }
+    },
+    onAcknowledgeAlert() {
+      sim = acknowledgeAlert(sim);
+    },
+  });
 
   const beginDay = () => {
     sim = startLiveDay(run);

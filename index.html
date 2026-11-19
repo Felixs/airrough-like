@@ -35,9 +35,10 @@
         </aside>
         <main id="map" class="map" aria-label="Airfield">
           <div class="chips"><span id="runway-chip" class="chip"></span><span id="wind-chip" class="chip"></span></div>
+          <div id="alert-banner" class="alert-banner" role="alertdialog" aria-live="assertive" hidden></div>
         </main>
         <aside class="panel" aria-label="Tower">
-          <section class="actions"><h3>Emergency Actions</h3><p class="empty">Coming soon</p></section>
+          <section class="actions"><h3>Emergency Actions</h3><div id="actions" class="action-list"></div><p id="action-msg" class="empty" role="status"></p></section>
           <section class="alerts"><h3>Alerts</h3><ol id="alerts"></ol></section>
           <section class="stands"><h3>Stands</h3><div id="stands" class="stand-grid"></div></section>
         </aside>

@@ -79,6 +79,12 @@ function drawStructure(g: Graphics, s: Structure, labels: Container): void {
       labels.addChild(label('BAY', x + w / 2, y - 1));
       break;
     }
+    case 'supportBuilding': {
+      g.rect(x, y, w, h).fill(COLOURS.terminalRoof).stroke({ width: 0.4, color: COLOURS.wall });
+      const name = { rampAgentStation: 'RAMP', adminOffice: 'ADMIN', airlineOffice: 'AIRLINE' }[s.role];
+      labels.addChild(label(name, x + w / 2, y - 1));
+      break;
+    }
     case 'atcTower': {
       const cx = x + w / 2;
       g.rect(x, y + h - 9, w, 9).fill(COLOURS.terminalRoof);
@@ -99,7 +105,7 @@ export function drawAirfield(layout: AirportLayout): Container {
   const g = new Graphics();
   const labels = new Container();
   // Paved surfaces first, buildings and markings on top.
-  const order: Structure['kind'][] = ['taxiway', 'runway', 'holdingBay', 'stand', 'terminal', 'cargoHub', 'atcTower'];
+  const order: Structure['kind'][] = ['taxiway', 'runway', 'holdingBay', 'stand', 'terminal', 'cargoHub', 'supportBuilding', 'atcTower'];
   for (const kind of order) for (const s of layout.structures) if (s.kind === kind) drawStructure(g, s, labels);
   root.addChild(ground, g, labels);
   return root;

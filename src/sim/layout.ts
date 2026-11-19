@@ -45,8 +45,14 @@ export interface HoldingBay extends TileRect {
 export interface AtcTower extends TileRect {
   readonly kind: 'atcTower';
 }
+/** Enables one Emergency Action. */
+export type SupportRole = 'rampAgentStation' | 'adminOffice' | 'airlineOffice';
+export interface SupportBuilding extends TileRect {
+  readonly kind: 'supportBuilding';
+  readonly role: SupportRole;
+}
 
-export type Structure = Runway | Taxiway | Terminal | CargoHub | Stand | HoldingBay | AtcTower;
+export type Structure = Runway | Taxiway | Terminal | CargoHub | Stand | HoldingBay | AtcTower | SupportBuilding;
 
 export interface AirportLayout {
   /** Grid size in tiles. */

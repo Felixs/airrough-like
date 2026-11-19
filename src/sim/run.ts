@@ -109,6 +109,8 @@ function structureUpkeep(s: Structure): number {
       return UPKEEP.stand[s.size];
     case 'holdingBay':
       return UPKEEP.holdingBay[s.size];
+    case 'supportBuilding':
+      return UPKEEP.supportBuilding;
     default:
       return 0;
   }
