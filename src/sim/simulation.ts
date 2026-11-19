@@ -3,7 +3,7 @@
  * Pure TypeScript, no rendering or DOM (ADR 0001). Each step returns a new Simulation.
  */
 import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
-import { STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
+import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
 import { TILE_SIZE, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
 import { buildTaxiNetwork, routeBetween, routeFromStand, routeToStand, type TaxiNetwork, type Tile } from './taxi';
@@ -15,6 +15,18 @@ export const TIMINGS = {
   remoteStandFactor: 1.5,
   /** Arrival Fee is paid when unloading finishes, this far into the Turnaround. */
   unloadShare: 0.4,
+} as const;
+
+/** The Day's operating hours (minutes after midnight). */
+export const HOURS = {
+  /** No Movements before this (Curfew ends). */
+  operationsStart: 6 * 60,
+  /** From now on only Lit or ILS Runways can be used. */
+  dusk: 20 * 60,
+  /** No new arrivals enter Holding after this. */
+  holdingCloses: 22 * 60,
+  /** Anything still airborne is Diverted (Curfew). */
+  curfew: DAY_END_MINUTE,
 } as const;
 
 /** ATC rules *(first guess, from the prototypes)*. */
@@ -106,6 +118,8 @@ export interface ScheduledFlight {
   readonly overnight?: boolean;
   /** Fuel Reserve on arrival in minutes; defaults by Size Class. */
   readonly fuelMinutes?: number;
+  /** Overnight aircraft only: whether yesterday's unloading finished (default true). */
+  readonly arrivalFeePaid?: boolean;
 }
 
 export type FlightPhase = 'scheduled' | 'holding' | 'landing' | 'taxiIn' | 'inBay' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed' | 'crashed' | 'diverted';
@@ -238,8 +252,11 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     const stand = f.overnight ? freeFittingStand(sim, flight) : undefined;
     if (stand) {
       sim.standOccupant[stand.id] = f.id;
-      Object.assign(flight, { phase: 'onStand', phaseStart: sim.clock.minute, standId: stand.id, unloaded: true });
+      Object.assign(flight, { phase: 'onStand', phaseStart: sim.clock.minute, standId: stand.id, unloaded: f.arrivalFeePaid ?? true });
       place(sim, flight, sim.clock.minute);
+    } else if (f.overnight) {
+      // No Stand for it (e.g. one was demolished): it arrives when operations start instead.
+      flight.arrivalMinute = HOURS.operationsStart;
     }
     return flight;
   });
@@ -303,6 +320,7 @@ export function stepSimulation(prev: Simulation): Simulation {
   rollTaxiIncident(sim, flights, now, rng);
   const blocked = releaseBays(sim, flights, now);
   assignRunway(sim, flights, now, blocked, rng);
+  if (now + STEP_MINUTES >= HOURS.curfew) for (const f of flights) if (f.phase === 'holding' || f.phase === 'scheduled') divert(sim, f, now);
   for (const f of flights) place(sim, f, now + STEP_MINUTES);
   sim.flights = flights;
   sim.clock = { ...prev.clock, minute: now + STEP_MINUTES };
@@ -353,8 +371,24 @@ export function riskMeter(sim: Simulation): { atc: number; pilot: number; total:
 }
 
 const blockMinutes = (sim: Simulation, base: number) => base * (SAFETY.fireRescueFactor[sim.fireRescueLevel] ?? 1);
-const runwayUsable = (sim: Simulation, now: number) => now >= sim.runwayBlockedUntil;
-const runwayFits = (sim: Simulation, f: Flight) => RUNWAY_FITS[sim.network.runway.length] >= sizeRank(AIRCRAFT_TYPES[f.type].size);
+const isDark = (now: number) => now >= HOURS.dusk;
+const nightCapable = (sim: Simulation) => sim.network.runway.surface === 'lit' || sim.network.runway.surface === 'ils';
+/** Whether the Runway can take any Movement right now (open, operating hours, light). */
+const runwayUsable = (sim: Simulation, now: number) =>
+  now >= sim.runwayBlockedUntil && now >= HOURS.operationsStart && (!isDark(now) || nightCapable(sim));
+/** Whether the Runway is long enough and of a surface that takes this aircraft (Grass: Small only). */
+const runwayFits = (sim: Simulation, f: Flight) => {
+  const size = sizeRank(AIRCRAFT_TYPES[f.type].size);
+  return RUNWAY_FITS[sim.network.runway.length] >= size && (sim.network.runway.surface !== 'grass' || size === 1);
+};
+
+function divert(sim: MutableSim, f: Mutable<Flight>, now: number): void {
+  sim.diversions += 1;
+  logEvent(sim, now, 'diversion', f);
+  releaseSpots(sim, f);
+  f.phase = 'diverted';
+  f.phaseStart = now;
+}
 
 function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, cost = 0): void {
   sim.money -= cost;
@@ -455,14 +489,17 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
   switch (f.phase) {
     case 'scheduled':
       if (now < f.arrivalMinute) break;
+      if (now >= HOURS.holdingCloses) {
+        divert(sim, f, now);
+        break;
+      }
       enter('holding');
       f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
       break;
     case 'holding':
-      if (f.fuelMinutes <= ATC.minimumFuelMinutes && (!runwayUsable(sim, now) || !runwayFits(sim, f))) {
-        sim.diversions += 1;
-        logEvent(sim, now, 'diversion', f);
-        enter('diverted');
+      const nightfall = isDark(now) && !nightCapable(sim);
+      if (nightfall || (f.fuelMinutes <= ATC.minimumFuelMinutes && (!runwayUsable(sim, now) || !runwayFits(sim, f)))) {
+        divert(sim, f, now);
         break;
       }
       if (f.fuelMinutes <= 0) {
@@ -509,6 +546,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
         sim.money += AIRCRAFT_TYPES[f.type].fee;
       }
       if (now < f.phaseStart + turnaround) break;
+      if (isDark(now) && !nightCapable(sim)) break; // stays overnight
       f.route = routeFromStand(sim.network, stand!, sim.network.holdPoint);
       f.routeProgress = 0;
       delete sim.standOccupant[stand!.id];
@@ -599,4 +637,12 @@ export function runTo(sim: Simulation, newClock: Day): Simulation {
   let s = sim;
   while (s.clock.minute + 1e-9 < newClock.minute && !isDayOver(s.clock)) s = stepSimulation(s);
   return { ...s, clock: { ...s.clock, pendingRealMs: newClock.pendingRealMs } };
+}
+
+/** Aircraft still on the ground at the end of the Day become the next Day's overnight aircraft. */
+export function carryOver(sim: Simulation): ScheduledFlight[] {
+  const onGround: readonly FlightPhase[] = ['landing', 'taxiIn', 'inBay', 'onStand', 'taxiOut', 'holdShort'];
+  return sim.flights
+    .filter((f) => onGround.includes(f.phase))
+    .map((f) => ({ id: f.id, type: f.type, arrivalMinute: 0, overnight: true, arrivalFeePaid: f.unloaded }));
 }
