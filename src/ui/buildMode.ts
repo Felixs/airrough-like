@@ -1,10 +1,10 @@
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
 import { drawAirfield, fitToScreen } from '../render/airfield';
 import {
-  addPending, confirmBuild, newHoldingBay, newStand, openBuild, pendingTotal, placementChecks, taxiwayFromDrag, undoPending,
-  type BuildSession, type PlacementCheck,
+  applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild,
+  pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
-import { TILE_SIZE, WORLD, type SizeClass, type Stand, type Structure } from '../sim/layout';
+import { TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { Tile } from '../sim/taxi';
 
@@ -12,18 +12,23 @@ const T = TILE_SIZE;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 
-const TOOLS = [
-  ['taxiway', 'Taxiway', 'T'],
-  ['stand', 'Stands', 'S'],
-  ['holdingBay', 'Holding Bay', 'B'],
-  ['runway', 'Runways', 'R'],
-  ['building', 'Buildings', 'U'],
-  ['land', 'Land', 'L'],
-  ['move', 'Move', 'M'],
-  ['demolish', 'Demolish', 'D'],
-] as const;
-const READY_TOOLS = new Set<string>(['taxiway', 'stand', 'holdingBay']);
-type Tool = 'taxiway' | 'stand' | 'holdingBay';
+type Tool = 'taxiway' | 'stand' | 'holdingBay' | 'runway' | 'building' | 'land' | 'move' | 'demolish';
+const TOOLS: ReadonlyArray<readonly [Tool, string, string]> = [
+  ['taxiway', 'Taxiway', 't'], ['stand', 'Stands', 's'], ['holdingBay', 'Holding Bay', 'b'], ['runway', 'Runways', 'r'],
+  ['building', 'Buildings', 'u'], ['land', 'Land', 'l'], ['move', 'Move', 'm'], ['demolish', 'Demolish', 'd'],
+];
+const HINT: Record<Tool, string> = {
+  taxiway: 'Drag on the map to draw a Taxiway.',
+  stand: 'Click to place a Stand (top-left at the cursor).',
+  holdingBay: 'Click to place a Holding Bay (top-left at the cursor).',
+  runway: 'Click to place a new Runway, or pick “Lengthen” and click a Runway.',
+  building: 'Click to place a building (top-left at the cursor).',
+  land: 'Click a dimmed Land Plot next to your land to buy it.',
+  move: 'Click a building, Holding Bay or Remote Stand, then click where it should go. Free.',
+  demolish: 'Click something to demolish it for a 50% refund.',
+};
+
+type Building = SupportRole | 'terminalWing' | 'cargoWing';
 
 export interface BuildModeHandlers {
   /** Called after Confirm with the updated Run. */
@@ -37,43 +42,56 @@ export interface BuildModeView {
 /** Plan Mode · Build: the airfield on its tile grid with a tool palette, placement ghost, checks and pending list. */
 export async function mountBuildMode(root: HTMLElement, run: RunState, handlers: BuildModeHandlers): Promise<BuildModeView> {
   let session: BuildSession = openBuild(run);
-  let candidate: { structure: Structure; check: PlacementCheck } | null = null;
+  let candidate: { change: Change; rects: TileRect[]; check: PlacementCheck } | null = null;
   let dragFrom: Tile | null = null;
+  let moving: Structure | null = null;
   let tool: Tool = 'taxiway';
-  let size: SizeClass = 'medium';
-  let placement: Stand['placement'] = 'contact';
-  let serves: Stand['serves'] = 'terminal';
+  const opt = {
+    size: 'medium' as SizeClass, placement: 'contact' as Stand['placement'], serves: 'terminal' as Stand['serves'],
+    length: 'medium' as RunwayLength, orientation: 'horizontal', runwayAction: 'new', building: 'rampAgentStation' as Building,
+  };
 
+  const select = (name: string, values: Array<[string, string]>, selected: string, show: Tool[]) =>
+    `<label data-for="${show.join(' ')}">${name}<select data-opt="${name.toLowerCase()}">${values.map(([v, l]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`;
   root.innerHTML = `
     <div class="build">
       <nav class="palette" aria-label="Build tools">${TOOLS.map(([id, name, key]) =>
-        `<button type="button" data-tool="${id}" aria-pressed="${id === 'taxiway'}" ${READY_TOOLS.has(id) ? '' : 'disabled title="Coming with the next build ticket"'}>${name}<kbd>${key}</kbd></button>`).join('')}
-        <div class="tool-options" hidden>
-          <label>Size <select data-opt="size"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select></label>
-          <label data-stand-only>Type <select data-opt="placement"><option value="contact">Contact</option><option value="remote">Remote</option></select></label>
-          <label data-stand-only>Serves <select data-opt="serves"><option value="terminal">Terminal</option><option value="cargoHub">Cargo Hub</option></select></label>
+        `<button type="button" data-tool="${id}" aria-pressed="${id === 'taxiway'}">${name}<kbd>${key.toUpperCase()}</kbd></button>`).join('')}
+        <div class="tool-options">
+          ${select('Size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']], 'medium', ['stand', 'holdingBay'])}
+          ${select('Type', [['contact', 'Contact'], ['remote', 'Remote']], 'contact', ['stand'])}
+          ${select('Serves', [['terminal', 'Terminal'], ['cargoHub', 'Cargo Hub']], 'terminal', ['stand'])}
+          ${select('Action', [['new', 'New Runway'], ['lengthen', 'Lengthen']], 'new', ['runway'])}
+          ${select('Length', [['short', 'Short (24)'], ['medium', 'Medium (36)'], ['long', 'Long (48)']], 'medium', ['runway'])}
+          ${select('Orientation', [['horizontal', '09-27 (horizontal)'], ['vertical', '18-36 (vertical)']], 'horizontal', ['runway'])}
+          ${select('Building', [['rampAgentStation', 'Ramp Agent Station'], ['adminOffice', 'Admin Office'], ['airlineOffice', 'Airline Office'], ['terminalWing', 'Terminal wing'], ['cargoWing', 'Cargo Hub wing']], 'rampAgentStation', ['building'])}
         </div></nav>
-      <div class="build-map" aria-label="Build map: drag to draw a Taxiway"></div>
+      <div class="build-map" aria-label="Build map"></div>
       <aside class="build-side">
-        <div class="card"><h3>Placement</h3><div class="candidate"><p class="empty">Drag on the map to draw a Taxiway.</p></div></div>
+        <div class="card"><h3>Placement</h3><div class="candidate"></div></div>
         <div class="card"><h3>Pending</h3><ol class="pending"></ol><dl class="totals"></dl>
           <div class="build-buttons"><button type="button" class="undo">Undo <kbd>Ctrl Z</kbd></button><button type="button" class="confirm">Confirm <kbd>Enter</kbd></button></div>
           <p class="msg" role="status"></p></div>
-        <p class="hint">Drag to draw · Esc cancels · Taxiways are one width that fits every aircraft.</p>
+        <p class="hint">Esc cancels · tool keys T S B R U L M D</p>
       </aside>
     </div>`;
   const mapEl = root.querySelector<HTMLElement>('.build-map')!;
+  const side = root.querySelector<HTMLElement>('.build-side')!;
+  const palette = root.querySelector<HTMLElement>('.palette')!;
+  const msg = side.querySelector<HTMLElement>('.msg')!;
+
   const app = new Application();
   await app.init({ resizeTo: mapEl, background: '#0b1210', antialias: true, autoDensity: true, resolution: window.devicePixelRatio });
   mapEl.appendChild(app.canvas);
 
   const world = new Container();
   const overlay = new Graphics();
+  const plotLabels = new Container();
   const ghost = new Graphics();
   const ghostLabel = new Text({ text: '', style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 4, fontWeight: '700', fill: 0xffffff } });
   ghostLabel.resolution = 4;
   let airfield = drawAirfield(session.layout);
-  world.addChild(airfield, overlay, ghost, ghostLabel);
+  world.addChild(airfield, overlay, plotLabels, ghost, ghostLabel);
   app.stage.addChild(world);
   const fit = () => fitToScreen(world, session.layout, app.screen.width, app.screen.height);
   fit();
@@ -81,116 +99,180 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
 
   const drawOverlay = () => {
     overlay.clear();
+    for (const l of plotLabels.removeChildren()) l.destroy();
     for (let x = 0; x <= WORLD.width; x++) overlay.moveTo(x * T, 0).lineTo(x * T, WORLD.height * T).stroke({ width: 0.15, color: 0x2a3a35 });
     for (let y = 0; y <= WORLD.height; y++) overlay.moveTo(0, y * T).lineTo(WORLD.width * T, y * T).stroke({ width: 0.15, color: 0x2a3a35 });
+    const price = nextPlotPrice(session);
     for (let px = 0; px < WORLD.width / WORLD.plotW; px++) {
       for (let py = 0; py < WORLD.height / WORLD.plotH; py++) {
-        if (run.ownedPlots.some((p) => p.px === px && p.py === py)) continue;
+        if (session.ownedPlots.some((p) => p.px === px && p.py === py)) continue;
         overlay.rect(px * WORLD.plotW * T, py * WORLD.plotH * T, WORLD.plotW * T, WORLD.plotH * T).fill({ color: 0x000000, alpha: 0.55 });
+        const t = new Text({ text: `Land Plot · ${money(price)}`, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 4, fill: 0x8fa8a0 } });
+        t.resolution = 4;
+        t.anchor.set(0.5);
+        t.position.set((px + 0.5) * WORLD.plotW * T, (py + 0.5) * WORLD.plotH * T);
+        plotLabels.addChild(t);
       }
     }
   };
-  const redrawAirfield = () => {
+  const redraw = () => {
     world.removeChild(airfield);
     airfield.destroy({ children: true });
     airfield = drawAirfield(session.layout);
     world.addChildAt(airfield, 0);
+    drawOverlay();
   };
   drawOverlay();
 
   const drawGhost = () => {
     ghost.clear();
     ghostLabel.text = '';
-    for (const p of session.pending) {
-      const s = p.structure;
-      ghost.rect(s.x * T, s.y * T, s.w * T, s.h * T).stroke({ width: 0.6, color: 0x38d0b0 });
-    }
+    if (moving) ghost.rect(moving.x * T, moving.y * T, moving.w * T, moving.h * T).stroke({ width: 0.8, color: 0xf0b54a });
     if (!candidate) return;
-    const s = candidate.structure;
-    const color = candidate.check.ok ? 0x6fd08c : 0xff6b5e;
-    ghost.rect(s.x * T, s.y * T, s.w * T, s.h * T).fill({ color, alpha: 0.35 }).stroke({ width: 0.6, color });
-    ghostLabel.text = `${s.kind === 'taxiway' ? `${s.w * s.h} tiles` : candidate.check.label} · ${money(candidate.check.cost)}${candidate.check.upkeep ? ` · +${money(candidate.check.upkeep)}/Day` : ''}`;
-    ghostLabel.position.set(s.x * T, s.y * T - 6);
+    const color = candidate.change.kind === 'remove' ? 0xff6b5e : candidate.check.ok ? 0x6fd08c : 0xff6b5e;
+    for (const r of candidate.rects) ghost.rect(r.x * T, r.y * T, r.w * T, r.h * T).fill({ color, alpha: 0.32 }).stroke({ width: 0.6, color });
+    const c = candidate.check;
+    const r0 = candidate.rects[0]!;
+    ghostLabel.text = `${c.label} · ${c.cost < 0 ? `refund ${money(-c.cost)}` : money(c.cost)}${c.upkeep ? ` · ${c.upkeep > 0 ? '+' : '−'}${money(Math.abs(c.upkeep))}/Day` : ''}`;
+    ghostLabel.position.set(r0.x * T, Math.max(0, r0.y * T - 6));
   };
 
-  const side = root.querySelector<HTMLElement>('.build-side')!;
   const renderSide = () => {
     const c = candidate;
     side.querySelector('.candidate')!.innerHTML = c
-      ? `<p><b>${esc(c.check.label)}</b> · ${money(c.check.cost)} · Upkeep +${money(c.check.upkeep)}/Day</p>
+      ? `<p><b>${esc(c.check.label)}</b> · ${c.check.cost < 0 ? `refund ${money(-c.check.cost)}` : money(c.check.cost)}${c.check.upkeep ? ` · Upkeep ${c.check.upkeep > 0 ? '+' : '−'}${money(Math.abs(c.check.upkeep))}/Day` : ''}</p>
          <ul class="checks">${c.check.items.map((i) => `<li class="${i.ok ? 'ok' : 'bad'}">${i.ok ? '✓' : '✗'} ${esc(i.label)}</li>`).join('')}</ul>`
-      : `<p class="empty">${hintFor()}</p>`;
-    side.querySelector('.pending')!.innerHTML = session.pending.map((p) => `<li>${esc(p.label)} <span>${money(p.cost)}</span></li>`).join('') || '<li class="empty">Nothing yet</li>';
+      : `<p class="empty">${moving ? 'Click where it should go. Esc cancels.' : HINT[tool]}</p>`;
+    side.querySelector('.pending')!.innerHTML = session.pending.map((p) => `<li>${esc(p.label)} <span>${p.cost < 0 ? `+${money(-p.cost)}` : money(p.cost)}</span></li>`).join('') || '<li class="empty">Nothing yet</li>';
     const total = pendingTotal(session);
-    side.querySelector('.totals')!.innerHTML = `<dt>Total</dt><dd>${money(total.cost)}</dd><dt>Upkeep</dt><dd>+${money(total.upkeep)}/Day</dd><dt>Money after</dt><dd>${money(run.money - total.cost)}</dd>`;
+    side.querySelector('.totals')!.innerHTML = `<dt>Total</dt><dd>${money(total.cost)}</dd><dt>Upkeep</dt><dd>${total.upkeep >= 0 ? '+' : '−'}${money(Math.abs(total.upkeep))}/Day</dd><dt>Money after</dt><dd>${money(run.money - total.cost)}</dd>`;
     side.querySelector<HTMLButtonElement>('.undo')!.disabled = session.pending.length === 0;
     side.querySelector<HTMLButtonElement>('.confirm')!.disabled = session.pending.length === 0;
   };
-  renderSide();
 
-  const palette = root.querySelector<HTMLElement>('.palette')!;
-  const options = palette.querySelector<HTMLElement>('.tool-options')!;
-  const hintFor = () => (tool === 'taxiway' ? 'Drag on the map to draw a Taxiway.' : 'Click on the map to place it (top-left corner at the cursor).');
   const selectTool = (t: Tool) => {
     tool = t;
-    for (const b of palette.querySelectorAll<HTMLButtonElement>('button[data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
-    options.hidden = t === 'taxiway';
-    for (const l of options.querySelectorAll<HTMLElement>('[data-stand-only]')) l.hidden = t !== 'stand';
+    moving = null;
     candidate = null;
+    for (const b of palette.querySelectorAll<HTMLButtonElement>('button[data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+    for (const l of palette.querySelectorAll<HTMLElement>('[data-for]')) l.hidden = !l.dataset.for!.split(' ').includes(t);
     drawGhost();
     renderSide();
-    side.querySelector('.candidate .empty')?.replaceChildren(hintFor());
   };
   palette.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-tool]');
-    if (b && !b.disabled) selectTool(b.dataset.tool as Tool);
+    if (b) selectTool(b.dataset.tool as Tool);
   });
-  options.addEventListener('change', (e) => {
+  palette.addEventListener('change', (e) => {
     const sel = e.target as HTMLSelectElement;
-    if (sel.dataset.opt === 'size') size = sel.value as SizeClass;
-    if (sel.dataset.opt === 'placement') placement = sel.value as Stand['placement'];
-    if (sel.dataset.opt === 'serves') serves = sel.value as Stand['serves'];
+    const key = sel.dataset.opt === 'serves' ? 'serves' : sel.dataset.opt === 'type' ? 'placement' : sel.dataset.opt === 'action' ? 'runwayAction' : sel.dataset.opt!;
+    (opt as Record<string, string>)[key] = sel.value;
   });
-  const spotAt = (t: Tile): Structure => (tool === 'stand' ? newStand(session, t, size, placement, serves) : newHoldingBay(session, t, size));
 
-  const toTile = (globalX: number, globalY: number): Tile => {
-    const p = world.toLocal({ x: globalX, y: globalY });
+  /** The change the current tool would make at a tile, and the rectangles to show for it. */
+  const changeAt = (t: Tile): { change: Change; rects: TileRect[] } | null => {
+    switch (tool) {
+      case 'taxiway': {
+        const s = taxiwayFromDrag(dragFrom ?? t, t);
+        return { change: { kind: 'add', structure: s }, rects: [s] };
+      }
+      case 'stand': {
+        const s = newStand(session, t, opt.size, opt.placement, opt.serves);
+        return { change: { kind: 'add', structure: s }, rects: [s] };
+      }
+      case 'holdingBay': {
+        const s = newHoldingBay(session, t, opt.size);
+        return { change: { kind: 'add', structure: s }, rects: [s] };
+      }
+      case 'runway': {
+        if (opt.runwayAction === 'lengthen') {
+          const r = structureAt(session.layout, t);
+          if (r?.kind !== 'runway') return null;
+          const longer = lengthened(r);
+          return longer ? { change: { kind: 'replace', from: r, to: longer }, rects: [longer] } : null;
+        }
+        const s = newRunway(session, t, opt.length, opt.orientation === 'vertical');
+        return { change: { kind: 'add', structure: s }, rects: [s] };
+      }
+      case 'building': {
+        const s: Structure = opt.building === 'terminalWing' ? { kind: 'terminal', x: t.x, y: t.y, w: 3, h: 4 }
+          : opt.building === 'cargoWing' ? { kind: 'cargoHub', x: t.x, y: t.y, w: 3, h: 4 }
+          : newBuilding(session, t, opt.building);
+        return { change: { kind: 'add', structure: s }, rects: [s] };
+      }
+      case 'land': {
+        const plot = { px: Math.floor(t.x / WORLD.plotW), py: Math.floor(t.y / WORLD.plotH) };
+        return { change: { kind: 'buyPlot', plot }, rects: [{ x: plot.px * WORLD.plotW, y: plot.py * WORLD.plotH, w: WORLD.plotW, h: WORLD.plotH }] };
+      }
+      case 'move': {
+        if (!moving) return null;
+        const to = { ...moving, x: t.x, y: t.y } as Structure;
+        return { change: { kind: 'move', from: moving, to }, rects: [to] };
+      }
+      case 'demolish': {
+        const s = structureAt(session.layout, t);
+        return s ? { change: { kind: 'remove', structure: s }, rects: [s] } : null;
+      }
+    }
+  };
+
+  const update = (t: Tile) => {
+    const c = changeAt(t);
+    candidate = c ? { ...c, check: checkChange(session, c.change) } : null;
+    drawGhost();
+    renderSide();
+  };
+  const commit = () => {
+    if (!candidate) return;
+    if (!candidate.check.ok) {
+      msg.textContent = candidate.check.items.filter((i) => !i.ok).map((i) => i.label).join(' · ');
+      return;
+    }
+    session = applyChange(session, candidate.change);
+    msg.textContent = '';
+    moving = null;
+    candidate = null;
+    redraw();
+    drawGhost();
+    renderSide();
+  };
+
+  const toTile = (e: FederatedPointerEvent): Tile => {
+    const p = world.toLocal(e.global);
     return { x: Math.floor(p.x / T), y: Math.floor(p.y / T) };
   };
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
   app.stage.on('pointerdown', (e: FederatedPointerEvent) => {
-    dragFrom = toTile(e.global.x, e.global.y);
-    update(dragFrom);
+    const t = toTile(e);
+    if (tool === 'taxiway') {
+      dragFrom = t;
+      update(t);
+    } else if (tool === 'move' && !moving) {
+      const s = structureAt(session.layout, t);
+      if (s) {
+        moving = s;
+        update(t);
+      }
+    } else {
+      update(t);
+      commit();
+    }
   });
   app.stage.on('pointermove', (e: FederatedPointerEvent) => {
-    const t = toTile(e.global.x, e.global.y);
-    if (dragFrom || tool !== 'taxiway') update(t);
+    if (tool !== 'taxiway' || dragFrom) update(toTile(e));
   });
   const finish = () => {
     if (!dragFrom) return;
     dragFrom = null;
-    if (candidate?.check.ok) {
-      session = addPending(session, candidate.structure);
-      candidate = null;
-      redrawAirfield();
-    }
-    drawGhost();
-    renderSide();
+    commit();
   };
   app.stage.on('pointerup', finish);
   app.stage.on('pointerupoutside', finish);
-  function update(to: Tile): void {
-    const structure = tool === 'taxiway' ? taxiwayFromDrag(dragFrom ?? to, to) : spotAt(to);
-    candidate = { structure, check: placementChecks(session, structure) };
-    drawGhost();
-    renderSide();
-  }
 
-  const msg = side.querySelector<HTMLElement>('.msg')!;
   const undo = () => {
     session = undoPending(session);
-    redrawAirfield();
+    redraw();
     drawGhost();
     renderSide();
   };
@@ -199,8 +281,9 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
       run = confirmBuild(session);
       session = openBuild(run);
       candidate = null;
+      moving = null;
       msg.textContent = 'Built. The new layout is used from the next Day.';
-      redrawAirfield();
+      redraw();
       drawGhost();
       renderSide();
       handlers.onConfirmed(run);
@@ -211,13 +294,13 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   side.querySelector('.undo')!.addEventListener('click', undo);
   side.querySelector('.confirm')!.addEventListener('click', confirm);
   const onKey = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'SELECT') return;
-    const shortcut: Record<string, Tool> = { t: 'taxiway', s: 'stand', b: 'holdingBay' };
-    if (!e.ctrlKey && !e.metaKey && shortcut[e.key]) {
-      selectTool(shortcut[e.key]!);
+    if ((e.target as HTMLElement).tagName === 'SELECT') return;
+    const byKey = TOOLS.find(([, , k]) => k === e.key);
+    if (byKey && !e.ctrlKey && !e.metaKey) {
+      selectTool(byKey[0]);
     } else if (e.key === 'Escape') {
       dragFrom = null;
+      moving = null;
       candidate = null;
       drawGhost();
       renderSide();
@@ -229,6 +312,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     }
   };
   window.addEventListener('keydown', onKey);
+  selectTool('taxiway');
 
   return {
     destroy() {

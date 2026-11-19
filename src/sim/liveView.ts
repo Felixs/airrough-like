@@ -5,7 +5,7 @@
 import { AIRCRAFT_TYPES, type AircraftTypeId, type Purpose } from './aircraft';
 import type { SizeClass } from './layout';
 import { mixSeed, createRandom } from './random';
-import { ATC, HOURS, TIMINGS, isDark, nightCapable, type FlightPhase, type ScheduledFlight, type SimEvent, type Simulation } from './simulation';
+import { ATC, HOURS, TIMINGS, isDark, type FlightPhase, type ScheduledFlight, type SimEvent, type Simulation } from './simulation';
 
 interface StripBase {
   readonly id: string;
@@ -109,20 +109,30 @@ export function standsStatus(sim: Simulation): SpotStatus[] {
 
 export interface RunwayStatus {
   readonly name: string;
-  readonly state: 'open' | 'blocked' | 'dark' | 'curfew';
+  readonly state: 'open' | 'blocked' | 'dark' | 'curfew' | 'unconnected';
   readonly until: number | null;
   readonly wind: { readonly direction: number; readonly knots: number };
 }
 
-export function runwayStatus(sim: Simulation): RunwayStatus {
+/** One status per Runway, in layout order. */
+export function runwayStatuses(sim: Simulation): RunwayStatus[] {
   const now = sim.clock.minute;
   const rng = createRandom(mixSeed(sim.seed, 0x3171d));
   const wind = { direction: 240 + Math.round(rng.next() * 6) * 10, knots: 4 + rng.int(12) };
-  const name = sim.network.runway.w >= sim.network.runway.h ? '09-27' : '18-36';
-  if (now < HOURS.operationsStart || now >= HOURS.curfew) return { name, state: 'curfew', until: HOURS.operationsStart, wind };
-  if (now < sim.runwayBlockedUntil) return { name, state: 'blocked', until: sim.runwayBlockedUntil, wind };
-  if (isDark(now) && !nightCapable(sim)) return { name, state: 'dark', until: null, wind };
-  return { name, state: 'open', until: null, wind };
+  return sim.layout.runways.map((r, i): RunwayStatus => {
+    const name = (r.w >= r.h ? '09-27' : '18-36') + (sim.layout.runways.length > 1 ? ` (R${i + 1})` : '');
+    const lit = r.surface === 'lit' || r.surface === 'ils';
+    const blockedUntil = sim.runwayBlockedUntil[i] ?? 0;
+    if (!sim.network.runways.some((a) => a.index === i)) return { name, state: 'unconnected', until: null, wind };
+    if (now < HOURS.operationsStart || now >= HOURS.curfew) return { name, state: 'curfew', until: HOURS.operationsStart, wind };
+    if (now < blockedUntil) return { name, state: 'blocked', until: blockedUntil, wind };
+    if (isDark(now) && !lit) return { name, state: 'dark', until: null, wind };
+    return { name, state: 'open', until: null, wind };
+  });
+}
+
+export function runwayStatus(sim: Simulation): RunwayStatus {
+  return runwayStatuses(sim)[0]!;
 }
 
 export interface HourBar {

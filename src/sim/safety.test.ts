@@ -66,20 +66,20 @@ describe('Error outcomes', () => {
     const crash = end.events.find((e) => e.kind === 'crash')!;
     expect(flight(end, 'A').phase).toBe('crashed');
     expect(end.money).toBe(-10_000);
-    expect(end.runwayBlockedUntil).toBe(crash.minute + 60);
+    expect(end.runwayBlockedUntil[0]).toBe(crash.minute + 60);
   });
 
   it('a Fire & Rescue Station clears a Crash faster', () => {
     const schedule: ScheduledFlight[] = [{ id: 'A', type: 'A320', arrivalMinute: 360 }];
     const end = findSeed({ layout, schedule, riskMultiplier: 100, fireRescueLevel: 2 }, 365, 'crash');
     const crash = end.events.find((e) => e.kind === 'crash')!;
-    expect(end.runwayBlockedUntil).toBe(crash.minute + 60 * 0.55);
+    expect(end.runwayBlockedUntil[0]).toBe(crash.minute + 60 * 0.55);
   });
 
   it('an Incident blocks the Runway for 20 minutes but the aircraft still lands', () => {
     const end = findSeed({ layout, schedule: [{ id: 'A', type: 'A320', arrivalMinute: 360 }], riskMultiplier: 100 }, 365, 'incident');
     const incident = end.events.find((e) => e.kind === 'incident')!;
-    expect(end.runwayBlockedUntil).toBe(incident.minute + 20);
+    expect(end.runwayBlockedUntil[0]).toBe(incident.minute + 20);
     expect(end.movements).toBe(1);
     expect(end.money).toBeLessThan(0);
   });

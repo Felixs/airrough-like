@@ -73,7 +73,8 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 .chip { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line); background: rgb(11 18 16 / 0.85); font: 600 11px var(--mono); pointer-events: auto; }
 .chip.open { color: var(--green); border-color: #2c5a3c; }
 .chip.blocked, .chip.dark { color: var(--red); border-color: #5a2c2c; }
-.chip.curfew { color: var(--mute); }
+.chip.curfew, .chip.unconnected { color: var(--mute); }
+.chip-group { display: flex; gap: 6px; }
 
 .panel { width: 260px; flex: none; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; font-family: var(--mono); }
 .panel section { padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
@@ -204,6 +205,7 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .build-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
 .hint { margin: 0; font-size: 11px; color: var(--mute); }
 
+.tool-options label[hidden] { display: none; }
 .tool-options { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; color: var(--mute); }
 .tool-options label { display: grid; gap: 2px; }
 .tool-options select { height: 30px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--text); font: 12px var(--mono); }
