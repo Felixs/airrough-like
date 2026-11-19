@@ -322,7 +322,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
     case 'buyPlot': {
       const { plot } = change;
       label = `Land Plot ${plot.px + 1}-${plot.py + 1}`;
-      const bought = session.ownedPlots.length - BUILD_COSTS.startingPlots;
+      const bought = session.ownedPlots.length - session.base.startingPlots;
       cost = BUILD_COSTS.plotBase * (bought + 1);
       const inWorld = plot.px >= 0 && plot.py >= 0 && plot.px < WORLD.width / WORLD.plotW && plot.py < WORLD.height / WORLD.plotH;
       items.push({ label: 'Not owned yet', ok: !session.ownedPlots.some((o) => o.px === plot.px && o.py === plot.py) });
@@ -330,6 +330,9 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       break;
     }
   }
+  const longRunway = (change.kind === 'add' || change.kind === 'replace') && (change.kind === 'add' ? change.structure : change.to).kind === 'runway' &&
+    ((change.kind === 'add' ? change.structure : change.to) as Runway).length === 'long';
+  if (longRunway && !run.modifiers.unlocks.includes('surviveWeek1')) items.push({ label: 'Unlocked (Milestone: Survive Week 1)', ok: false });
   if (run.inDebt && cost > 0) items.push({ label: 'Not in Debt', ok: false });
   items.push({ label: 'Affordable', ok: run.money >= pendingTotal(session).cost + cost });
   return { ok: items.every((c) => c.ok), items, cost, upkeep: upkeepCost, label };
@@ -408,5 +411,5 @@ export function lengthened(r: Runway): Runway | null {
 
 /** Plot price for the next purchase in this session. */
 export function nextPlotPrice(session: BuildSession): number {
-  return BUILD_COSTS.plotBase * (session.ownedPlots.length - BUILD_COSTS.startingPlots + 1);
+  return BUILD_COSTS.plotBase * (session.ownedPlots.length - session.base.startingPlots + 1);
 }

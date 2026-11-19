@@ -6,7 +6,10 @@ import {
 import type { Structure } from './layout';
 import { startRun, upkeep, type RunState } from './run';
 
-const rich = (): RunState => ({ ...startRun(1), money: 1_000_000 });
+const rich = (): RunState => {
+  const run = startRun(1);
+  return { ...run, money: 1_000_000, modifiers: { ...run.modifiers, unlocks: ['surviveWeek1', 'surviveWeek2', 'land100Large'] } };
+};
 const find = (session: BuildSession, pred: (s: Structure) => boolean) => session.layout.structures.find(pred)!;
 const failing = (c: ReturnType<typeof checkChange>) => c.items.filter((i) => !i.ok).map((i) => i.label);
 

@@ -48,3 +48,15 @@ describe('Saving a Run', () => {
     expect(() => clearRun(failing)).not.toThrow();
   });
 });
+
+describe('Saving meta-progression', () => {
+  it('round-trips and falls back to a fresh start', async () => {
+    const { emptyMeta } = await import('./meta');
+    const { saveMeta, loadMeta } = await import('./save');
+    const store = memoryStore();
+    expect(loadMeta(store)).toEqual(emptyMeta());
+    const meta = { ...emptyMeta(), airMiles: 1234, perks: ['extraCash' as const] };
+    saveMeta(store, meta);
+    expect(loadMeta(store)).toEqual(meta);
+  });
+});
