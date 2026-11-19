@@ -25,4 +25,4 @@ npm run build      # production build into dist/
 
 ## Deploy
 
-Every push to `main` runs CI (typecheck, tests, build) and deploys `dist/` to GitHub Pages.
+Every push to `main` runs CI (typecheck, tests, build) and publishes a Docker image (nginx serving the game, arm64 + amd64) to a private GitLab Container Registry. A Raspberry Pi on the home network runs it. Setup: [`docs/deploy-raspberry-pi.md`](docs/deploy-raspberry-pi.md).
