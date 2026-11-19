@@ -1,10 +1,10 @@
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
 import { drawAirfield, fitToScreen } from '../render/airfield';
 import {
-  addPending, confirmBuild, openBuild, pendingTotal, placementChecks, taxiwayFromDrag, undoPending,
+  addPending, confirmBuild, newHoldingBay, newStand, openBuild, pendingTotal, placementChecks, taxiwayFromDrag, undoPending,
   type BuildSession, type PlacementCheck,
 } from '../sim/build';
-import { TILE_SIZE, WORLD, type Structure } from '../sim/layout';
+import { TILE_SIZE, WORLD, type SizeClass, type Stand, type Structure } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { Tile } from '../sim/taxi';
 
@@ -22,7 +22,8 @@ const TOOLS = [
   ['move', 'Move', 'M'],
   ['demolish', 'Demolish', 'D'],
 ] as const;
-const READY_TOOLS = new Set<string>(['taxiway']);
+const READY_TOOLS = new Set<string>(['taxiway', 'stand', 'holdingBay']);
+type Tool = 'taxiway' | 'stand' | 'holdingBay';
 
 export interface BuildModeHandlers {
   /** Called after Confirm with the updated Run. */
@@ -38,11 +39,20 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   let session: BuildSession = openBuild(run);
   let candidate: { structure: Structure; check: PlacementCheck } | null = null;
   let dragFrom: Tile | null = null;
+  let tool: Tool = 'taxiway';
+  let size: SizeClass = 'medium';
+  let placement: Stand['placement'] = 'contact';
+  let serves: Stand['serves'] = 'terminal';
 
   root.innerHTML = `
     <div class="build">
       <nav class="palette" aria-label="Build tools">${TOOLS.map(([id, name, key]) =>
-        `<button type="button" data-tool="${id}" ${READY_TOOLS.has(id) ? 'aria-pressed="true"' : 'disabled title="Coming with the next build tickets"'}>${name}<kbd>${key}</kbd></button>`).join('')}</nav>
+        `<button type="button" data-tool="${id}" aria-pressed="${id === 'taxiway'}" ${READY_TOOLS.has(id) ? '' : 'disabled title="Coming with the next build ticket"'}>${name}<kbd>${key}</kbd></button>`).join('')}
+        <div class="tool-options" hidden>
+          <label>Size <select data-opt="size"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select></label>
+          <label data-stand-only>Type <select data-opt="placement"><option value="contact">Contact</option><option value="remote">Remote</option></select></label>
+          <label data-stand-only>Serves <select data-opt="serves"><option value="terminal">Terminal</option><option value="cargoHub">Cargo Hub</option></select></label>
+        </div></nav>
       <div class="build-map" aria-label="Build map: drag to draw a Taxiway"></div>
       <aside class="build-side">
         <div class="card"><h3>Placement</h3><div class="candidate"><p class="empty">Drag on the map to draw a Taxiway.</p></div></div>
@@ -99,7 +109,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     const s = candidate.structure;
     const color = candidate.check.ok ? 0x6fd08c : 0xff6b5e;
     ghost.rect(s.x * T, s.y * T, s.w * T, s.h * T).fill({ color, alpha: 0.35 }).stroke({ width: 0.6, color });
-    ghostLabel.text = `${s.w * s.h} tiles · ${money(candidate.check.cost)} · +${money(candidate.check.upkeep)}/Day`;
+    ghostLabel.text = `${s.kind === 'taxiway' ? `${s.w * s.h} tiles` : candidate.check.label} · ${money(candidate.check.cost)}${candidate.check.upkeep ? ` · +${money(candidate.check.upkeep)}/Day` : ''}`;
     ghostLabel.position.set(s.x * T, s.y * T - 6);
   };
 
@@ -109,7 +119,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     side.querySelector('.candidate')!.innerHTML = c
       ? `<p><b>${esc(c.check.label)}</b> · ${money(c.check.cost)} · Upkeep +${money(c.check.upkeep)}/Day</p>
          <ul class="checks">${c.check.items.map((i) => `<li class="${i.ok ? 'ok' : 'bad'}">${i.ok ? '✓' : '✗'} ${esc(i.label)}</li>`).join('')}</ul>`
-      : '<p class="empty">Drag on the map to draw a Taxiway.</p>';
+      : `<p class="empty">${hintFor()}</p>`;
     side.querySelector('.pending')!.innerHTML = session.pending.map((p) => `<li>${esc(p.label)} <span>${money(p.cost)}</span></li>`).join('') || '<li class="empty">Nothing yet</li>';
     const total = pendingTotal(session);
     side.querySelector('.totals')!.innerHTML = `<dt>Total</dt><dd>${money(total.cost)}</dd><dt>Upkeep</dt><dd>+${money(total.upkeep)}/Day</dd><dt>Money after</dt><dd>${money(run.money - total.cost)}</dd>`;
@@ -117,6 +127,31 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     side.querySelector<HTMLButtonElement>('.confirm')!.disabled = session.pending.length === 0;
   };
   renderSide();
+
+  const palette = root.querySelector<HTMLElement>('.palette')!;
+  const options = palette.querySelector<HTMLElement>('.tool-options')!;
+  const hintFor = () => (tool === 'taxiway' ? 'Drag on the map to draw a Taxiway.' : 'Click on the map to place it (top-left corner at the cursor).');
+  const selectTool = (t: Tool) => {
+    tool = t;
+    for (const b of palette.querySelectorAll<HTMLButtonElement>('button[data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+    options.hidden = t === 'taxiway';
+    for (const l of options.querySelectorAll<HTMLElement>('[data-stand-only]')) l.hidden = t !== 'stand';
+    candidate = null;
+    drawGhost();
+    renderSide();
+    side.querySelector('.candidate .empty')?.replaceChildren(hintFor());
+  };
+  palette.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-tool]');
+    if (b && !b.disabled) selectTool(b.dataset.tool as Tool);
+  });
+  options.addEventListener('change', (e) => {
+    const sel = e.target as HTMLSelectElement;
+    if (sel.dataset.opt === 'size') size = sel.value as SizeClass;
+    if (sel.dataset.opt === 'placement') placement = sel.value as Stand['placement'];
+    if (sel.dataset.opt === 'serves') serves = sel.value as Stand['serves'];
+  });
+  const spotAt = (t: Tile): Structure => (tool === 'stand' ? newStand(session, t, size, placement, serves) : newHoldingBay(session, t, size));
 
   const toTile = (globalX: number, globalY: number): Tile => {
     const p = world.toLocal({ x: globalX, y: globalY });
@@ -129,7 +164,8 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     update(dragFrom);
   });
   app.stage.on('pointermove', (e: FederatedPointerEvent) => {
-    if (dragFrom) update(toTile(e.global.x, e.global.y));
+    const t = toTile(e.global.x, e.global.y);
+    if (dragFrom || tool !== 'taxiway') update(t);
   });
   const finish = () => {
     if (!dragFrom) return;
@@ -145,7 +181,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   app.stage.on('pointerup', finish);
   app.stage.on('pointerupoutside', finish);
   function update(to: Tile): void {
-    const structure = taxiwayFromDrag(dragFrom!, to);
+    const structure = tool === 'taxiway' ? taxiwayFromDrag(dragFrom ?? to, to) : spotAt(to);
     candidate = { structure, check: placementChecks(session, structure) };
     drawGhost();
     renderSide();
@@ -175,7 +211,12 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   side.querySelector('.undo')!.addEventListener('click', undo);
   side.querySelector('.confirm')!.addEventListener('click', confirm);
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'SELECT') return;
+    const shortcut: Record<string, Tool> = { t: 'taxiway', s: 'stand', b: 'holdingBay' };
+    if (!e.ctrlKey && !e.metaKey && shortcut[e.key]) {
+      selectTool(shortcut[e.key]!);
+    } else if (e.key === 'Escape') {
       dragFrom = null;
       candidate = null;
       drawGhost();

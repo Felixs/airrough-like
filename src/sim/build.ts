@@ -2,8 +2,8 @@
  * Build Mode: a session of pending placements on top of the Run's layout, validated with a checks list,
  * paid for and applied on Confirm. The simulation routes on the new layout from the next Day.
  */
-import { createLayout, WORLD, type AirportLayout, type Structure, type TileRect } from './layout';
-import type { RunState } from './run';
+import { createLayout, WORLD, type AirportLayout, type HoldingBay, type SizeClass, type Stand, type Structure, type TileRect } from './layout';
+import { UPKEEP, type RunState } from './run';
 import type { Tile } from './taxi';
 
 /** Prices *(first guess)*. */
@@ -12,7 +12,15 @@ export const BUILD_COSTS = {
   taxiwayUpkeepPerTile: 2,
   /** Taxiways have one width that fits every aircraft. */
   taxiwayWidth: 3,
+  stand: { small: 8_000, medium: 16_000, large: 36_000 },
+  remoteStandFactor: 0.5,
+  holdingBay: { small: 4_000, medium: 8_000, large: 16_000 },
+  /** Each copy of the same Stand or Holding Bay already built (or pending) adds this share. */
+  perCopy: 0.25,
 } as const;
+
+/** Stand and Holding Bay footprints (outline plus clearance), in tiles; they open onto the Taxiway below. */
+export const FOOTPRINT = { small: { w: 2, h: 3 }, medium: { w: 3, h: 3 }, large: { w: 4, h: 3 } } as const;
 
 export interface PendingChange {
   readonly kind: 'add';
@@ -88,6 +96,36 @@ function connectsAtBothEnds(layout: AirportLayout, t: TileRect): boolean {
   return ends.every(([outside, inside]) => [...outside, ...inside].some((tile) => isTaxiwayAt(layout, tile)));
 }
 
+function nextId(layout: AirportLayout, prefix: string, numeric: boolean): string {
+  const used = new Set(layout.structures.flatMap((s) => ('id' in s ? [s.id] : [])));
+  for (let n = 1; ; n++) {
+    const id = numeric ? String(n) : `${prefix}${n}`;
+    if (!used.has(id)) return id;
+  }
+}
+
+/** A new Stand with its top-left tile at `at`. Contact Stands get the building's numbering (1, 2… / C1, C2…), Remote ones R1, R2… */
+export function newStand(session: BuildSession, at: Tile, size: SizeClass, placement: Stand['placement'], serves: Stand['serves']): Stand {
+  const id = placement === 'remote' ? nextId(session.layout, 'R', false) : serves === 'terminal' ? nextId(session.layout, '', true) : nextId(session.layout, 'C', false);
+  return { kind: 'stand', id, x: at.x, y: at.y, ...FOOTPRINT[size], size, serves, placement };
+}
+
+export function newHoldingBay(session: BuildSession, at: Tile, size: SizeClass): HoldingBay {
+  return { kind: 'holdingBay', id: nextId(session.layout, 'B', false), x: at.x, y: at.y, ...FOOTPRINT[size], size };
+}
+
+const SIZE_NAME: Record<SizeClass, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
+
+/** Price of a Stand or Holding Bay given how many copies of the same kind exist (built or pending). */
+function spotPrice(layout: AirportLayout, s: Stand | HoldingBay): number {
+  const copies = layout.structures.filter((o) =>
+    o.kind === s.kind && o.size === s.size && (o.kind !== 'stand' || s.kind !== 'stand' || o.placement === s.placement)).length;
+  const base = s.kind === 'stand'
+    ? BUILD_COSTS.stand[s.size] * (s.placement === 'remote' ? BUILD_COSTS.remoteStandFactor : 1)
+    : BUILD_COSTS.holdingBay[s.size];
+  return Math.round(base * (1 + BUILD_COSTS.perCopy * copies));
+}
+
 export function placementChecks(session: BuildSession, s: Structure): PlacementCheck {
   const run = session.base;
   const layout = session.layout;
@@ -106,6 +144,21 @@ export function placementChecks(session: BuildSession, s: Structure): PlacementC
       label: 'Clear of buildings and Stands',
       ok: !layout.structures.some((o) => o.kind !== 'taxiway' && o.kind !== 'runway' && overlaps(o, s)),
     });
+  }
+  if (s.kind === 'stand' || s.kind === 'holdingBay') {
+    cost = spotPrice(layout, s);
+    upkeepCost = s.kind === 'stand' ? UPKEEP.stand[s.size] : UPKEEP.holdingBay[s.size];
+    label = s.kind === 'stand'
+      ? `${SIZE_NAME[s.size]} ${s.placement === 'remote' ? 'Remote' : 'Contact'} Stand ${s.id} (${s.serves === 'terminal' ? 'Terminal' : 'Cargo Hub'})`
+      : `${SIZE_NAME[s.size]} Holding Bay ${s.id}`;
+    items.push({ label: 'Clear of other structures', ok: !layout.structures.some((o) => overlaps(o, s)) });
+    const entry = { x: s.x + Math.floor(s.w / 2), y: s.y + s.h };
+    items.push({ label: 'Taxiway access', ok: isTaxiwayAt(layout, entry) });
+    if (s.kind === 'stand' && s.placement === 'contact') {
+      const building = s.serves === 'terminal' ? 'terminal' : 'cargoHub';
+      const attached = layout.structures.some((b) => b.kind === building && b.y + b.h === s.y && s.x >= b.x && s.x + s.w <= b.x + b.w);
+      items.push({ label: s.serves === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: attached });
+    }
   }
   items.push({ label: 'Inside owned land', ok: tilesOf(s).every((t) => ownsTile(run, t)) });
   if (run.inDebt) items.push({ label: 'Not in Debt', ok: false });
