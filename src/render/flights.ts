@@ -25,6 +25,13 @@ export class FlightLayer {
   private readonly sprites = new Map<string, Graphics>();
 
   update(flights: readonly Flight[]): void {
+    const present = new Set(flights.map((f) => f.id));
+    for (const [id, g] of this.sprites) {
+      if (!present.has(id)) {
+        g.destroy();
+        this.sprites.delete(id);
+      }
+    }
     for (const f of flights) {
       let g = this.sprites.get(f.id);
       if (!f.position) {

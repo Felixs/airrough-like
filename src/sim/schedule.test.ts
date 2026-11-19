@@ -111,3 +111,11 @@ describe('Schedule', () => {
     expect(day.forecast.quota).toBe(day.quota);
   });
 });
+
+describe('Schedule without overnight aircraft', () => {
+  it('turns every flight into a daytime arrival', () => {
+    const day = planDay({ layout: airport, week: 1, weekday: 1, seed: 4, includeOvernight: false });
+    expect(day.schedule.some((f) => f.overnight)).toBe(false);
+    expect(day.schedule.length).toBe(planDay({ layout: airport, week: 1, weekday: 1, seed: 4 }).schedule.length);
+  });
+});

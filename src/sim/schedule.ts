@@ -68,6 +68,11 @@ export interface DayPlanSetup {
   /** 0 = Monday … 6 = Sunday. */
   readonly weekday: number;
   readonly seed: number;
+  /**
+   * Whether some arrivals are instead parked overnight (default true). The Run turns this off after its
+   * first Day, because last night's real aircraft carry over.
+   */
+  readonly includeOvernight?: boolean;
 }
 
 export function demandFor(week: number, weekday: number): number {
@@ -96,7 +101,7 @@ function arrivalMinute(rng: Random): number {
   const { firstArrivalMinute: lo, lastArrivalMinute: hi } = SCHEDULE_RULES;
   for (;;) {
     const r = rng.next();
-    const m = r < 0.4 ? 8.5 * 60 + rng.normal() * 75 : r < 0.8 ? 18.5 * 60 + rng.normal() * 75 : lo + rng.next() * (hi - lo);
+    const m = r < 0.4 ? 8.5 * 60 + rng.normal() * 75 : r < 0.8 ? 17.75 * 60 + rng.normal() * 75 : lo + rng.next() * (hi - lo);
     if (m >= lo && m < hi) return Math.floor(m);
   }
 }
@@ -147,7 +152,7 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     const type = types[Math.floor(typeRoll * types.length)]!;
     // Overnight aircraft need a Stand free at 05:00; smallest fitting Stand first, like the simulation.
     let overnight = false;
-    if (overnightRoll < SCHEDULE_RULES.overnightShare) {
+    if (setup.includeOvernight !== false && overnightRoll < SCHEDULE_RULES.overnightShare) {
       if (!overnightStandsLeft.has(purpose)) overnightStandsLeft.set(purpose, new Set(fittingStands('small', purpose).map((s) => s.id)));
       const free = overnightStandsLeft.get(purpose)!;
       const stand = fittingStands(size, purpose)
