@@ -2,7 +2,10 @@
  * Taxi network: a graph of Taxiway tiles (4-neighbour) built from the layout.
  * Routes are lists of tiles; aircraft move along tile centres.
  */
-import type { AirportLayout, Runway, Stand, TileRect } from './layout';
+import type { AirportLayout, Runway, TileRect } from './layout';
+
+/** A Stand or Holding Bay: a spot an aircraft taxis into from the Taxiway below it. */
+export type Spot = TileRect & { readonly id: string };
 
 export interface Tile {
   readonly x: number;
@@ -54,7 +57,7 @@ export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {
 }
 
 /** The Taxiway tile directly in front of a Stand's open side (below it) and the Stand's centre tile. */
-function standAccess(network: TaxiNetwork, stand: Stand): { entry: Tile; centre: Tile } {
+function standAccess(network: TaxiNetwork, stand: Spot): { entry: Tile; centre: Tile } {
   const centre = centreTile(stand);
   const entry = { x: centre.x, y: stand.y + stand.h };
   if (!network.tiles.has(key(entry))) throw new Error(`Stand ${stand.id} has no Taxiway in front of it`);
@@ -87,14 +90,20 @@ function shortestPath(network: TaxiNetwork, from: Tile, to: Tile): Tile[] {
   return path.reverse();
 }
 
-export function routeToStand(network: TaxiNetwork, from: Tile, stand: Stand): Tile[] {
+export function routeToStand(network: TaxiNetwork, from: Tile, stand: Spot): Tile[] {
   const { entry, centre } = standAccess(network, stand);
   return [...shortestPath(network, from, entry), ...walkInto(entry, centre)];
 }
 
-export function routeFromStand(network: TaxiNetwork, stand: Stand, to: Tile): Tile[] {
+export function routeFromStand(network: TaxiNetwork, stand: Spot, to: Tile): Tile[] {
   const { entry, centre } = standAccess(network, stand);
   return [...walkInto(entry, centre).reverse(), ...shortestPath(network, entry, to)];
+}
+
+/** From one Spot (e.g. a Holding Bay) to another (e.g. a Stand). */
+export function routeBetween(network: TaxiNetwork, from: Spot, to: Spot): Tile[] {
+  const toEntry = standAccess(network, to).entry;
+  return [...routeFromStand(network, from, toEntry), ...routeToStand(network, toEntry, to).slice(1)];
 }
 
 /** Tiles from just inside the Stand up to its centre (excluding the entry tile). */

@@ -46,7 +46,7 @@ describe('findOverlaps', () => {
     const layout = createLayout(10, 10, [
       { kind: 'taxiway', x: 0, y: 0, w: 3, h: 3 },
       { kind: 'taxiway', x: 3, y: 0, w: 3, h: 3 }, // touches the first, no shared tile
-      { kind: 'holdingBay', x: 5, y: 2, w: 3, h: 3, size: 'medium' }, // shares tile (5,2) with the second
+      { kind: 'holdingBay', id: 'B9', x: 5, y: 2, w: 3, h: 3, size: 'medium' }, // shares tile (5,2) with the second
     ]);
     const overlaps = findOverlaps(layout);
     expect(overlaps).toHaveLength(1);
