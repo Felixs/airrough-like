@@ -22,6 +22,8 @@ export interface ScheduledFlight {
   readonly id: string;
   readonly type: AircraftTypeId;
   readonly arrivalMinute: number;
+  /** Parked overnight: starts the Day on a Stand with unloading done. */
+  readonly overnight?: boolean;
 }
 
 export type FlightPhase = 'scheduled' | 'landing' | 'taxiIn' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed';
@@ -66,8 +68,11 @@ export interface SimulationSetup {
   readonly money?: number;
 }
 
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+type MutableSim = Omit<Mutable<Simulation>, 'standOccupant'> & { standOccupant: Record<string, string> };
+
 export function createSimulation(setup: SimulationSetup): Simulation {
-  return {
+  const sim: MutableSim = {
     layout: setup.layout,
     network: buildTaxiNetwork(setup.layout),
     clock: createDay(),
@@ -76,10 +81,21 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     movements: 0,
     runwayBusyUntil: 0,
     standOccupant: {},
-    flights: setup.schedule.map((f) => ({
-      ...f, phase: 'scheduled', phaseStart: 0, standId: null, route: [], routeProgress: 0, unloaded: false, position: null, heading: 90,
-    })),
+    flights: [],
   };
+  sim.flights = setup.schedule.map((f) => {
+    const flight: Mutable<Flight> = {
+      ...f, phase: 'scheduled', phaseStart: 0, standId: null, route: [], routeProgress: 0, unloaded: false, position: null, heading: 90,
+    };
+    const stand = f.overnight ? freeFittingStand(sim, flight) : undefined;
+    if (stand) {
+      sim.standOccupant[stand.id] = f.id;
+      Object.assign(flight, { phase: 'onStand', phaseStart: sim.clock.minute, standId: stand.id, unloaded: true });
+      place(sim, flight, sim.clock.minute);
+    }
+    return flight;
+  });
+  return sim;
 }
 
 // ---------------------------------------------------------------- geometry helpers
@@ -115,8 +131,6 @@ function freeFittingStand(sim: Simulation, flight: Flight): Stand | undefined {
 }
 
 // ---------------------------------------------------------------- step
-type Mutable<T> = { -readonly [K in keyof T]: T[K] };
-type MutableSim = Omit<Mutable<Simulation>, 'standOccupant'> & { standOccupant: Record<string, string> };
 
 /** Advances the simulation by one fixed step (15 in-game seconds). */
 export function stepSimulation(prev: Simulation): Simulation {

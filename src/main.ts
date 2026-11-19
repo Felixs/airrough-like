@@ -4,6 +4,7 @@ import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { startingAirport } from './sim/layout';
+import { planDay } from './sim/schedule';
 import { createSimulation, runTo } from './sim/simulation';
 import { mountTopBar } from './ui/topBar';
 
@@ -22,16 +23,10 @@ async function start(): Promise<void> {
   fit();
   app.renderer.on('resize', fit);
 
-  // Demo traffic until the Schedule ticket lands.
-  let sim = createSimulation({
-    layout,
-    seed: 1,
-    schedule: [
-      { id: 'DLH1', type: 'A320', arrivalMinute: 6 * 60 },
-      { id: 'LOG2', type: 'Q400', arrivalMinute: 6 * 60 + 20 },
-      { id: 'UPS3', type: 'B738F', arrivalMinute: 6 * 60 + 40 },
-    ],
-  });
+  // Week 1 Monday until the Run loop ticket lands.
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  const plan = planDay({ layout, week: 1, weekday: 0, seed });
+  let sim = createSimulation({ layout, seed, schedule: plan.schedule });
   let speed: Speed = 1;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => (speed = s));
 
@@ -39,7 +34,7 @@ async function start(): Promise<void> {
     sim = runTo(sim, advance(sim.clock, ticker.deltaMS, speed));
     flightLayer.update(sim.flights);
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
-    topBar.showStats(sim.money, sim.movements);
+    topBar.showStats(sim.money, sim.movements, plan.quota);
   });
 }
 
