@@ -1,5 +1,6 @@
-.godot/
-*.import
-export/
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
 prototypes/ui-canvas/out/
 __pycache__/
