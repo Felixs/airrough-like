@@ -75,7 +75,7 @@ export interface DayPlanSetup {
    */
   readonly includeOvernight?: boolean;
   /** The Day's Twist; a Traffic Surge changes Demand, mix and peaks. */
-  readonly twist?: TwistRef | null;
+  readonly twist?: TwistRef | readonly TwistRef[] | null;
 }
 
 export function demandFor(week: number, weekday: number): number {

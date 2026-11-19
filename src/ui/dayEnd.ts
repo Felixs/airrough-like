@@ -8,51 +8,50 @@ export function dayName(week: number, weekday: number): string {
   return `Week ${week} · ${WEEKDAY_NAMES[weekday] ?? ''}`;
 }
 
-/**
- * The Score Screen when the Run is lost (a plain Day report otherwise; Plan Mode normally shows that).
- */
-export function showDayEnd(root: HTMLElement, run: RunState, onNext: () => void, onNewRun: () => void): void {
+export interface ScoreScreenHandlers {
+  onNewRun(): void;
+  /** Only offered after a win. */
+  onEndless(): void;
+}
+
+/** The Score Screen when a Run is lost or won (a won Run can continue into Endless Mode). */
+export function showScoreScreen(root: HTMLElement, run: RunState, handlers: ScoreScreenHandlers): void {
   const report = run.history[run.history.length - 1];
+  const won = run.status === 'won';
   const el = document.createElement('div');
   el.className = 'overlay';
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
   const rows = (pairs: Array<[string, string]>) => pairs.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  if (run.status === 'lost') {
-    el.innerHTML = `
-      <div class="card">
-        <h2>Run over</h2>
-        <p class="lead">${report ? `Daily Quota missed on ${dayName(report.week, report.weekday)}: ${report.movements} of ${report.quota} Movements.` : ''}</p>
-        <dl>${rows([
-          ['Days survived', String(run.stats.daysSurvived)],
-          ['Movements', run.stats.movements.toLocaleString('en-US')],
-          ['Fees earned', money(run.stats.fees)],
-          ['Spending', money(run.stats.spending)],
-          ['Crashes', String(run.stats.crashes)],
-          ['Score', runScore(run).toLocaleString('en-US')],
-          ['Air Miles', `+${airMiles(run).toLocaleString('en-US')}`],
-        ])}</dl>
-        <button type="button" class="primary">New Run</button>
-      </div>`;
-  } else {
-    el.innerHTML = `
-      <div class="card">
-        <h2>${report ? dayName(report.week, report.weekday) : ''} done</h2>
-        <dl>${report ? rows([
-          ['Movements / Quota', `${report.movements} / ${report.quota}`],
-          ['Fees', money(report.fees)],
-          ['Upkeep', money(-report.upkeep)],
-          ['Fines & Incidents', money(-report.penalties)],
-          ['Crashes · Diversions', `${report.crashes} · ${report.diversions}`],
-          ['Money', money(run.money) + (run.inDebt ? ' (Debt: building blocked)' : '')],
-        ]) : ''}</dl>
-        <p class="lead">Next: ${dayName(run.week, run.weekday)}${run.weekday === 6 ? ' (Boss Day)' : run.weekday === 5 ? ' (Rush Day)' : ''}</p>
-        <button type="button" class="primary">Next Day</button>
-      </div>`;
-  }
-  el.querySelector('button')!.addEventListener('click', () => {
+  const lead = won
+    ? 'You survived all four Weeks. Bank the Score now, or keep going in Endless Mode.'
+    : report
+      ? `Daily Quota missed on ${dayName(report.week, report.weekday)}${run.endless ? ' (Endless)' : ''}: ${report.movements} of ${report.quota} Movements.`
+      : '';
+  el.innerHTML = `
+    <div class="card">
+      <h2>${won ? 'Run won!' : 'Run over'}</h2>
+      <p class="lead">${lead}</p>
+      <dl>${rows([
+        ['Days survived', String(run.stats.daysSurvived)],
+        ['Movements', run.stats.movements.toLocaleString('en-US')],
+        ['Fees earned', money(run.stats.fees)],
+        ['Spending', money(run.stats.spending)],
+        ['Crashes', String(run.stats.crashes)],
+        ['Score', runScore(run).toLocaleString('en-US')],
+        ['Air Miles', `+${airMiles(run).toLocaleString('en-US')}`],
+      ])}</dl>
+      <div class="score-buttons">
+        ${won ? '<button type="button" class="primary" data-act="endless">Continue in Endless Mode</button>' : ''}
+        <button type="button" class="${won ? 'secondary' : 'primary'}" data-act="new">New Run</button>
+      </div>
+    </div>`;
+  el.addEventListener('click', (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]')?.dataset.act;
+    if (!act) return;
     el.remove();
-    (run.status === 'lost' ? onNewRun : onNext)();
+    if (act === 'endless') handlers.onEndless();
+    else handlers.onNewRun();
   });
   root.appendChild(el);
   el.querySelector<HTMLButtonElement>('button')!.focus();

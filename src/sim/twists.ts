@@ -52,12 +52,30 @@ export function describeTwist(t: TwistRef, boss: boolean): Twist {
   return { ...t, ...info, boss };
 }
 
-/** The Twist on a Day of a Run, or null. Seeded, so the Run Calendar can show it from the start of the Week. */
-export function twistFor(seed: number, week: number, weekday: number): Twist | null {
+/** How many Boss Twists a Boss Day stacks: one, then two from Week 5 and three from Week 7 (Endless). */
+export function bossTwistCount(week: number): number {
+  return week >= 7 ? 3 : week >= 5 ? 2 : 1;
+}
+
+/** Every Twist on a Day of a Run (Endless Boss Days stack several). Seeded, so the Run Calendar can show them. */
+export function twistsFor(seed: number, week: number, weekday: number): Twist[] {
   if (weekday === 6) {
     const rng = createRandom(mixSeed(seed, week, 0xb055));
-    return describeTwist({ family: rng.pick(FAMILIES), severity: Math.min(TWIST_RULES.maxSeverity, week) }, true);
+    const families = [...FAMILIES];
+    const out: Twist[] = [];
+    for (let i = 0; i < bossTwistCount(week); i++) {
+      const family = families.splice(rng.int(families.length), 1)[0]!;
+      out.push(describeTwist({ family, severity: Math.min(TWIST_RULES.maxSeverity, week) }, true));
+    }
+    return out;
   }
+  const one = twistFor(seed, week, weekday);
+  return one ? [one] : [];
+}
+
+/** The (first) Twist on a Day of a Run, or null. */
+export function twistFor(seed: number, week: number, weekday: number): Twist | null {
+  if (weekday === 6) return twistsFor(seed, week, weekday)[0] ?? null;
   const rng = createRandom(mixSeed(seed, week, weekday, 0x7715));
   if (rng.next() >= TWIST_RULES.weekdayChance) return null;
   return describeTwist({ family: rng.pick(FAMILIES), severity: 1 }, false);
@@ -75,8 +93,22 @@ export interface TrafficEffects {
 
 const NO_TRAFFIC_EFFECT: TrafficEffects = { demandFactor: 1, mediumShift: 0, largeShift: 0, peakSpread: 75, peakShare: 0.4 };
 
-export function trafficEffects(t: TwistRef | null | undefined): TrafficEffects {
-  if (!t || t.family !== 'surge') return NO_TRAFFIC_EFFECT;
+type TwistInput = TwistRef | readonly TwistRef[] | null | undefined;
+const asList = (t: TwistInput): readonly TwistRef[] => (!t ? [] : Array.isArray(t) ? t : [t as TwistRef]);
+
+/** Traffic effects of one or several Twists (combined). */
+export function trafficEffects(input: TwistInput): TrafficEffects {
+  return asList(input).map(oneTraffic).reduce((a, b) => ({
+    demandFactor: a.demandFactor * b.demandFactor,
+    mediumShift: a.mediumShift + b.mediumShift,
+    largeShift: a.largeShift + b.largeShift,
+    peakSpread: Math.min(a.peakSpread, b.peakSpread),
+    peakShare: Math.max(a.peakShare, b.peakShare),
+  }), NO_TRAFFIC_EFFECT);
+}
+
+function oneTraffic(t: TwistRef): TrafficEffects {
+  if (t.family !== 'surge') return NO_TRAFFIC_EFFECT;
   switch (t.severity) {
     case 1: return { ...NO_TRAFFIC_EFFECT, demandFactor: 1.15 };
     case 2: return { ...NO_TRAFFIC_EFFECT, demandFactor: 1.25, mediumShift: 0.15 };
@@ -94,9 +126,18 @@ export interface SimulationEffects {
 
 const NO_SIM_EFFECT: SimulationEffects = { riskMultiplier: 1, windows: [], taxiSpeedFactor: 1, noLights: false };
 
-/** Simulation inputs for a Twist. The Weather Station (level 1–5) softens Weather. */
-export function simulationEffects(t: TwistRef | null | undefined, seed: number, weatherStationLevel: number): SimulationEffects {
-  if (!t || t.family === 'surge') return NO_SIM_EFFECT;
+/** Simulation inputs for one or several Twists (combined). The Weather Station (level 1–5) softens Weather. */
+export function simulationEffects(input: TwistInput, seed: number, weatherStationLevel: number): SimulationEffects {
+  return asList(input).map((t) => oneSimulation(t, seed, weatherStationLevel)).reduce((a, b) => ({
+    riskMultiplier: a.riskMultiplier * b.riskMultiplier,
+    windows: [...a.windows, ...b.windows],
+    taxiSpeedFactor: Math.min(a.taxiSpeedFactor, b.taxiSpeedFactor),
+    noLights: a.noLights || b.noLights,
+  }), NO_SIM_EFFECT);
+}
+
+function oneSimulation(t: TwistRef, seed: number, weatherStationLevel: number): SimulationEffects {
+  if (t.family === 'surge') return NO_SIM_EFFECT;
   const rng = createRandom(mixSeed(seed, t.severity, FAMILIES.indexOf(t.family), 0xef));
   const at = (fromHour: number, toHour: number) => Math.round((fromHour + rng.next() * (toHour - fromHour)) * 60);
   if (t.family === 'infrastructure') {

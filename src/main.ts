@@ -4,9 +4,9 @@ import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
-import { dayPlan, dayTwist, endDay, startLiveDay, startRun, type RunState } from './sim/run';
+import { continueEndless, dayPlan, dayTwists, endDay, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, runTo, useAction, type Simulation } from './sim/simulation';
-import { dayName, showDayEnd } from './ui/dayEnd';
+import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
@@ -62,9 +62,9 @@ async function start(): Promise<void> {
     sim = startLiveDay(run);
     quota = dayPlan(run).quota;
     ended = false;
-    const twist = dayTwist(run);
-    dayLabel.textContent = dayName(run.week, run.weekday) + (twist ? ` · ${twist.name}` : '');
-    dayLabel.title = twist?.description ?? '';
+    const twists = dayTwists(run);
+    dayLabel.textContent = dayName(run.week, run.weekday) + (run.endless ? ' · Endless' : '') + twists.map((t) => ` · ${t.name}`).join('');
+    dayLabel.title = twists.map((t) => `${t.name}: ${t.description}`).join('\n');
     mountAirfield();
   };
   const openPlan = () => {
@@ -92,10 +92,16 @@ async function start(): Promise<void> {
     if (!ended && isDayOver(sim.clock)) {
       ended = true;
       run = endDay(run, sim);
-      if (run.status === 'lost') {
-        showDayEnd(appEl, run, () => {}, () => {
-          run = startRun(newSeed());
-          openPlan();
+      if (run.status === 'lost' || run.status === 'won') {
+        showScoreScreen(appEl, run, {
+          onNewRun() {
+            run = startRun(newSeed());
+            openPlan();
+          },
+          onEndless() {
+            run = continueEndless(run);
+            openPlan();
+          },
         });
       } else {
         openPlan();

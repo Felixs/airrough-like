@@ -1,5 +1,5 @@
 import { upgradeOffers, runCalendar, suggestions, type UpgradeId } from '../sim/plan';
-import { dayPlan, dayTwist, upkeep, type RunState } from '../sim/run';
+import { dayPlan, dayTwists, upkeep, type RunState } from '../sim/run';
 import { FAMILY_NAME, type Twist } from '../sim/twists';
 import { WEEKDAY_NAMES } from '../sim/schedule';
 import { mountBuildMode, type BuildModeView } from './buildMode';
@@ -41,7 +41,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
     const offers = upgradeOffers(run);
     const tips = suggestions(run);
     const turned = Object.entries(f.turnedAway).filter(([k, v]) => k !== 'total' && v > 0);
-    const twist = dayTwist(run);
+    const twists = dayTwists(run);
 
     el.innerHTML = `
       <header class="plan-head">
@@ -49,7 +49,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
           <button type="button" role="tab" data-tab="overview" aria-selected="${tab === 'overview'}">Overview</button>
           <button type="button" role="tab" data-tab="build" aria-selected="${tab === 'build'}">Build</button>
         </div>
-        <span class="next">Next: <b>${dayName(run.week, run.weekday)}</b>${plan.weekday === 6 ? ' · Boss Day' : plan.weekday === 5 ? ' · Rush Day' : ''}</span>
+        <span class="next">${run.endless ? '<b class="endless">Endless</b> · ' : ''}Next: <b>${dayName(run.week, run.weekday)}</b>${plan.weekday === 6 ? ' · Boss Day' : plan.weekday === 5 ? ' · Rush Day' : ''}</span>
         <span class="spacer"></span>
         <span class="money${run.inDebt ? ' debt' : ''}" title="Upkeep ${money(upkeep(run))} per Day, paid at 24:00">${money(run.money)}</span>
         <button type="button" class="start">Start Day ▶</button>
@@ -63,7 +63,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             <dt>Fines & Incidents</dt><dd>${money(-last.penalties)}</dd>
             <dt>Crashes · Diversions</dt><dd>${last.crashes} · ${last.diversions}</dd></dl></div>` : ''}
           <div class="card"><h3>Forecast · ${dayName(run.week, run.weekday)}</h3><dl>
-            ${twist ? `<dt>Twist</dt><dd class="twist" title="${esc(twist.description)}">${ICON[twist.family]} ${esc(twist.name)}</dd>` : ''}
+            ${twists.map((t) => `<dt>Twist</dt><dd class="twist" title="${esc(t.description)}">${ICON[t.family]} ${esc(t.name)}</dd>`).join('')}
             <dt>Daily Quota</dt><dd><b>${f.quota}</b> Movements</dd>
             <dt>Demand</dt><dd>${f.demand} flights</dd>
             <dt>Arriving</dt><dd>S ${f.arrivalsBySize.small} · M ${f.arrivalsBySize.medium} · L ${f.arrivalsBySize.large}</dd>
@@ -81,7 +81,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             }).join('')}</div>`).join('')}
           </div>
           ${boss ? `<div class="card boss-card"><h3>Boss Day · Sunday W${run.week}</h3><p>Quota <b>${boss.quota}</b> (90% of Demand ${boss.demand} × 2).</p>
-            ${boss.twist ? `<p class="boss-twist">${ICON[boss.twist.family]} <b>${esc(boss.twist.name)}</b> · ${FAMILY_NAME[boss.twist.family]} Severity ${boss.twist.severity}<br>${esc(boss.twist.description)}</p>` : ''}</div>` : ''}
+            ${boss.twists.map((t) => `<p class="boss-twist">${ICON[t.family]} <b>${esc(t.name)}</b> · ${FAMILY_NAME[t.family]} Severity ${t.severity}<br>${esc(t.description)}</p>`).join('')}</div>` : ''}
           <div class="card"><h3>Suggested</h3><ul class="tips">${tips.map((t) => `<li>${esc(t.text)}</li>`).join('') || '<li>Looking good.</li>'}</ul></div>
         </section>
         <section class="col">
