@@ -86,7 +86,7 @@ describe('Error outcomes', () => {
 
   it('a rejected takeoff returns the aircraft to the hold point', () => {
     const overnight: ScheduledFlight[] = [{ id: 'N', type: 'A320', arrivalMinute: 0, overnight: true }];
-    const end = findSeed({ layout, schedule: overnight, riskMultiplier: 100 }, 6 * 60, 'rejectedTakeoff');
+    const end = findSeed({ layout, schedule: overnight, riskMultiplier: 100 }, 6 * 60 + 5, 'rejectedTakeoff');
     expect(['holdShort', 'takeoff']).toContain(flight(end, 'N').phase);
   });
 });

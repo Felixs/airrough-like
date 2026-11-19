@@ -19,15 +19,15 @@ const whenPhase = (start: Simulation, id: string, phase: string) => {
 describe('Runway assignment and Holding', () => {
   it('lands arrivals one at a time in the order they reached Holding', () => {
     const s = sim([
-      { id: 'A', type: 'A320', arrivalMinute: 360 },
-      { id: 'B', type: 'B738', arrivalMinute: 360 },
-      { id: 'C', type: 'Q400', arrivalMinute: 359 },
+      { id: 'A', type: 'A320', arrivalMinute: 401 },
+      { id: 'B', type: 'B738', arrivalMinute: 401 },
+      { id: 'C', type: 'Q400', arrivalMinute: 400 },
     ]);
-    expect(whenPhase(s, 'C', 'landing')).toBe(359);
+    expect(whenPhase(s, 'C', 'landing')).toBe(400);
     // Runway Separation at Radar 1 + Controller Training 1: 4 minutes per landing
-    expect(whenPhase(s, 'A', 'landing')).toBe(363);
-    expect(whenPhase(s, 'B', 'landing')).toBe(367);
-    expect(flight(runUntil(s, 361), 'B').phase).toBe('holding');
+    expect(whenPhase(s, 'A', 'landing')).toBe(404);
+    expect(whenPhase(s, 'B', 'landing')).toBe(408);
+    expect(flight(runUntil(s, 402), 'B').phase).toBe('holding');
   });
 
   it('gives low-fuel aircraft landing priority', () => {
@@ -67,10 +67,10 @@ describe('Runway assignment and Holding', () => {
   });
 
   it('lets a waiting departure take the Runway after 3 minutes even with arrivals queued', () => {
-    const alone = sim([{ id: 'N', type: 'A320', arrivalMinute: 0, overnight: true }]);
+    const alone = sim([{ id: 'N', type: 'A320', arrivalMinute: 360 }]);
     const holdAt = whenPhase(alone, 'N', 'holdShort');
     const arrivals = ['C208F', 'C208F', 'C208', 'C208', 'Q400', 'A320'].map((type, i): ScheduledFlight => ({ id: `ARR${i}`, type: type as ScheduledFlight['type'], arrivalMinute: holdAt - 1 }));
-    const busy = sim([{ id: 'N', type: 'A320', arrivalMinute: 0, overnight: true }, ...arrivals]);
+    const busy = sim([{ id: 'N', type: 'A320', arrivalMinute: 360 }, ...arrivals]);
     const takeoffAt = whenPhase(busy, 'N', 'takeoff');
     expect(takeoffAt).toBeGreaterThanOrEqual(holdAt + 3);
     expect(takeoffAt).toBeLessThanOrEqual(holdAt + 6);
