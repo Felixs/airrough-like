@@ -39,7 +39,7 @@ One landing or one takeoff; the unit the Daily Quota counts.
 _Avoid_: Flight handled, operation
 
 **Schedule**:
-The flights that actually come on a Day: the Day's Demand minus aircraft the airport can't handle, and capped per Size Class by how many fitting Stands the airport has (one Large Stand can't attract a flood of Large aircraft). In Week 1 turned-away flights are swapped for Small aircraft; from Week 2 on they simply don't come, so an under-built airport earns less and struggles to reach the Daily Quota. The Player cannot change it.
+The flights that actually come on a Day: the Day's Demand minus aircraft the airport can't handle, and capped per Size Class by how many fitting Stands the airport has (one Large Stand can't attract a flood of Large aircraft). In Week 1 flights with no fitting Stand, and on the first three Days flights whose Stands are full, are swapped for Small aircraft; otherwise they simply don't come, so an under-built airport earns less and struggles to reach the Daily Quota. The Player cannot change it.
 _Avoid_: Timetable, traffic plan
 
 **Demand**:
@@ -151,7 +151,7 @@ A Player-set constraint the ATC Tower follows (e.g. "Runway 2 is cargo only"); u
 _Avoid_: Policy, setting
 
 **Land Plot**:
-A purchasable chunk of grid tiles adjacent to the airport; the Run starts with a small one and more are bought in Plan Mode.
+A purchasable square of 16 × 16 grid tiles bordering owned land; the Run starts with 3 × 2 of them and more are bought in Build Mode.
 _Avoid_: Land, area, zone, expansion
 
 ### Meta-progression
@@ -319,7 +319,7 @@ _Avoid_: Danger level, threat
 ### People
 
 **Starting Airport**:
-The layout every Run begins with. In v1 there is one: Medium Asphalt Runway, small Terminal, small Cargo Hub with two Stands, one Medium Holding Bay and an ATC Tower.
+The layout every Run begins with. In v1 there is one: Medium Asphalt Runway, small Terminal with two Small and one Medium Stand, small Cargo Hub with one Medium and one Small Stand, a Small and a Medium Holding Bay, and an ATC Tower.
 _Avoid_: Difficulty, map, scenario
 
 **Player**:

@@ -6,7 +6,7 @@ import { createLayout } from './layout';
 import type { RunState } from './run';
 import { emptyMeta, type MetaState } from './meta';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4; // 4: square Land Plots and the new starting airport
 /** Meta-progression has its own version so Run format changes don't wipe Air Miles. */
 export const META_VERSION = 2;
 export const KEYS = { run: 'aab.run', meta: 'aab.meta', options: 'aab.options' } as const;

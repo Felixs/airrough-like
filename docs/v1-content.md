@@ -27,7 +27,7 @@ Larger/rarer types may become Unlockables later.
 
 ## Starting Airport
 
-v1 has one: 1 Medium Asphalt Runway, small Terminal, small Cargo Hub with 2 Medium Stands, 1 Medium Holding Bay, ATC Tower. (Hard and Custom modes are parked in later-ideas.)
+v1 has one: 1 Medium Asphalt Runway, a small Terminal with 2 Small + 1 Medium Stands, a small Cargo Hub with 1 Medium + 1 Small Stand, a Small and a Medium Holding Bay, ATC Tower, on 3×2 square Land Plots (see game-design.md for the layout). (Hard and Custom modes are parked in later-ideas.)
 
 ## Run rules (v1)
 

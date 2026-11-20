@@ -9,7 +9,7 @@ export const TILE_SIZE = 8;
  * The whole map in tiles, split into 16 × 14 Land Plots. It starts at (x0, y0), which is negative so there is
  * land on every side: the Run starts owning plots (0…2, 0…1) in the middle.
  */
-export const WORLD = { x0: -16, y0: -14, width: 96, height: 56, plotW: 16, plotH: 14 } as const;
+export const WORLD = { x0: -16, y0: -16, width: 96, height: 64, plotW: 16, plotH: 16 } as const;
 
 export interface TileRect {
   readonly x: number;
@@ -104,31 +104,35 @@ export function findOverlaps(layout: AirportLayout): Array<[Structure, Structure
   return pairs;
 }
 
-const stand = (id: string, x: number, serves: Stand['serves']): Stand => ({
-  kind: 'stand', id, x, y: 6, w: 3, h: 3, size: 'medium', serves, placement: 'contact',
+const stand = (id: string, x: number, size: 'small' | 'medium', serves: Stand['serves']): Stand => ({
+  kind: 'stand', id, x, y: 8, w: size === 'small' ? 2 : 3, h: 3, size, serves, placement: 'contact',
 });
 
-/** The layout every Run begins with. */
+/**
+ * The layout every Run begins with, centred in the starting land (3×2 Land Plots = 48×32 tiles): the Terminal with
+ * 2 Small + 1 Medium Stands, the Cargo Hub with 1 Medium + 1 Small, a Small and a Medium Holding Bay right of the
+ * cargo Stands, an apron lane along them with a link down near each end, the parallel Taxiway, a connector at each end of a Medium Asphalt Runway, and the ATC Tower.
+ */
 export function startingAirport(): AirportLayout {
   return createLayout(WORLD.width, WORLD.height, [
-    { kind: 'atcTower', x: 2, y: 2, w: 3, h: 4 },
-    { kind: 'terminal', x: 7, y: 2, w: 15, h: 4 },
-    { kind: 'cargoHub', x: 25, y: 2, w: 10, h: 4 },
-    stand('1', 8, 'terminal'),
-    stand('2', 11, 'terminal'),
-    stand('3', 14, 'terminal'),
-    stand('4', 17, 'terminal'),
-    stand('C1', 26, 'cargoHub'),
-    stand('C2', 29, 'cargoHub'),
-    { kind: 'holdingBay', id: 'B1', x: 38, y: 6, w: 3, h: 3, size: 'medium' },
-    // Taxiway along the Stands, links down to Taxiway A, Taxiway A, connectors onto the Runway
-    { kind: 'taxiway', x: 7, y: 9, w: 35, h: 3 },
-    { kind: 'taxiway', x: 12, y: 12, w: 3, h: 4 },
-    { kind: 'taxiway', x: 29, y: 12, w: 3, h: 4 },
-    { kind: 'taxiway', x: 6, y: 16, w: 36, h: 3 },
-    { kind: 'taxiway', x: 6, y: 19, w: 3, h: 3 },
-    { kind: 'taxiway', x: 39, y: 19, w: 3, h: 3 },
-    { kind: 'runway', x: 6, y: 22, w: 36, h: 4, length: 'medium', surface: 'asphalt' },
+    { kind: 'atcTower', x: 12, y: 4, w: 3, h: 4 },
+    { kind: 'terminal', x: 16, y: 4, w: 10, h: 4 },
+    { kind: 'cargoHub', x: 28, y: 4, w: 7, h: 4 },
+    stand('1', 16, 'small', 'terminal'),
+    stand('2', 18, 'small', 'terminal'),
+    stand('3', 20, 'medium', 'terminal'),
+    stand('C1', 28, 'medium', 'cargoHub'),
+    stand('C2', 31, 'small', 'cargoHub'),
+    { kind: 'holdingBay', id: 'B1', x: 33, y: 8, w: 2, h: 3, size: 'small' },
+    { kind: 'holdingBay', id: 'B2', x: 35, y: 8, w: 3, h: 3, size: 'medium' },
+    // apron lane along the Stands and Holding Bays, a link down at each end, the parallel Taxiway, Runway connectors
+    { kind: 'taxiway', x: 15, y: 11, w: 23, h: 3 },
+    { kind: 'taxiway', x: 15, y: 14, w: 3, h: 4 },
+    { kind: 'taxiway', x: 33, y: 14, w: 3, h: 4 },
+    { kind: 'taxiway', x: 6, y: 18, w: 36, h: 3 },
+    { kind: 'taxiway', x: 6, y: 21, w: 3, h: 3 },
+    { kind: 'taxiway', x: 39, y: 21, w: 3, h: 3 },
+    { kind: 'runway', x: 6, y: 24, w: 36, h: 4, length: 'medium', surface: 'asphalt' },
   ]);
 }
 

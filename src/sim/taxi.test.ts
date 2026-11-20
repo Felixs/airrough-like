@@ -11,10 +11,10 @@ describe('Taxi routing on the Starting Airport', () => {
   it('reaches Stand 3 from the Runway exit on the shortest path', () => {
     const stand = airport.stands.find((s) => s.id === '3')!;
     const route = routeToStand(network, network.runwayExit, stand);
-    // Exit (40,21) to the centre of Stand 3 (15,7): 25 tiles west + 14 tiles north, no detour needed.
-    expect(route.length - 1).toBe(39);
-    expect(route[0]).toEqual({ x: 40, y: 21 });
-    expect(route[route.length - 1]).toEqual({ x: 15, y: 7 });
+    // Exit (40,23) to the centre of Stand 3 (21,9): 19 tiles west + 14 tiles north, no detour needed.
+    expect(route.length - 1).toBe(33);
+    expect(route[0]).toEqual({ x: 40, y: 23 });
+    expect(route[route.length - 1]).toEqual({ x: 21, y: 9 });
   });
 
   it('reaches every Stand from the Runway exit and back to the hold point using only Taxiway and that Stand', () => {
@@ -30,7 +30,7 @@ describe('Taxi routing on the Starting Airport', () => {
   });
 
   it('holds short at the near end of Runway 09 and exits at the far end', () => {
-    expect(network.holdPoint).toEqual({ x: 7, y: 21 });
-    expect(network.runwayExit).toEqual({ x: 40, y: 21 });
+    expect(network.holdPoint).toEqual({ x: 7, y: 23 });
+    expect(network.runwayExit).toEqual({ x: 40, y: 23 });
   });
 });

@@ -53,7 +53,7 @@ export const BOOSTS: ReadonlyArray<{
   { id: 'lowerCrashFines', name: 'Lower Crash Fines', perLevel: '−10% Crash Fines', maxLevel: 3 },
   { id: 'fasterFireCrews', name: 'Faster fire crews', perLevel: '−10% Runway blockage', maxLevel: 3, needs: 'fireRescueStation' },
   { id: 'startingMoney', name: 'Starting Money', perLevel: '+$15,000 at the start of a Run', maxLevel: 3 },
-  { id: 'startingHoldingBay', name: 'Starting Holding Bay', perLevel: 'Start with a second Medium Holding Bay', maxLevel: 1 },
+  { id: 'startingHoldingBay', name: 'Starting Holding Bay', perLevel: 'Start with a third, Medium Holding Bay', maxLevel: 1 },
   { id: 'largerStartingLand', name: 'Larger starting land', perLevel: 'Start with one more Land Plot', maxLevel: 1 },
   { id: 'betterStartingRadar', name: 'Better starting Radar', perLevel: '+1 starting Radar level', maxLevel: 2 },
 ];

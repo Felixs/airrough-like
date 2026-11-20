@@ -57,13 +57,13 @@ describe('Runway assignment and Holding', () => {
   });
 
   it('only starts a landing when a fitting Stand or Holding Bay is free', () => {
-    // Four terminal Stands and one Holding Bay: the sixth A320 waits in Holding for the first to leave
-    const six = ['1', '2', '3', '4', '5', '6'].map((id): ScheduledFlight => ({ id, type: 'A320', arrivalMinute: 360, fuelMinutes: 120 }));
-    const s = sim(six);
+    // One Medium Terminal Stand and one Medium Holding Bay: the third A320 waits in Holding for the first to leave
+    const three = ['1', '2', '3'].map((id): ScheduledFlight => ({ id, type: 'A320', arrivalMinute: 360, fuelMinutes: 120 }));
+    const s = sim(three);
     const firstOff = whenPhase(s, '1', 'taxiOut');
-    expect(whenPhase(s, '5', 'landing')).toBeLessThan(firstOff);
-    expect(whenPhase(s, '6', 'landing')).toBeGreaterThanOrEqual(firstOff);
-    expect(flight(runUntil(s, 24 * 60), '6').phase).toBe('departed');
+    expect(whenPhase(s, '2', 'landing')).toBeLessThan(firstOff);
+    expect(whenPhase(s, '3', 'landing')).toBeGreaterThanOrEqual(firstOff);
+    expect(flight(runUntil(s, 24 * 60), '3').phase).toBe('departed');
   });
 
   it('lets a waiting departure take the Runway after 3 minutes even with arrivals queued', () => {

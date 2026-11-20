@@ -12,17 +12,17 @@ describe('Starting Airport', () => {
     expect(runways[0]?.surface).toBe('asphalt');
   });
 
-  it('has a Terminal with Contact Stands and a Cargo Hub with two Stands', () => {
+  it('has a Terminal with 2 Small + 1 Medium Stands and a Cargo Hub with 1 Medium + 1 Small', () => {
+    expect(airport.stands.filter((s) => s.serves === 'terminal').map((s) => s.size)).toEqual(['small', 'small', 'medium']);
+    expect(airport.stands.filter((s) => s.serves === 'cargoHub').map((s) => s.size)).toEqual(['medium', 'small']);
     expect(of('terminal')).toHaveLength(1);
     expect(of('cargoHub')).toHaveLength(1);
     expect(airport.stands.filter((s) => s.serves === 'terminal').length).toBeGreaterThanOrEqual(2);
     expect(airport.stands.filter((s) => s.serves === 'cargoHub')).toHaveLength(2);
   });
 
-  it('has one Medium Holding Bay, an ATC Tower and Taxiways', () => {
-    const bays = airport.holdingBays;
-    expect(bays).toHaveLength(1);
-    expect(bays[0]?.size).toBe('medium');
+  it('has a Small and a Medium Holding Bay, an ATC Tower and Taxiways', () => {
+    expect(airport.holdingBays.map((b) => b.size)).toEqual(['small', 'medium']);
     expect(of('atcTower')).toHaveLength(1);
     expect(of('taxiway').length).toBeGreaterThan(0);
   });
