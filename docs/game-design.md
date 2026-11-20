@@ -188,13 +188,28 @@ cooldown (`simulation.ts → ACTIONS`).
   Departure Fee on takeoff (`aircraft.ts → AIRCRAFT_TYPES`). Upkeep is paid at 24:00 (`run.ts → UPKEEP`). Prices are in
   `build.ts → BUILD_COSTS` and `plan.ts → PRICES`; each extra copy of a Stand, Holding Bay or Runway costs 25% more.
 - Daily Quota: 75% of the Day's Demand in Movements, 90% on the Sunday Boss Day.
-- Plan Mode explains flights that won't come by size and Purpose: "no Stand big enough" (build a Stand of that size or
-  larger at that building) or "Stands booked up" (each Stand takes about 10 Small / 8 Medium / 6 Large arrivals a Day).
-  When even a perfect Day can't reach the Quota (two Movements per arrival, one per overnight aircraft), the Forecast
-  says so with the numbers.
+- **Plan Mode Overview** is a dashboard for the next Day, in tabs Overview · Build · Last Day (the Last Day tab shows
+  the previous Day's report, Summary and Details, again).
+  - **Money Warnings** run across the top (`plan.ts → moneyWarnings`), worst first, each with an icon, what it costs
+    in fees (Arrival + Departure Fees of the flights lost, at the typical fee of their size and Purpose), the fix and a
+    button (Buy for an upgrade, else Build): the Quota can't be met (even a perfect Day — two Movements per arrival,
+    one per overnight aircraft — falls short: red, first); flights that won't come for want of a long enough Runway,
+    a Stand big enough at their building, or because the fitting Stands are booked up (each Stand takes about
+    10 Small / 8 Medium / 6 Large arrivals a Day), per Purpose with the sizes; evening arrivals (after 20:00) that
+    divert without a fitting Lit or ILS Runway (fix: buy Lit). With none, a green line says nothing costs money.
+  - **Forecast** in sections: Quota (Daily Quota, most Movements possible), Traffic (Demand, flights coming and turned
+    away, peak hour, a Passenger / Cargo × S / M / L table), Money (expected fees, Upkeep, net, money after).
+  - **Run Calendar**, large: one button per Day with the Quota big, the Demand ("D 30"), marks for Boss Day ♛, Rush
+    Day ⇈ and each Twist's family icon (☁ ⚠ ▲), ✓ / ✗ on played Days, a legend under it; locked Weeks show 🔒.
+    Clicking a Day shows it in the **Day detail** card below (the next Day at first): Quota, Demand, result or number
+    of Twists as tiles, each Twist with family, Severity and description, and what Rush and Boss Days mean.
+  - **Upgrades** grouped Runways (Runway Surface 💡), ATC Tower (Radar 📡, Ground Radar 🛰, Weather Station 🌦,
+    Controller Training 🎧), Safety (Fire & Rescue 🚒), each with its icon, price and effect; **Suggested** keeps the
+    tips that are not about money tomorrow (Lit Runways, Radar 3, Fire & Rescue).
 - **Expected money** (Plan Mode Forecast): the fees the next Day earns if every flight that comes is handled —
   each arrival's Arrival Fee, and the Departure Fee of every aircraft that can still leave that Day (its Turnaround
-  ends before dusk, or a fitting Lit/ILS Runway works tonight; overnight aircraft count too). Upkeep is taken off for
+  ends before dusk, or a fitting Lit/ILS Runway works tonight; overnight aircraft count too). Arrivals after 20:00
+  with no fitting Lit/ILS Runway divert and earn nothing. Upkeep is taken off for
   the expected net and the money after the Day. Lost fees from Incidents, Crashes and Diversions are not included.
 - Twists (`twists.ts`, Severity 1–4 rising with the Week): Weather, Infrastructure and Traffic Surge families, shown in
   advance on the Run Calendar.

@@ -58,6 +58,10 @@ _Avoid_: Week overview, timeline, map
 The rough summary of the next Day's Schedule shown in Plan Mode (flight count, size mix, peak hours, Boss Twist).
 _Avoid_: Preview, timetable
 
+**Money Warning**:
+A Plan Mode notice of something that will lose fees (or the Run) on the next Day: an unreachable Quota, flights turned away for want of a Runway or Stands, evening arrivals diverting without lights; it says roughly how much and how to fix it.
+_Avoid_: Alert (that is a Live Day event), suggestion
+
 **Twist**:
 An announced modifier on a Day, always shown in the Forecast. Weekdays have a small chance of a Severity-1 Twist.
 _Avoid_: Event, mutator, emergency, condition
