@@ -60,3 +60,12 @@ describe('daylight', () => {
     expect(daylight(23 * 60)).toEqual({ darkness: NIGHT_DARKNESS, warmth: 0 });
   });
 });
+
+describe('Live speed', () => {
+  it('runs one game minute per real minute', async () => {
+    const { REAL_TIME, advance, createDay, parseSpeed } = await import('./clock');
+    expect(parseSpeed('live')).toBe(REAL_TIME);
+    expect(advance(createDay(), 60_000, REAL_TIME).minute).toBeCloseTo(createDay().minute + 1);
+    expect(advance(createDay(), 59_000, REAL_TIME).minute).toBe(createDay().minute + 0.75); // whole 15-second steps
+  });
+});

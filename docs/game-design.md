@@ -18,8 +18,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
 
 ## Time
 
-- A Day runs 05:00–24:00 in fixed steps of 15 in-game seconds (`clock.ts`). At 1× a Day lasts about 2.5 real minutes;
-  speeds are pause, 1×, 2×, 4×, 8×. The last speed played at (not pause) is remembered for the next Day.
+- A Day runs 05:00–24:00 in fixed steps of 15 in-game seconds (`clock.ts`). At 1× a Day lasts about 2.5 real minutes
+  (1× is 450× real time); speeds are pause, Live (real time: one game minute per real minute, for watching traffic),
+  1×, 2×, 4×, 8×. The last of 1×–8× played at is remembered for the next Day. Aircraft are drawn gliding between
+  steps, so they move smoothly even at Live speed.
 - Auto-slow (option): while any aircraft is landing or taking off, the game runs at 1×.
 - Operating hours (`simulation.ts → HOURS`): no Movements before 06:00; from 20:00 (dusk) only Lit or ILS Runways
   work; no new arrivals after 22:00; anything still airborne at 24:00 is Diverted (Curfew).
