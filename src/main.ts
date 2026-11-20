@@ -2,7 +2,7 @@ import { Application, Graphics } from 'pixi.js';
 import './style.css';
 import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
-import { advance, daylight, formatClock, isDayOver, type Speed } from './sim/clock';
+import { advance, daylight, formatClock, isDayOver, stepFraction, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
 import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, daySettled, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
@@ -68,8 +68,8 @@ async function start(): Promise<void> {
   let speedReady = false;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => {
     speed = s;
-    // Remember the last speed played at (not a pause), so the next Day starts at it.
-    if (speedReady && s !== 0 && s !== options.defaultSpeed) {
+    // Remember the last speed played at (not a pause, not Live), so the next Day starts at it.
+    if (speedReady && (s === 1 || s === 2 || s === 4 || s === 8) && s !== options.defaultSpeed) {
       options = { ...options, defaultSpeed: s };
       saveOptions(store, options);
     }
@@ -195,7 +195,7 @@ async function start(): Promise<void> {
     if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, effective));
     // Nothing left to happen today (last departure gone, the rest parked for the night): end the Day now.
     if (!ended && !sim.pendingAlert && daySettled(sim)) sim = finishDay(sim);
-    flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute));
+    flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute), performance.now(), sim.clock.minute, stepFraction(sim.clock));
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
     if (!ended && isDayOver(sim.clock)) {

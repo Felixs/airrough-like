@@ -206,7 +206,12 @@ function aircraftLights(spec: Spec, scale: number): Lights {
   return { root, nav, beacon, strobes, landing, taxi };
 }
 
+interface Pose { x: number; y: number; heading: number }
+
 interface Sprite {
+  /** Where it was drawn at the last step and where the simulation has it now; drawn between the two. */
+  from: Pose;
+  to: Pose;
   readonly root: Container;
   readonly shadow: Graphics;
   readonly body: Graphics;
@@ -227,7 +232,8 @@ function aircraftSprite(flight: Flight): Sprite {
   const root = new Container();
   root.addChild(shadow, body);
   const phaseMs = [...flight.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7);
-  return { root, shadow, body, lights: aircraftLights(spec, scale), phaseMs };
+  const at = { x: flight.position?.x ?? 0, y: flight.position?.y ?? 0, heading: flight.heading };
+  return { from: at, to: { ...at }, root, shadow, body, lights: aircraftLights(spec, scale), phaseMs };
 }
 
 const ON_RUNWAY = new Set<Flight['phase']>(['landing', 'takeoff']);
@@ -241,9 +247,16 @@ export class FlightLayer {
   readonly container = new Container();
   readonly lights = new Container();
   private readonly sprites = new Map<string, Sprite>();
+  private minute = -1;
 
-  /** `darkness` 0 (day) … ~0.6 (night) from the daylight curve; lights fade in as it gets dark. */
-  update(flights: readonly Flight[], darkness = 0, nowMs = performance.now()): void {
+  /**
+   * `darkness` 0 (day) … ~0.6 (night) from the daylight curve; lights fade in as it gets dark. `minute` and `fraction`
+   * (how far the Day is towards its next step) let aircraft glide between steps instead of jumping, which matters at
+   * slow speeds such as Live, where a step lasts 15 real seconds.
+   */
+  update(flights: readonly Flight[], darkness = 0, nowMs = performance.now(), minute = -1, fraction = 1): void {
+    const stepped = minute !== this.minute;
+    this.minute = minute;
     const present = new Set(flights.filter((f) => f.position).map((f) => f.id));
     for (const [id, s] of this.sprites) {
       if (!present.has(id)) {
@@ -263,15 +276,24 @@ export class FlightLayer {
         this.container.addChild(s.root);
         this.lights.addChild(s.lights.root);
       }
-      const rotation = (f.heading * Math.PI) / 180;
+      if (stepped) {
+        s.from = s.to;
+        s.to = { x: f.position.x, y: f.position.y, heading: f.heading };
+        // a long jump (onto a Stand, a new phase) is not a glide
+        if (Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y) > 120) s.from = { ...s.to };
+      }
+      const k = minute < 0 ? 1 : fraction;
+      const turn = ((((s.to.heading - s.from.heading) % 360) + 540) % 360) - 180;
+      const pose = { x: s.from.x + (s.to.x - s.from.x) * k, y: s.from.y + (s.to.y - s.from.y) * k, heading: s.from.heading + turn * k };
+      const rotation = (pose.heading * Math.PI) / 180;
       const alt = altitude(f);
-      s.body.position.set(f.position.x, f.position.y);
+      s.body.position.set(pose.x, pose.y);
       s.body.rotation = rotation;
-      s.shadow.position.set(f.position.x + alt, f.position.y + alt);
+      s.shadow.position.set(pose.x + alt, pose.y + alt);
       s.shadow.rotation = rotation;
       if (!this.lights.visible) continue;
       const l = s.lights;
-      l.root.position.set(f.position.x, f.position.y);
+      l.root.position.set(pose.x, pose.y);
       l.root.rotation = rotation;
       const runway = ON_RUNWAY.has(f.phase);
       const moving = runway || TAXIING.has(f.phase);

@@ -12,7 +12,7 @@ export function mountTopBar(root: HTMLElement, initial: Speed, onSpeed: (speed: 
   const buttons = [...root.querySelectorAll<HTMLButtonElement>('button[data-speed]')];
 
   const select = (speed: Speed) => {
-    for (const b of buttons) b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === speed));
+    for (const b of buttons) b.setAttribute('aria-pressed', String(parseSpeed(b.dataset.speed) === speed));
     onSpeed(speed);
   };
   for (const b of buttons) {

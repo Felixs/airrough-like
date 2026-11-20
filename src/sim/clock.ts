@@ -7,11 +7,16 @@ export const STEP_MINUTES = 0.25;
 /** At 1× the simulation runs 30 steps per real second (a Day lasts about 2.5 real minutes). */
 const STEPS_PER_REAL_SECOND = 30;
 
-export const SPEEDS = [0, 1, 2, 4, 8] as const;
+/** Real time ("Live"): one game minute per real minute. 1× is 450× real time (7.5 game minutes per real second). */
+export const REAL_TIME = 1 / (STEPS_PER_REAL_SECOND * STEP_MINUTES * 60);
+
+export const SPEEDS = [0, REAL_TIME, 1, 2, 4, 8] as const;
 export type Speed = (typeof SPEEDS)[number];
 
+/** Parses a speed button's value: "0" … "8", or "live" for real time. */
 export function parseSpeed(value: string | undefined): Speed | undefined {
   if (value === undefined || value.trim() === '') return undefined;
+  if (value.trim() === 'live') return REAL_TIME;
   const n = Number(value);
   return SPEEDS.find((s) => s === n);
 }
@@ -44,6 +49,11 @@ export function advance(day: Day, realMs: number, speed: Speed): Day {
   const stepsLeft = (DAY_END_MINUTE - day.minute) / STEP_MINUTES;
   const steps = Math.min(stepsLeft, Math.floor(total / realMsPerStep + 1e-9));
   return { minute: day.minute + steps * STEP_MINUTES, pendingRealMs: total - steps * realMsPerStep };
+}
+
+/** How far the Day is between its last step and the next (0…1), for drawing aircraft smoothly between steps. */
+export function stepFraction(day: Day): number {
+  return Math.min(1, day.pendingRealMs / (1000 / STEPS_PER_REAL_SECOND));
 }
 
 /** Night darkness the map is drawn under (0 = full daylight). */
