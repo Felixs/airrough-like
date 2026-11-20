@@ -174,7 +174,7 @@ button.day { cursor: pointer; }
 button.day:hover { background: #15211d; }
 .day.picked { outline: 2px solid var(--text); outline-offset: 1px; }
 .day .q { font-size: 18px; }
-.day .icons { font-size: 12px; min-height: 14px; color: var(--amber); letter-spacing: 2px; }
+.day .icons { font-size: 15px; min-height: 18px; color: var(--amber); letter-spacing: 2px; }
 .day.boss .icons { color: var(--red); }
 .week.head span { text-align: center; font-size: 11px; color: var(--mute); }
 .calendar h3 small { text-transform: none; letter-spacing: 0; color: var(--mute); font-weight: 400; margin-left: 6px; }
