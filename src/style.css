@@ -216,7 +216,7 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .variant svg { width: 100%; max-width: 44px; height: 30px; }
 .variant .v-name { color: var(--text); }
 .variant .cost { color: var(--mute); }
-.variant kbd { position: absolute; top: 2px; left: 3px; font-size: 11px; opacity: 0.7; }
+.variant kbd { position: absolute; top: 2px; right: 2px; z-index: 1; padding: 0 3px; border-radius: 3px; background: var(--panel); font-size: 11px; line-height: 14px; opacity: 0.85; }
 .palette .variants button.variant:disabled { opacity: 0.45; cursor: not-allowed; }
 .variant.short .cost { color: var(--red); }
 
