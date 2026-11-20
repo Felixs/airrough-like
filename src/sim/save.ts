@@ -116,15 +116,23 @@ export function loadMeta(store: KeyValueStore): MetaState {
 /** Boosts the game no longer has (Lower Crash Fines went with the fines): their Air Miles come back. */
 const RETIRED_BOOSTS = ['lowerCrashFines'];
 
+/** Unlockables the game no longer has (a second Terminal is now always buildable), with what they cost. */
+const RETIRED_UNLOCKS: Record<string, number> = { secondTerminal: 1_500 };
+
 function refundRetiredBoosts(meta: MetaState): MetaState {
   const boosts: Record<string, number> = { ...meta.boosts };
   let airMiles = meta.airMiles;
+  const unlocks = meta.unlocks.filter((u) => {
+    const refund = RETIRED_UNLOCKS[u];
+    if (refund !== undefined) airMiles += refund;
+    return refund === undefined;
+  });
   for (const id of RETIRED_BOOSTS) {
     const level = boosts[id] ?? 0;
     for (let l = 1; l <= level; l++) airMiles += BOOST_COST_PER_LEVEL * l;
     delete boosts[id];
   }
-  return { ...meta, airMiles, boosts: boosts as MetaState['boosts'] };
+  return { ...meta, airMiles, unlocks, boosts: boosts as MetaState['boosts'] };
 }
 
 /** Player options, kept between sessions. */

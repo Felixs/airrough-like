@@ -73,7 +73,7 @@ describe('Buildings', () => {
 
   it('Terminal and Cargo Hub wings must be attached to their building', () => {
     const r = rich();
-    const s = openBuild({ ...r, modifiers: { ...r.modifiers, unlocks: r.modifiers.unlocks.filter((u) => u !== 'secondTerminal') } });
+    const s = openBuild(r);
     const wing: Structure = { kind: 'terminal', x: 20, y: 0, w: 3, h: 4 }; // on top of the Terminal
     expect(checkChange(s, { kind: 'add', structure: wing })).toMatchObject({ ok: true, cost: 18_000 });
     expect(failing(checkChange(s, { kind: 'add', structure: { ...wing, x: 2, y: 14 } }))).toContain('Attached to the Terminal');
@@ -149,7 +149,7 @@ describe('Land Plots', () => {
 });
 
 describe('Main buildings', () => {
-  it('a Terminal or Cargo Hub can be built standing alone, with no Unlockable, when the airport has none', () => {
+  it('a whole Terminal or Cargo Hub can be built standing alone, with no Unlockable, any time', () => {
     const run = { ...startRun(1), money: 1_000_000 };
     let s = openBuild(run);
     for (const st of s.layout.stands.filter((x) => x.serves === 'cargoHub' && x.placement === 'contact')) s = applyChange(s, { kind: 'remove', structure: st });
@@ -158,7 +158,10 @@ describe('Main buildings', () => {
     const fails = failing(checkChange(s, { kind: 'add', structure: hub }));
     expect(fails.some((f) => f.includes('Unlockable') || f.includes('Attached'))).toBe(false);
     expect(checkChange(s, { kind: 'add', structure: hub }).label).toBe('Cargo Hub, 28 tiles');
-    // with a Cargo Hub standing, another piece is a wing: locked and attached only
+    // a whole second Cargo Hub may stand anywhere too, with no Unlockable
+    const second = failing(checkChange(openBuild(run), { kind: 'add', structure: hub }));
+    expect(second.some((f) => f.includes('Unlockable') || f.includes('Attached'))).toBe(false);
+    // a smaller piece is a wing: locked and attached only
     const wing = checkChange(openBuild(run), { kind: 'add', structure: { kind: 'cargoHub', x: 2, y: 2, w: 3, h: 4 } });
     expect(failing(wing).some((f) => f.includes('Unlockable'))).toBe(true);
   });

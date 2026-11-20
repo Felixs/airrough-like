@@ -24,8 +24,8 @@ describe('Air Miles', () => {
 });
 
 describe('Unlockables', () => {
-  it('are bought once and cost 300 to 1,500 Air Miles', () => {
-    expect(UNLOCKABLES.length).toBeGreaterThanOrEqual(14);
+  it('are bought once and cost 300 to 1,200 Air Miles', () => {
+    expect(UNLOCKABLES.length).toBeGreaterThanOrEqual(13);
     expect(Math.min(...UNLOCKABLES.map((u) => u.cost))).toBe(300);
     let meta = rich();
     meta = buyUnlockable(meta, 'remoteStands');
