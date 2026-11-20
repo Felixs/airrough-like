@@ -422,3 +422,10 @@ button.danger { height: 36px; padding: 0 14px; border-radius: 4px; border: 1px s
   .variants { flex: 1 1 100%; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
   .palette button { flex: 1 1 110px; }
 }
+
+/* Options from inside the game */
+.options-button { height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text); font: 600 12px var(--mono); cursor: pointer; }
+.options-button:hover { border-color: var(--teal); color: var(--teal); }
+.options-dialog { z-index: 30; }
+.overlay.options-dialog .card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; display: grid; gap: 14px; }
+.options-dialog .options { display: grid; gap: 12px; font-size: 13px; }

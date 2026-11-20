@@ -8,10 +8,11 @@ import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, st
 import { acknowledgeAlert, daySettled, resolveFuel, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
+import { showOptionsDialog } from './ui/options';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
 import { MusicPlayer } from './audio/music';
-import { browserStore, clearRun, loadMeta, loadOptions, loadRun, reduceMotion, resetProgress, saveMeta, saveOptions, saveRun } from './sim/save';
+import { type Options, browserStore, clearRun, loadMeta, loadOptions, loadRun, reduceMotion, resetProgress, saveMeta, saveOptions, saveRun } from './sim/save';
 import { awardRun } from './sim/meta';
 import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
@@ -131,6 +132,7 @@ async function start(): Promise<void> {
         saveRun(store, run);
         return run;
       },
+      onOpenOptions: () => openOptions(),
       onBuilt(next) {
         run = next;
         saveRun(store, run);
@@ -188,13 +190,7 @@ async function start(): Promise<void> {
         meta = next;
         saveMeta(store, meta);
       },
-      onOptions(next) {
-        options = next;
-        saveOptions(store, options);
-        autoSlow.checked = options.autoSlow;
-        calmLights = reduceMotion(options);
-        applyMusic();
-      },
+      onOptions: (next) => applyOptions(next),
       onResetProgress() {
         resetProgress(store);
         meta = loadMeta(store);
@@ -207,6 +203,31 @@ async function start(): Promise<void> {
   // Reduce motion (Options, else the system setting), refreshed when the system setting changes
   let calmLights = reduceMotion(options);
   if (typeof matchMedia === 'function') matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => (calmLights = reduceMotion(options)));
+
+  /** Takes new Options from the Main Menu or the in-game dialog. */
+  const applyOptions = (next: Options) => {
+    options = next;
+    saveOptions(store, options);
+    autoSlow.checked = options.autoSlow;
+    calmLights = reduceMotion(options);
+    applyMusic();
+    if (!ended) sim = { ...sim, pauseOnEvents: options.eventPopups };
+  };
+  /** The Options over the game (Plan Mode or a Live Day); a running Day pauses while it is open. */
+  const openOptions = () => {
+    if (document.querySelector('.options-dialog')) return;
+    const before = speed;
+    if (!ended) topBar.setSpeed(0);
+    showOptionsDialog(document.body, options, applyOptions, () => {
+      if (!ended && before !== 0) topBar.setSpeed(before);
+    });
+  };
+  document.querySelector('#options-button')!.addEventListener('click', openOptions);
+  window.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement;
+    if ((e.key === 'o' || e.key === 'O') && !e.ctrlKey && !e.metaKey && !e.altKey && !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)
+      && !document.querySelector('.menu')) openOptions();
+  });
 
   // Live Day keys: Space pause/resume, 1–5 Live / 1× / 2× / 4× / 8×, D / M answer a low-fuel decision
   const SPEED_KEYS: Record<string, Speed> = { '1': REAL_TIME, '2': 1, '3': 2, '4': 4, '5': 8 };

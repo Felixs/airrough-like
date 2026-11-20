@@ -261,6 +261,10 @@ cooldown (`simulation.ts → ACTIONS`).
 - **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
   answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
   confirms, Ctrl Z undoes, Esc frees the cursor. Buttons name their keys; the Main Menu lists them.
+- **Options while playing:** a ⚙ Options button in the Plan Mode header and the Live Day top bar (key O) opens the
+  same Options as the Main Menu (speed, pop-ups, music, background running, reduce motion) as a dialog; a running Day
+  pauses while it is open and resumes at its speed when it closes (Esc, Close or a click outside). Reset progress
+  stays in the Main Menu.
 - **Finding an aircraft:** clicking a flight strip (Inbound, Holding or Ground) or an alert about an aircraft picks
   it: its strip is outlined in yellow (the rail opens and scrolls to it) and on the map it gets a gently pulsing yellow
   ring with a pointer above it (steady with Reduce motion). Clicking it again drops it; it is dropped by itself when

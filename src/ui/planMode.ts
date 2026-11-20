@@ -26,6 +26,8 @@ export interface PlanModeHandlers {
   /** Turns the next Day's Bonus Twist on or off; returns the updated Run. */
   onBonusTwist(on: boolean): RunState;
   onStartDay(): void;
+  /** Opens the Options dialog. */
+  onOpenOptions(): void;
 }
 
 /** Plan Mode · Overview between Days (UI baseline direction B). */
@@ -114,6 +116,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
         ${seedButton(run)}
         <span class="spacer"></span>
         <span class="money${run.inDebt ? ' debt' : ''}" title="Upkeep ${money(upkeep(run))} per Day, paid at 24:00">${money(run.money)}</span>
+        <button type="button" class="options-button" data-options aria-keyshortcuts="O" title="Options (O)">⚙ Options</button>
         <button type="button" class="start">Start Day ▶</button>
       </header>
       ${tab === 'build' ? '<div class="plan-build"></div>' : tab === 'lastDay' ? `<div class="plan-body last-day"><div class="card report report-inline">${last ? `${daySummary(run)}${daySections(run)}` : '<p>No Day played yet.</p>'}</div></div>` : `<div class="plan-body dash">
@@ -184,6 +187,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
         </section>
       </div>`}`;
 
+    el.querySelector<HTMLButtonElement>('[data-options]')!.addEventListener('click', () => handlers.onOpenOptions());
     el.querySelector<HTMLButtonElement>('.start')!.addEventListener('click', () => leaveBuild(() => {
       build?.destroy();
       el.remove();
