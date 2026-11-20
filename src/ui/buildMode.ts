@@ -4,7 +4,7 @@ import {
   applyChange, BUILD_COSTS, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
   priceOf, ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
-import { spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
+import { runwayEndZones, spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { UnlockableId } from '../sim/meta';
 import type { Tile } from '../sim/taxi';
@@ -235,6 +235,17 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     const y0 = WORLD.y0;
     for (let x = x0; x <= x0 + WORLD.width; x++) overlay.moveTo(x * T, y0 * T).lineTo(x * T, (y0 + WORLD.height) * T).stroke({ width: 0.15, color: 0x2a3a35 });
     for (let y = y0; y <= y0 + WORLD.height; y++) overlay.moveTo(x0 * T, y * T).lineTo((x0 + WORLD.width) * T, y * T).stroke({ width: 0.15, color: 0x2a3a35 });
+    // the no-build areas past each Runway end: red hatching
+    for (const z of session.layout.runways.flatMap(runwayEndZones)) {
+      overlay.rect(z.x * T, z.y * T, z.w * T, z.h * T).fill({ color: 0xff6b5e, alpha: 0.12 }).stroke({ width: 0.4, color: 0xff6b5e, alpha: 0.6 });
+      for (let d = 0; d < z.w + z.h; d += 1) {
+        const x0 = z.x + Math.min(d, z.w);
+        const y0 = z.y + Math.max(0, d - z.w);
+        const x1 = z.x + Math.max(0, d - z.h);
+        const y1 = z.y + Math.min(d, z.h);
+        overlay.moveTo(x0 * T, y0 * T).lineTo(x1 * T, y1 * T).stroke({ width: 0.3, color: 0xff6b5e, alpha: 0.45 });
+      }
+    }
     const price = nextPlotPrice(session);
     for (let px = WORLD.x0 / WORLD.plotW; px < (WORLD.x0 + WORLD.width) / WORLD.plotW; px++) {
       for (let py = WORLD.y0 / WORLD.plotH; py < (WORLD.y0 + WORLD.height) / WORLD.plotH; py++) {

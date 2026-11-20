@@ -61,7 +61,7 @@ describe('Unlockables', () => {
 
   it('Grass strip allows cheap Short Grass Runways', () => {
     const s = openBuild({ ...startRun(1, { ...emptyMeta(), unlocks: ['grassStrip'] }), money: 1e6 });
-    const grass = newRunway(s, { x: 44, y: 2 }, 'long', true, true);
+    const grass = newRunway(s, { x: 44, y: 0 }, 'long', true, true);
     expect(grass).toMatchObject({ length: 'short', surface: 'grass', h: 24 });
     expect(checkChange(s, { kind: 'add', structure: grass })).toMatchObject({ ok: true, cost: 12_000 });
   });

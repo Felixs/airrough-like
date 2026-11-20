@@ -23,7 +23,7 @@ describe('New Runways', () => {
 
   it('cost 30k / 80k / 160k, however many Runways are built', () => {
     const s = openBuild(rich());
-    const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 43, y: 2 }, 'short', true) });
+    const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 43, y: 0 }, 'short', true) });
     expect(c.ok).toBe(true);
     expect(c.cost).toBe(30_000);
     expect(c.upkeep).toBe(300);
@@ -57,7 +57,7 @@ describe('New Runways', () => {
 describe('Runway connectors', () => {
   it('a Taxiway may end against a Runway side', () => {
     let s = openBuild(rich());
-    s = addPending(s, newRunway(s, { x: 44, y: 2 }, 'short', true));
+    s = addPending(s, newRunway(s, { x: 44, y: 0 }, 'short', true));
     // from the east end of the parallel Taxiway (x 41) to the new Runway's side (x 44)
     expect(checkChange(s, { kind: 'add', structure: taxiwayFromDrag({ x: 42, y: 19 }, { x: 43, y: 19 }) }).ok).toBe(true);
   });
@@ -167,10 +167,24 @@ describe('Main buildings', () => {
 describe('Grass strips', () => {
   it('cannot be lengthened (they would turn into a free Medium Runway)', () => {
     let s = openBuild(rich());
-    const grass = newRunway(s, { x: 44, y: 2 }, 'short', true, true);
+    const grass = newRunway(s, { x: 44, y: 0 }, 'short', true, true);
     s = applyChange(s, { kind: 'buyPlot', plot: { px: 3, py: 0 } });
     s = applyChange(s, { kind: 'add', structure: grass });
     const longer = lengthened(grass)!;
     expect(failing(checkChange(s, { kind: 'replace', from: grass, to: longer }))).toContain('Grass strips can’t be lengthened: build a paved Runway');
+  });
+});
+
+describe('Runway end zones', () => {
+  it('nothing may be built in the 4 tiles past a Runway end; a new Runway needs its own ends clear', () => {
+    const s = openBuild(rich());
+    // the starting Runway runs x 6–41 on rows 24–27: x 42–45 there is its east end zone
+    const inZone = taxiwayFromDrag({ x: 43, y: 24 }, { x: 43, y: 27 });
+    expect(failing(checkChange(s, { kind: 'add', structure: inZone }))).toContain('Clear of the Runway ends (4 tiles)');
+    const pastZone = newBuilding(s, { x: 46, y: 24 }, 'rampAgentStation');
+    expect(failing(checkChange(s, { kind: 'add', structure: pastZone }))).not.toContain('Clear of the Runway ends (4 tiles)');
+    // a vertical Runway whose south end zone would cover the parallel Taxiway
+    const blocked = newRunway(s, { x: 30, y: -10 }, 'short', true);
+    expect(failing(checkChange(s, { kind: 'add', structure: blocked }))).toContain('Nothing built past its ends (4 tiles)');
   });
 });

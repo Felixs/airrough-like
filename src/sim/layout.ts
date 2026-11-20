@@ -209,3 +209,14 @@ export function runwayNames(layout: AirportLayout): RunwayName[] {
   }
   return names;
 }
+
+/** Tiles past each end of a Runway, its full width, where nothing may be built (approach and departure areas). */
+export const RUNWAY_END_CLEAR_TILES = 4;
+
+/** The two no-build areas beyond a Runway's ends; they may reach into land not bought yet. */
+export function runwayEndZones(r: TileRect): TileRect[] {
+  const n = RUNWAY_END_CLEAR_TILES;
+  return r.w >= r.h
+    ? [{ x: r.x - n, y: r.y, w: n, h: r.h }, { x: r.x + r.w, y: r.y, w: n, h: r.h }]
+    : [{ x: r.x, y: r.y - n, w: r.w, h: n }, { x: r.x, y: r.y + r.h, w: r.w, h: n }];
+}

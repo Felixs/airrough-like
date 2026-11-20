@@ -2,7 +2,7 @@
  * Build Mode: a session of pending placements on top of the Run's layout, validated with a checks list,
  * paid for and applied on Confirm. The simulation routes on the new layout from the next Day.
  */
-import { airportSurface, createLayout, sharesEdge, spotEntry, WORLD, type Facing, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
+import { airportSurface, createLayout, runwayEndZones, sharesEdge, spotEntry, WORLD, type Facing, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
 import { UPKEEP, type LandPlot, type RunState } from './run';
 import { AIRCRAFT_TYPES, sizeRank } from './aircraft';
 import { unlockableName, type UnlockableId } from './meta';
@@ -315,6 +315,9 @@ function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure, 
     default:
       items.push({ label: 'Clear of other structures', ok: clearOfAll });
   }
+  // nothing in the 4 tiles past a Runway's ends, and a new Runway needs its own ends clear
+  items.push({ label: 'Clear of the Runway ends (4 tiles)', ok: !layout.runways.some((r) => r !== s && runwayEndZones(r).some((z) => overlaps(z, s))) });
+  if (s.kind === 'runway') items.push({ label: 'Nothing built past its ends (4 tiles)', ok: !layout.structures.some((o) => o !== s && runwayEndZones(s).some((z) => overlaps(z, o))) });
   items.push({ label: 'Inside owned land', ok: tilesOf(s).every((t) => ownsTile(session, t)) });
   return items;
 }
