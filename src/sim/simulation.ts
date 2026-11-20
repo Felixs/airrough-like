@@ -766,7 +766,8 @@ function incident(sim: MutableSim, f: Flight, now: number, kind: 'incident' | 't
 
 /** More aircraft taxiing at once means more chance two of them meet; the Incident stops one of them. */
 function rollTaxiIncident(sim: MutableSim, flights: Mutable<Flight>[], now: number, rng: Random): void {
-  const taxiing = flights.filter((f) => (f.phase === 'taxiIn' || f.phase === 'taxiOut') && f.stoppedUntil <= now);
+  // only aircraft on the move can run into trouble: ones standing in a queue (waiting in line) don't count
+  const taxiing = flights.filter((f) => (f.phase === 'taxiIn' || f.phase === 'taxiOut') && f.stoppedUntil <= now && f.waitingSince === undefined);
   if (rng.next() >= taxiIncidentChance(taxiing.length, sim.groundRadarLevel)) return;
   const f = rng.pick(taxiing);
   f.stoppedUntil = incident(sim, f, now, 'taxiIncident');
