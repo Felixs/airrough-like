@@ -2,7 +2,7 @@ import { Application, Graphics } from 'pixi.js';
 import './style.css';
 import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
-import { advance, daylight, formatClock, isDayOver, stepFraction, type Speed } from './sim/clock';
+import { advance, daylight, formatClock, isDayOver, REAL_TIME, stepFraction, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
 import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, daySettled, resolveFuel, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
@@ -10,7 +10,7 @@ import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
-import { browserStore, clearRun, loadMeta, loadOptions, loadRun, resetProgress, saveMeta, saveOptions, saveRun } from './sim/save';
+import { browserStore, clearRun, loadMeta, loadOptions, loadRun, reduceMotion, resetProgress, saveMeta, saveOptions, saveRun } from './sim/save';
 import { awardRun } from './sim/meta';
 import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
@@ -65,9 +65,11 @@ async function start(): Promise<void> {
   app.renderer.on('resize', fit);
 
   let speed: Speed = 1;
+  let lastRunning: Speed = 1; // what Space resumes to
   let speedReady = false;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => {
     speed = s;
+    if (s !== 0) lastRunning = s;
     // Remember the last speed played at (not a pause, not Live), so the next Day starts at it.
     if (speedReady && (s === 1 || s === 2 || s === 4 || s === 8) && s !== options.defaultSpeed) {
       options = { ...options, defaultSpeed: s };
@@ -180,6 +182,7 @@ async function start(): Promise<void> {
         options = next;
         saveOptions(store, options);
         autoSlow.checked = options.autoSlow;
+        calmLights = reduceMotion(options);
       },
       onResetProgress() {
         resetProgress(store);
@@ -190,6 +193,28 @@ async function start(): Promise<void> {
   };
   openMenu();
 
+  // Reduce motion (Options, else the system setting), refreshed when the system setting changes
+  let calmLights = reduceMotion(options);
+  if (typeof matchMedia === 'function') matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => (calmLights = reduceMotion(options)));
+
+  // Live Day keys: Space pause/resume, 1–5 Live / 1× / 2× / 4× / 8×, D / M answer a low-fuel decision
+  const SPEED_KEYS: Record<string, Speed> = { '1': REAL_TIME, '2': 1, '3': 2, '4': 4, '5': 8 };
+  window.addEventListener('keydown', (e) => {
+    if (ended || e.ctrlKey || e.metaKey || e.altKey) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('input, select, textarea')) return;
+    const key = e.key.toLowerCase();
+    if (sim.pendingAlert?.kind === 'fuel' && (key === 'd' || key === 'm')) {
+      e.preventDefault();
+      sim = resolveFuel(sim, key === 'd' ? 'divert' : 'mayday');
+    } else if (e.key === ' ' && !target.closest('button')) {
+      e.preventDefault();
+      topBar.setSpeed(speed === 0 ? lastRunning : 0);
+    } else if (SPEED_KEYS[e.key] !== undefined) {
+      topBar.setSpeed(SPEED_KEYS[e.key]!);
+    }
+  });
+
   app.ticker.add((ticker) => {
     // Auto-slow: watch landings and takeoffs at 1×, rush through the quiet minutes.
     const moving = sim.flights.some((f) => f.phase === 'landing' || f.phase === 'takeoff');
@@ -198,6 +223,7 @@ async function start(): Promise<void> {
     if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, effective));
     // Nothing left to happen today (last departure gone, the rest parked for the night): end the Day now.
     if (!ended && !sim.pendingAlert && daySettled(sim)) sim = finishDay(sim);
+    flightLayer.calm = calmLights;
     flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute), performance.now(), sim.clock.minute, stepFraction(sim.clock));
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);

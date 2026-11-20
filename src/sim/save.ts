@@ -121,6 +121,14 @@ export interface Options {
   readonly autoSlow: boolean;
   /** Pause with an info pop-up on Incidents, Crashes and Diversions. */
   readonly eventPopups: boolean;
+  /** Steady instead of flashing aircraft lights; unset follows the system's reduced-motion setting. */
+  readonly reduceMotion?: boolean;
+}
+
+/** Whether to reduce motion: the Player's choice, else the system setting. */
+export function reduceMotion(options: Options): boolean {
+  if (options.reduceMotion !== undefined) return options.reduceMotion;
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 export const DEFAULT_OPTIONS: Options = { defaultSpeed: 1, autoSlow: true, eventPopups: true };

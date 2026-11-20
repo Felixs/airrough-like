@@ -169,7 +169,7 @@ A permanent bonus bought with Air Miles in levels, applied from the next Run: st
 _Avoid_: Upgrade (that is a Plan Mode purchase), perk, buff, Starting Perk
 
 **Main Menu**:
-The screen the game opens on and returns to after a Run: Continue (when a Run is saved), New Run, Unlockables & Boosts, Options, About (with How to play).
+The screen the game opens on and returns to after a Run: Continue (when a Run is saved), New Run, the career summary and controls, Unlockables & Boosts, Options, About (with How to play).
 _Avoid_: Title screen, home
 
 **Money**:

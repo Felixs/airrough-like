@@ -187,3 +187,21 @@ cooldown (`simulation.ts → ACTIONS`).
   navigation lights and a white tail light whenever not parked on a Stand; a flashing red beacon while moving; white
   strobes double-flashing and a landing-light beam on the Runway; a short taxi-light beam while taxiing.
 - Aircraft in Holding are not drawn; they appear only in the flight strips.
+
+## Controls and accessibility
+
+- **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
+  answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, Enter confirms, Ctrl Z undoes,
+  Esc cancels. Buttons name their keys; the Main Menu lists them.
+- **Never colour alone:** Stands and Holding Bays in the side panel say their state in words and a symbol (○ free,
+  ◐ due with the arriving callsign, ● with the parked callsign); played Days on the Run Calendar carry ✓ or ✗;
+  alerts start with what happened (CRASH, MAYDAY, …).
+- **Text** is at least 11 px; the palette keeps every text colour at 6:1 contrast or better on the dark panels.
+- **Screen sizes:** below 1200 px wide the side panels narrow and the top bar wraps; below 900 px the Live Day stacks
+  (map on top, flight strips and Tower panel below), Plan Mode becomes one column and Build Mode puts its tools above
+  the map.
+- **Reduce motion** (Options; follows the system setting until changed): aircraft beacons glow steadily and strobes
+  stay off instead of flashing.
+- **Unlockables & Boosts:** items that need more Air Miles are dimmed with their price in red; one line above the lists
+  says how many Air Miles the Player has. The Main Menu's Play tab also shows the career (Runs played, Air Miles,
+  Unlockables and Boost levels owned, the cheapest next item) and the controls.
