@@ -78,18 +78,22 @@ Screen, which turns Score into Air Miles for the meta-progression.
 ## Runways, wind and direction
 
 - Lengths Short / Medium / Long are 24 / 36 / 48 tiles (`BUILD_COSTS.runwayTiles`); a Runway fits aircraft up to
-  Small / Medium / Large. Surfaces: Grass (Small only, daylight), Asphalt, Lit (night operations), ILS (bad-weather
-  landings, fewer Pilot Errors).
+  Small / Medium / Large. A Runway can be lengthened one class at a time for the price difference, on either end:
+  clicking its west (north) half grows it that way, its east (south) half the other way; the far end stays put. Surfaces: Grass (Small only, daylight), Asphalt, Lit (night operations), ILS (bad-weather
+  landings, fewer Pilot Errors). The Runway Surface is an airport-wide upgrade: buying the next level (Asphalt → Lit → ILS)
+  upgrades every Runway, and a new Runway is built with the airport's surface. Grass strips (an Unlockable) stay Grass.
 - **Wind** (`wind.ts`) is random per Day, sampled every 30 minutes and drifting slowly; the Wind Shift Twist turns it
   round. Each Runway lands and takes off into the wind: once the tailwind for its current direction exceeds 5 kt it
   changes direction, and no Movements use it for a 5-minute changeover.
 - **Runway Exits**: smaller aircraft need less Runway (`taxi.ts → ROLL_TILES`: 12 / 30 / 44 tiles). A landing aircraft
   leaves at the first connector past its roll distance, measured from the threshold in use. Departures hold short at
   the first connector of the active direction.
-- **Clear exit before landing:** the Tower only clears a landing when the aircraft's way off the Runway is clear: the
-  first 6 tiles of its taxi route from the exit hold no aircraft that is stopped, holding or waiting in line, and no
-  Incident closes its way to the Stand without a way round. Otherwise the arrival stays in Holding and the Runway goes
-  to waiting departures. If the exit gets blocked while an aircraft is on final, it goes around.
+- **Clear exit before landing:** a landing aircraft can take any connector past its landing roll, in the order it
+  reaches them; it takes the first that is clear and rolls on past blocked ones. An exit is clear when the first 6
+  tiles of the taxi route from it hold no aircraft that is stopped, holding short or waiting in line, no departure is
+  on its way to hold short there, and no Incident closes the way to the Stand without a way round. The Tower only
+  clears a landing when some exit is clear; otherwise the arrival stays in Holding and the Runway goes to waiting
+  departures. If every exit gets blocked while an aircraft is on final, it goes around.
 
 ## Flights and ATC
 

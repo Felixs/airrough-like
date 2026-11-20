@@ -191,3 +191,22 @@ describe('Stand choice', () => {
     expect(second).not.toBeNull();
   });
 });
+
+describe('A Runway lengthened to the west', () => {
+  it('keeps landing: an arrival rolls past a departure holding short at its first exit instead of going around', async () => {
+    const { createLayout } = await import('./layout');
+    const { lengthened } = await import('./build');
+    const r = layout.runways[0]!;
+    const longer = createLayout(layout.width, layout.height, layout.structures.map((s) => (s === r ? lengthened(r, 'start')! : s)));
+    const schedule = Array.from({ length: 10 }, (_, k) => ({ id: `F${k}`, type: (k % 2 ? 'A320' : 'C208') as 'A320' | 'C208', arrivalMinute: 6 * 60 + k * 5 }));
+    for (const seed of [1, 2, 3]) {
+      let sim: Simulation = createSimulation({ layout: longer, schedule, seed, wind: { seed } });
+      while (sim.clock.minute < 9 * 60) {
+        sim = stepSimulation(sim);
+        if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+      }
+      expect(sim.landings).toBeGreaterThanOrEqual(10);
+      expect(sim.events.filter((e) => e.kind === 'crash' || e.kind === 'diversion')).toEqual([]);
+    }
+  });
+});

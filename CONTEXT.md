@@ -205,7 +205,7 @@ Short, Medium or Long; a Runway serves its matching Size Class and every smaller
 _Avoid_: Runway size, runway class
 
 **Runway Surface**:
-The upgrade tier of a Runway: Grass (Small only, daylight only), Asphalt (daylight, clear weather), Lit (adds night operations), ILS (adds bad-weather landings and lowers pilot-error chance).
+The upgrade tier of the airport's Runways: Grass (Small only, daylight only), Asphalt (daylight, clear weather), Lit (adds night operations), ILS (adds bad-weather landings and lowers pilot-error chance). Bought once for the whole airport; new Runways get it too, except Grass strips.
 _Avoid_: Runway type, runway level
 
 **Taxiway**:

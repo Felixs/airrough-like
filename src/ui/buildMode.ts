@@ -4,7 +4,7 @@ import {
   applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
   ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
-import { spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
+import { airportSurface, spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { UnlockableId } from '../sim/meta';
 import type { Tile } from '../sim/taxi';
@@ -22,7 +22,7 @@ const HINT: Record<Tool, string> = {
   taxiway: 'Drag on the map to draw a Taxiway.',
   stand: 'Click to place a Stand (top-left at the cursor).',
   holdingBay: 'Click to place a Holding Bay (top-left at the cursor).',
-  runway: 'Click to place a new Runway, or pick “Lengthen” and click a Runway.',
+  runway: 'Click to place a new Runway, or pick “Lengthen” and click the end of a Runway to grow it on that side.',
   building: 'Click to place a building (top-left at the cursor).',
   land: 'Click a dimmed Land Plot next to your land to buy it.',
   move: 'Click a building, Holding Bay or Remote Stand, then click where it should go. Free.',
@@ -44,6 +44,9 @@ export interface BuildModeView {
   confirm(): boolean;
   destroy(): void;
 }
+
+/** The paved surface new Runways get, named after the airport's Runway Surface upgrade. */
+const PAVED_NAME: Partial<Record<string, string>> = { asphalt: 'Asphalt', lit: 'Lit (bought)', ils: 'ILS (bought)' };
 
 /** Plan Mode · Build: the airfield on its tile grid with a tool palette, placement ghost, checks and pending list. */
 export async function mountBuildMode(root: HTMLElement, run: RunState, handlers: BuildModeHandlers): Promise<BuildModeView> {
@@ -72,7 +75,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
           ${select('Action', [['new', 'New Runway'], ['lengthen', 'Lengthen']], 'new', ['runway'])}
           ${select('Length', [['short', 'Short (24)'], ['medium', 'Medium (36)'], ['long', 'Long (48)']], 'medium', ['runway'])}
           ${select('Orientation', [['horizontal', '09-27 (horizontal)'], ['vertical', '18-36 (vertical)']], 'horizontal', ['runway'])}
-          ${select('Surface', [['asphalt', 'Asphalt'], ['grass', lock('grassStrip', 'Grass strip (Short)')]], 'asphalt', ['runway'])}
+          ${select('Surface', [['asphalt', PAVED_NAME[airportSurface(run.layout)] ?? 'Asphalt'], ['grass', lock('grassStrip', 'Grass strip (Short)')]], 'asphalt', ['runway'])}
           ${select('Building', [
             ['terminalWing', lock('terminalWing', 'Terminal wing')], ['cargoWing', lock('cargoWing', 'Cargo Hub wing')],
             ...(['rampAgentStation', 'adminOffice', 'airlineOffice', 'fireRescueStation', 'fuelFarm', 'deIcingPad'] as const).map((r): [string, string] => [r, lock(r, ROLE_NAME[r])]),
@@ -210,7 +213,10 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         if (opt.runwayAction === 'lengthen') {
           const r = structureAt(session.layout, t);
           if (r?.kind !== 'runway') return null;
-          const longer = lengthened(r);
+          // grow on the side that was clicked: the west/north half lengthens it that way, the east/south half the other
+          const horizontal = r.w >= r.h;
+          const startSide = horizontal ? t.x < r.x + r.w / 2 : t.y < r.y + r.h / 2;
+          const longer = lengthened(r, startSide ? 'start' : 'end');
           return longer ? { change: { kind: 'replace', from: r, to: longer }, rects: [longer] } : null;
         }
         const s = newRunway(session, t, opt.length, opt.orientation === 'vertical', opt.surface === 'grass');

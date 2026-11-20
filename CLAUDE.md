@@ -4,12 +4,17 @@
 - `docs/game-design.md` is the spec of the game as built.
 - Game logic lives in `src/sim/` (pure TypeScript, unit-tested); `src/render/` and `src/ui/` only draw it.
 
-## Keep the README screenshots up to date
+## README screenshots
 
-Every change that touches the UI (anything under `src/ui/`, `src/render/`, `index.html` or the styles) must leave the README
-screenshots current. The [Screenshots workflow](.github/workflows/screenshots.yml) regenerates `docs/screenshots/*.png`
-on every push that changes `src/` and commits them to the same branch; check its run before merging. If a screen is
-added, renamed or its flow changes, update `scripts/screenshots.mjs` and the table in `README.md` in the same change.
+The [Screenshots workflow](.github/workflows/screenshots.yml) is manual (Actions → Screenshots → Run workflow on a
+branch); it regenerates `docs/screenshots/*.png` and commits them to that branch. Nothing waits on it. Keep it working:
+if a screen is added, renamed or its flow changes, update `scripts/screenshots.mjs` and the table in `README.md` in
+the same change.
+
+## Tests
+
+Locally, run the tests for the area you changed (plus a typecheck). CI runs the full suite on every PR; that run is the
+gate before merging.
 
 ## Keep the design docs in step with the game
 
@@ -23,5 +28,5 @@ change makes wrong is corrected, not appended to. Docs that are also in the clau
 
 Pages (`.github/workflows/pages.yml`) deploys on every push to main. Keep `[skip ci]` out of every commit message:
 a squash merge copies all branch commit messages into the merge commit, and `[skip ci]` there skips the deploy.
-Commits pushed by a workflow (e.g. the screenshots) start no workflows, so run CI on such a branch head by hand
+Commits pushed by a workflow (e.g. a screenshots run) start no workflows, so run CI on such a branch head by hand
 (`gh api -X POST repos/Felixs/airrough-like/actions/workflows/ci.yml/dispatches -f ref=<branch>`).

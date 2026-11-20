@@ -3,12 +3,8 @@ name: Screenshots
 # Keeps the README screenshots in docs/screenshots/ up to date: plays the built game in headless
 # Chromium and commits new PNGs to the same branch when the UI changed.
 on:
-  push:
-    paths:
-      - 'src/**'
-      - 'index.html'
-      - 'scripts/screenshots.mjs'
-      - '.github/workflows/screenshots.yml'
+  # Manual only (Actions → Screenshots → Run workflow, pick a branch): screens change too often during early
+  # development to regenerate them on every push.
   workflow_dispatch:
 
 permissions:

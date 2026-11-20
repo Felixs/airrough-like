@@ -6,7 +6,7 @@ import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
 import { TILE_SIZE, parkedHeading, spotEntry, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
-import { buildTaxiNetwork, detour, exitFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type Spot, type TaxiNetwork, type Tile } from './taxi';
+import { buildTaxiNetwork, detour, exitFor, exitsFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type Spot, type TaxiNetwork, type Tile } from './taxi';
 import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type WindSetup } from './wind';
 
 /** Timings *(first guess, from the prototypes)*. */
@@ -189,6 +189,8 @@ export interface Flight extends ScheduledFlight {
   readonly pendingOutcome: LandingOutcome | TakeoffOutcome | null;
   /** Stopped on the Taxiway by an Incident until this minute. */
   readonly stoppedUntil: number;
+  /** The Runway exit a landing aircraft will take (set when it is cleared to land). */
+  readonly exitTile?: Tile | null;
   /** Since when it has been waiting in line in front of a Taxiway closed by an Incident (unset while it can move). */
   readonly waitingSince?: number;
   /** Which error caused the pending outcome. */
@@ -382,6 +384,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
       reverse: false,
       stoppedUntil: 0,
       waitingSince: undefined, // every flight has every field, so copying flights each step stays fast
+      exitTile: null,
       pendingCause: null,
       priority: false,
       rushed: false,
@@ -713,14 +716,18 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
     const departure = departures[0];
     // Only land an aircraft whose way off the Runway is clear, so a blocked exit never keeps departures waiting.
     const closed = holding.length ? taxiwayClosures(sim, flights, now) : undefined;
+    const exits = new Map<string, Tile>();
     const landable = holding.find((f) => {
       const spot = freeFittingStand(sim, f, blocked) ?? freeFittingBay(sim, f);
-      return spot && exitClear(sim, closed!, access, sim.runwayReverse[access.index] ?? false, f, spot);
+      const exit = spot ? clearExit(sim, closed!, access, sim.runwayReverse[access.index] ?? false, f, spot) : null;
+      if (exit) exits.set(f.id, exit);
+      return !!exit;
     });
     const urgent = landable && (isLowFuel(landable) || landable.priority) ? landable : undefined;
     const departureDue = departure && now - departure.phaseStart >= ATC.departureMaxWaitMinutes;
     const next = urgent ?? (departureDue ? departure : (landable ?? departure));
     if (!next) continue;
+    if (next.phase === 'holding') next.exitTile = exits.get(next.id) ?? null;
     startMovement(sim, next, access, now, blocked, rng);
   }
 }
@@ -729,21 +736,28 @@ function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, 
 const EXIT_CLEAR_TILES = 6;
 
 /**
- * Whether a landing aircraft could get off the Runway: the first tiles of its taxi route from the Runway exit are
- * not taken by an aircraft standing or waiting there, and no Incident closes its way to the Stand with no way round.
+ * The exit a landing aircraft will take: the first one past its landing roll whose way off the Runway is clear (it
+ * rolls on past a blocked one). An exit is clear when the first tiles of the taxi route from it hold no aircraft that
+ * is stopped, holding short or waiting in line, and no departure is on its way to hold short there; and no Incident
+ * closes the way to the Stand with no way round. Null when no exit is clear.
  */
-function exitClear(sim: Simulation, closed: Closures, access: RunwayAccess, reverse: boolean, f: Flight, spot: Spot): boolean {
-  let route: Tile[];
-  try {
-    route = routeToStand(sim.network, exitFor(access, reverse, AIRCRAFT_TYPES[f.type].size), spot);
-  } catch {
-    return false;
+function clearExit(sim: Simulation, closed: Closures, access: RunwayAccess, reverse: boolean, f: Flight, spot: Spot): Tile | null {
+  const holdsComing = sim.flights.filter((o) => o.phase === 'taxiOut' && o.id !== f.id).map((o) => o.route[o.route.length - 1]!).filter(Boolean);
+  for (const exit of exitsFor(access, reverse, AIRCRAFT_TYPES[f.type].size)) {
+    let route: Tile[];
+    try {
+      route = routeToStand(sim.network, exit, spot);
+    } catch {
+      continue;
+    }
+    const first = route.slice(0, EXIT_CLEAR_TILES);
+    const taken = closed.occupants.some((o) => o.id !== f.id && (o.heading === null || o.waitingSince !== undefined) && first.some((t) => near(t, o.at, o.clearance + 1)))
+      || holdsComing.some((h) => first.some((t) => near(t, h, 2)));
+    if (taken || first.some((t) => closed.incident.has(`${t.x},${t.y}`))) continue;
+    if (closed.incident.size && route.some((t) => closed.incident.has(`${t.x},${t.y}`)) && !detour(sim.network, route, 1, closed.incident)) continue;
+    return exit;
   }
-  const first = route.slice(0, EXIT_CLEAR_TILES);
-  const taken = closed.occupants.some((o) => (o.heading === null || o.waitingSince !== undefined) && first.some((t) => near(t, o.at, o.clearance + 1)));
-  if (taken || first.some((t) => closed.incident.has(`${t.x},${t.y}`))) return false;
-  if (closed.incident.size && route.some((t) => closed.incident.has(`${t.x},${t.y}`))) return !!detour(sim.network, route, 1, closed.incident);
-  return true;
+  return null;
 }
 
 function startMovement(sim: MutableSim, next: Mutable<Flight>, access: RunwayAccess, now: number, blocked: ReadonlySet<string>, rng: Random): void {
@@ -1008,9 +1022,9 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       }
       const access = accessOf(sim, f)!;
       const spot = stand ?? bayById(sim, f.bayId)!;
-      // the way off the Runway got blocked on final: go around rather than stop on the Runway
-      const blockedExit = outcome !== 'incident' && !exitClear(sim, closed, access, f.reverse, f, spot);
-      if (outcome === 'goAround' || blockedExit) {
+      // roll on to the next exit if the planned one got blocked; go around only if none is clear
+      const exit = outcome === 'incident' ? f.exitTile ?? exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size) : clearExit(sim, closed, access, f.reverse, f, spot);
+      if (outcome === 'goAround' || !exit) {
         logEvent(sim, now, 'goAround', f);
         releaseSpots(sim, f);
         f.landedSeq = 0;
@@ -1019,7 +1033,8 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       }
       if (outcome === 'incident') block(sim, f.runway, incident(sim, f, now, 'incident'));
       countMovement(sim, now);
-      f.route = routeToStand(sim.network, exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size), spot);
+      f.exitTile = exit;
+      f.route = routeToStand(sim.network, exit, spot);
       f.routeProgress = 0;
       enter('taxiIn');
       break;
@@ -1112,7 +1127,7 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
   switch (f.phase) {
     case 'landing': {
       if (!access) break;
-      const exit = exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size);
+      const exit = f.exitTile ?? exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size);
       f.position = onRunway(access, f.reverse, fromStart(access, f.reverse, exit) * share(separationOf(sim).landing));
       f.heading = landingHeading(access.vertical, f.reverse);
       break;
