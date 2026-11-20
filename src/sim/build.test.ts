@@ -19,6 +19,17 @@ describe('Drawing a Taxiway', () => {
     expect(checks.upkeep).toBe(12 * BUILD_COSTS.taxiwayUpkeepPerTile);
   });
 
+  it('may end in a dead end, as long as one end joins the network', () => {
+    const spur = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 13 });
+    expect(placementChecks(openBuild(run()), spur).ok).toBe(true);
+  });
+
+  it('merges with the Taxiway it extends instead of drawing a junction', () => {
+    let session = addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 13 }));
+    session = addPending(session, taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 15 }));
+    expect(session.layout.structures.filter((s) => s.kind === 'taxiway' && s.x === 20 && s.y === 12)).toEqual([{ kind: 'taxiway', x: 20, y: 12, w: 3, h: 4 }]);
+  });
+
   it('is valid when it connects at both ends inside owned land without crossing a Runway', () => {
     // A link between the apron taxilane (y 9–11) and Taxiway A (y 16–18)
     const link = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 });
@@ -30,9 +41,10 @@ describe('Drawing a Taxiway', () => {
   it('explains why a placement is invalid', () => {
     const session = openBuild(run());
     const reasons = (s: ReturnType<typeof taxiwayFromDrag>) => placementChecks(session, s).items.filter((c: { ok: boolean }) => !c.ok).map((c: { label: string }) => c.label);
-    expect(reasons(taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 13 }))).toContain('Connects at both ends');
+    expect(reasons(taxiwayFromDrag({ x: 21, y: 13 }, { x: 21, y: 14 }))).toContain('Connects to a Taxiway or Runway');
     expect(reasons(taxiwayFromDrag({ x: 21, y: 19 }, { x: 21, y: 27 }))).toContain('Crosses no Runway');
     expect(reasons(taxiwayFromDrag({ x: 44, y: 17 }, { x: 60, y: 17 }))).toContain('Inside owned land');
+    expect(reasons(taxiwayFromDrag({ x: -10, y: 17 }, { x: 4, y: 17 }))).toContain('Inside owned land');
     expect(reasons(taxiwayFromDrag({ x: 9, y: 4 }, { x: 9, y: 10 }))).toContain('Clear of buildings and Stands');
   });
 });
@@ -54,7 +66,7 @@ describe('Pending changes', () => {
   });
 
   it('refuses invalid placements and Confirm while in Debt or short of Money', () => {
-    expect(() => addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 13 }))).toThrow();
+    expect(() => addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 13 }, { x: 21, y: 14 }))).toThrow();
     const link = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 });
     expect(() => confirmBuild(addPending(openBuild({ ...run(), money: 1_000 }), link))).toThrow();
     expect(() => addPending(openBuild({ ...run(), money: -5, inDebt: true }), link)).toThrow();

@@ -35,7 +35,7 @@ export const PERKS: ReadonlyArray<{ readonly id: PerkId; readonly name: string; 
 ];
 
 export const MILESTONES: ReadonlyArray<{ readonly id: MilestoneId; readonly name: string; readonly unlocks: string }> = [
-  { id: 'surviveWeek1', name: 'Survive Week 1', unlocks: 'Long Runways' },
+  { id: 'surviveWeek1', name: 'Survive Week 1', unlocks: 'Fire & Rescue levels 4–5' },
   { id: 'surviveWeek2', name: 'Survive Week 2', unlocks: 'ILS Runway Surface' },
   { id: 'land100Large', name: 'Land 100 Large aircraft', unlocks: 'Tower Modules level 5' },
 ];

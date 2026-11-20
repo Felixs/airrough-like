@@ -375,14 +375,14 @@ function freeFittingStand(sim: Simulation, flight: Flight, blocked?: ReadonlySet
   const type = AIRCRAFT_TYPES[flight.type];
   const serves = type.purpose === 'passenger' ? 'terminal' : 'cargoHub';
   return sim.layout.stands
-    .filter((s) => s.serves === serves && sizeRank(s.size) >= sizeRank(type.size) && !sim.standOccupant[s.id] && !blocked?.has(s.id))
+    .filter((s) => s.serves === serves && sizeRank(s.size) >= sizeRank(type.size) && !sim.standOccupant[s.id] && !blocked?.has(s.id) && sim.network.reachableSpots.has(s.id))
     .sort((a, b) => sizeRank(a.size) - sizeRank(b.size))[0];
 }
 
 function freeFittingBay(sim: Simulation, flight: Flight): HoldingBay | undefined {
   const size = sizeRank(AIRCRAFT_TYPES[flight.type].size);
   return sim.layout.holdingBays
-    .filter((b) => sizeRank(b.size) >= size && !sim.bayOccupant[b.id])
+    .filter((b) => sizeRank(b.size) >= size && !sim.bayOccupant[b.id] && sim.network.reachableSpots.has(b.id))
     .sort((a, b) => sizeRank(a.size) - sizeRank(b.size))[0];
 }
 
@@ -484,7 +484,12 @@ const nightRunwayFor = (sim: Simulation, f: Flight) => fittingRunways(sim, f).so
 /** The Runway a departure taxis to: a fitting one, the one with the shortest queue first. */
 function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight): RunwayAccess | undefined {
   const queue = (a: RunwayAccess) => flights.filter((o) => o.runway === a.index && (o.phase === 'taxiOut' || o.phase === 'holdShort')).length;
-  return [...fittingRunways(sim, f)].sort((a, b) => queue(a) - queue(b) || a.index - b.index)[0] ?? sim.network.runways[0];
+  // only Runways whose hold point is reachable from the aircraft's Stand
+  const stand = standById(sim, f.standId);
+  const here = stand ? sim.network.component.get(`${stand.x + Math.floor(stand.w / 2)},${stand.y + stand.h}`) : undefined;
+  const reachable = (a: RunwayAccess) => here === undefined || sim.network.component.get(`${a.holdPoint.x},${a.holdPoint.y}`) === here;
+  return [...fittingRunways(sim, f)].filter(reachable).sort((a, b) => queue(a) - queue(b) || a.index - b.index)[0]
+    ?? sim.network.runways.find(reachable);
 }
 
 function divert(sim: MutableSim, f: Mutable<Flight>, now: number): void {

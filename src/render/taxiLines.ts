@@ -18,8 +18,16 @@ export function centreTiles(layout: AirportLayout): Set<string> {
   const centreOf = (t: TileRect) => ({ cx: t.x + Math.floor(t.w / 2), cy: t.y + Math.floor(t.h / 2) });
   for (const t of taxiways) {
     const { cx, cy } = centreOf(t);
-    const vertical = t.h > t.w || (t.h === t.w && layout.runways.some((r) => t.y + t.h === r.y || t.y === r.y + r.h));
-    if (t.h === t.w && !vertical) {
+    // A square piece follows whatever it joins: only above/below → vertical, only left/right → horizontal,
+    // both → a real junction. Runway connectors are vertical (or horizontal for vertical Runways).
+    const row = (yy: number) => Array.from({ length: t.w }, (_, i) => at(t.x + i, yy)).some(Boolean);
+    const col = (xx: number) => Array.from({ length: t.h }, (_, i) => at(xx, t.y + i)).some(Boolean);
+    const touchesRunwayEnd = layout.runways.some((r) => (t.y + t.h === r.y || t.y === r.y + r.h) && t.x >= r.x && t.x + t.w <= r.x + r.w);
+    const touchesRunwaySide = layout.runways.some((r) => (t.x + t.w === r.x || t.x === r.x + r.w) && t.y >= r.y && t.y + t.h <= r.y + r.h);
+    const ns = row(t.y - 1) || row(t.y + t.h) || touchesRunwayEnd;
+    const ew = col(t.x - 1) || col(t.x + t.w) || touchesRunwaySide;
+    const vertical = t.h > t.w || (t.h === t.w && ns && !ew);
+    if (t.h === t.w && ns && ew) {
       out.add(key(cx, cy));
       // squares that are not Runway connectors join every neighbour they touch
       for (const d of ['n', 's', 'e', 'w'] as Dir[]) extend(cx, cy, d);

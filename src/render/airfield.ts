@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { TILE_SIZE, type AirportLayout, type Structure } from '../sim/layout';
+import { TILE_SIZE, WORLD, type AirportLayout, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, taxiwayEdgeLights } from '../sim/markings';
 import { drawCentreLines } from './taxiLines';
 
@@ -250,21 +250,23 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
 
 /** Perimeter fence round everything built (plus a margin), with trees only outside it. */
 function drawSurroundings(g: Graphics, layout: AirportLayout): void {
-  const W = layout.width * T;
-  const H = layout.height * T;
+  const X0 = WORLD.x0 * T;
+  const Y0 = WORLD.y0 * T;
+  const W = WORLD.width * T;
+  const H = WORLD.height * T;
   // mottled grass
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let k = 0; k < 140; k++) g.circle(rnd() * W, rnd() * H, 6 + rnd() * 14).fill({ color: k % 2 ? COLOURS.grass2 : COLOURS.grass3, alpha: 0.6 });
+  for (let k = 0; k < 220; k++) g.circle(X0 + rnd() * W, Y0 + rnd() * H, 6 + rnd() * 14).fill({ color: k % 2 ? COLOURS.grass2 : COLOURS.grass3, alpha: 0.6 });
   const xs = layout.structures.flatMap((s) => [s.x, s.x + s.w]);
   const ys = layout.structures.flatMap((s) => [s.y, s.y + s.h]);
-  const fx = (Math.max(0, Math.min(...xs) - 1.5)) * T;
-  const fy = (Math.max(0, Math.min(...ys) - 1.5)) * T;
-  const fx1 = Math.min(layout.width, Math.max(...xs) + 1.5) * T;
-  const fy1 = Math.min(layout.height, Math.max(...ys) + 1.5) * T;
-  for (let k = 0; k < 220; k++) {
-    const tx = rnd() * W;
-    const ty = rnd() * H;
+  const fx = (Math.min(...xs) - 1.5) * T;
+  const fy = (Math.min(...ys) - 1.5) * T;
+  const fx1 = (Math.max(...xs) + 1.5) * T;
+  const fy1 = (Math.max(...ys) + 1.5) * T;
+  for (let k = 0; k < 420; k++) {
+    const tx = X0 + rnd() * W;
+    const ty = Y0 + rnd() * H;
     const r = 2.5 + rnd() * 2.5;
     if (tx > fx - r - 2 && tx < fx1 + r + 2 && ty > fy - r - 2 && ty < fy1 + r + 2) continue;
     g.circle(tx + 1.2, ty + 1.2, r).fill(SHADOW);
@@ -311,7 +313,7 @@ function drawTaxiMarkings(g: Graphics, layout: AirportLayout, labels: Container)
 export function drawAirfield(layout: AirportLayout): Container {
   const root = new Container();
   const ground = new Graphics();
-  ground.rect(0, 0, layout.width * T, layout.height * T).fill(COLOURS.grass);
+  ground.rect(WORLD.x0 * T, WORLD.y0 * T, WORLD.width * T, WORLD.height * T).fill(COLOURS.grass);
   drawSurroundings(ground, layout);
   const g = new Graphics();
   const labels = new Container();
@@ -325,11 +327,21 @@ export function drawAirfield(layout: AirportLayout): Container {
   return root;
 }
 
-/** Scales and centres the airfield so the whole layout fits the given screen size. */
-export function fitToScreen(airfield: Container, layout: AirportLayout, screenW: number, screenH: number): void {
-  const worldW = layout.width * T;
-  const worldH = layout.height * T;
-  const scale = Math.min(screenW / worldW, screenH / worldH);
+/** The tiles the airport covers, plus a margin (what the Live Day shows). */
+export function airportBounds(layout: AirportLayout, margin = 3): TileRect {
+  const xs = layout.structures.flatMap((s) => [s.x, s.x + s.w]);
+  const ys = layout.structures.flatMap((s) => [s.y, s.y + s.h]);
+  const x = Math.min(...xs) - margin;
+  const y = Math.min(...ys) - margin;
+  return { x, y, w: Math.max(...xs) + margin - x, h: Math.max(...ys) + margin - y };
+}
+
+/** The whole world map (what Build Mode shows). */
+export const worldBounds: TileRect = { x: WORLD.x0, y: WORLD.y0, w: WORLD.width, h: WORLD.height };
+
+/** Scales and centres the airfield so the given tile area (default: the airport) fits the screen. */
+export function fitToScreen(airfield: Container, layout: AirportLayout, screenW: number, screenH: number, area: TileRect = airportBounds(layout)): void {
+  const scale = Math.min(screenW / (area.w * T), screenH / (area.h * T));
   airfield.scale.set(scale);
-  airfield.position.set((screenW - worldW * scale) / 2, (screenH - worldH * scale) / 2);
+  airfield.position.set((screenW - area.w * T * scale) / 2 - area.x * T * scale, (screenH - area.h * T * scale) / 2 - area.y * T * scale);
 }

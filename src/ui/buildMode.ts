@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
-import { drawAirfield, fitToScreen } from '../render/airfield';
+import { drawAirfield, fitToScreen, worldBounds } from '../render/airfield';
 import {
   applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild,
   pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
@@ -93,18 +93,20 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   let airfield = drawAirfield(session.layout);
   world.addChild(airfield, overlay, plotLabels, ghost, ghostLabel);
   app.stage.addChild(world);
-  const fit = () => fitToScreen(world, session.layout, app.screen.width, app.screen.height);
+  const fit = () => fitToScreen(world, session.layout, app.screen.width, app.screen.height, worldBounds);
   fit();
   app.renderer.on('resize', fit);
 
   const drawOverlay = () => {
     overlay.clear();
     for (const l of plotLabels.removeChildren()) l.destroy();
-    for (let x = 0; x <= WORLD.width; x++) overlay.moveTo(x * T, 0).lineTo(x * T, WORLD.height * T).stroke({ width: 0.15, color: 0x2a3a35 });
-    for (let y = 0; y <= WORLD.height; y++) overlay.moveTo(0, y * T).lineTo(WORLD.width * T, y * T).stroke({ width: 0.15, color: 0x2a3a35 });
+    const x0 = WORLD.x0;
+    const y0 = WORLD.y0;
+    for (let x = x0; x <= x0 + WORLD.width; x++) overlay.moveTo(x * T, y0 * T).lineTo(x * T, (y0 + WORLD.height) * T).stroke({ width: 0.15, color: 0x2a3a35 });
+    for (let y = y0; y <= y0 + WORLD.height; y++) overlay.moveTo(x0 * T, y * T).lineTo((x0 + WORLD.width) * T, y * T).stroke({ width: 0.15, color: 0x2a3a35 });
     const price = nextPlotPrice(session);
-    for (let px = 0; px < WORLD.width / WORLD.plotW; px++) {
-      for (let py = 0; py < WORLD.height / WORLD.plotH; py++) {
+    for (let px = WORLD.x0 / WORLD.plotW; px < (WORLD.x0 + WORLD.width) / WORLD.plotW; px++) {
+      for (let py = WORLD.y0 / WORLD.plotH; py < (WORLD.y0 + WORLD.height) / WORLD.plotH; py++) {
         if (session.ownedPlots.some((p) => p.px === px && p.py === py)) continue;
         overlay.rect(px * WORLD.plotW * T, py * WORLD.plotH * T, WORLD.plotW * T, WORLD.plotH * T).fill({ color: 0x000000, alpha: 0.55 });
         const t = new Text({ text: `Land Plot · ${money(price)}`, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 4, fill: 0x8fa8a0 } });
