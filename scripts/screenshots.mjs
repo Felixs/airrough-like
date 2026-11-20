@@ -52,7 +52,14 @@ const until = async (time, limitMs) => {
     await page.waitForTimeout(150);
   }
 };
-await until('06:12', 90_000);
+// Dawn: the first aircraft moving in the dark, to show the aircraft lights
+await until('05:58', 90_000);
+await page.click('[data-speed="1"]');
+const moving = async () => page.$$eval('.strips[data-group="ground"] li .t', (els) =>
+  els.some((el) => ['Landing', 'Taxi in', 'Taxi out', 'Takeoff'].includes(el.textContent ?? '')));
+for (const start = Date.now(); !(await moving()) && (await clock()) < '06:30' && Date.now() - start < 60_000;) {
+  await page.waitForTimeout(100);
+}
 await page.click('[data-speed="0"]');
 await settle(800);
 await page.screenshot({ path: out('live-day-dawn') });
