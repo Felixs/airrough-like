@@ -297,7 +297,7 @@ Circling in the air near the airport while waiting to land (no Runway free, or n
 _Avoid_: Queue, circling, waiting
 
 **Fuel Reserve**:
-The countdown an arriving aircraft has while Holding; when it runs low the aircraft jumps to the front of the landing queue, and at zero it Crashes (or is Diverted if the Airport is Closed).
+The countdown an arriving aircraft has while Holding, different for each flight (larger aircraft on longer trips tend to have more); when it runs low the game stops for a Fuel Alert (divert or Mayday), and at zero it Crashes (or is Diverted if the Airport is Closed).
 _Avoid_: Fuel, timer
 
 **Diversion**:

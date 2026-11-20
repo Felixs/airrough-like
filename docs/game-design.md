@@ -120,7 +120,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
   order, the smallest that fits first (a bigger one only when no smaller one is free), else a free Holding Bay (also
   smallest first); if neither is free it keeps holding. Low-fuel aircraft get priority; a departure
   held short over 3 minutes goes before normal arrivals.
-- Fuel Reserves 40 / 45 / 55 min; an aircraft that runs dry while no fitting Runway is usable is Diverted.
+- **Holding fuel**: each arrival rolls the minutes it can wait in Holding (`schedule.ts → holdingFuelMinutes`): Small
+  30–50, Medium 35–55, Large 45–75 (+5 with a Fuel Farm). Real flights hold on their contingency fuel (at least 5% of
+  the trip, so long-haul aircraft can hold longer) plus extra fuel the airline loads; alternate fuel and the 30-minute
+  final reserve are what they divert on. An aircraft that runs dry while no fitting Runway is usable is Diverted.
 
 ## Safety
 

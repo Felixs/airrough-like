@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AIRCRAFT_TYPES } from './aircraft';
 import { createLayout, startingAirport, type Structure } from './layout';
-import { planDay } from './schedule';
+import { planDay, SCHEDULE_RULES } from './schedule';
 
 const airport = startingAirport();
 const MON = 0;
@@ -138,5 +138,22 @@ describe('Callsigns and the Forecast by Purpose', () => {
     const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
     expect(sum(p.passenger) + sum(p.cargo)).toBe(day.schedule.length);
     expect(p.cargo.small + p.cargo.medium + p.cargo.large).toBe(day.schedule.filter((f) => AIRCRAFT_TYPES[f.type].purpose === 'cargo').length);
+  });
+});
+
+describe('Holding fuel', () => {
+  it('differs per arrival within a range by Size Class, and Large aircraft can hold longest', async () => {
+    const { startingAirport } = await import('./layout');
+    const { AIRCRAFT_TYPES } = await import('./aircraft');
+    const plan = planDay({ layout: startingAirport(), week: 1, weekday: 2, seed: 9 });
+    const fuels = plan.schedule.filter((f) => !f.overnight).map((f) => ({ size: AIRCRAFT_TYPES[f.type].size, fuel: f.fuelMinutes! }));
+    for (const { size, fuel } of fuels) {
+      const [lo, hi] = SCHEDULE_RULES.holdingFuelMinutes[size];
+      expect(fuel).toBeGreaterThanOrEqual(lo);
+      expect(fuel).toBeLessThanOrEqual(hi);
+    }
+    expect(new Set(fuels.map((f) => f.fuel)).size).toBeGreaterThan(5); // not all the same
+    expect(SCHEDULE_RULES.holdingFuelMinutes.large[1]).toBeGreaterThan(SCHEDULE_RULES.holdingFuelMinutes.medium[1]);
+    expect(planDay({ layout: startingAirport(), week: 1, weekday: 2, seed: 9 })).toEqual(plan); // reproducible
   });
 });
