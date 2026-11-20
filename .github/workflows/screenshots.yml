@@ -4,6 +4,9 @@ name: Screenshots
 # Chromium and commits new PNGs to the same branch when the UI changed.
 on:
   push:
+    # PR branches carry fresh screenshots into main; running on main too would push commits there that every open
+    # PR then conflicts with.
+    branches-ignore: [main]
     paths:
       - 'src/**'
       - 'index.html'

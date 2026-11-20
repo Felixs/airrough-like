@@ -8,7 +8,7 @@
 
 Every change that touches the UI (anything under `src/ui/`, `src/render/`, `index.html` or the styles) must leave the README
 screenshots current. The [Screenshots workflow](.github/workflows/screenshots.yml) regenerates `docs/screenshots/*.png`
-on every push that changes `src/` and commits them to the same branch; check its run before merging. If a screen is
+on every push to a branch other than main that changes `src/`, and commits them to the same branch; check its run before merging. If a screen is
 added, renamed or its flow changes, update `scripts/screenshots.mjs` and the table in `README.md` in the same change.
 
 ## Keep the design docs in step with the game

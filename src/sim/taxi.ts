@@ -100,10 +100,19 @@ export function holdPointFor(a: RunwayAccess, reverse: boolean): Tile {
   return reverse ? a.connectors[a.connectors.length - 1]! : a.connectors[0]!;
 }
 
+/**
+ * The exits a landing aircraft of this Size Class can take, in the order it reaches them: every connector past its
+ * landing roll (or only the last one when none is). If the first is blocked it rolls on to the next.
+ */
+export function exitsFor(a: RunwayAccess, reverse: boolean, size: keyof typeof ROLL_TILES): Tile[] {
+  const ordered = [...a.connectors].sort((p, q) => fromThreshold(a, reverse, p) - fromThreshold(a, reverse, q));
+  const past = ordered.filter((t) => fromThreshold(a, reverse, t) >= ROLL_TILES[size]);
+  return past.length ? past : [ordered[ordered.length - 1]!];
+}
+
 /** The first exit a landing aircraft of this Size Class can reach after its landing roll (or the last one). */
 export function exitFor(a: RunwayAccess, reverse: boolean, size: keyof typeof ROLL_TILES): Tile {
-  const ordered = [...a.connectors].sort((p, q) => fromThreshold(a, reverse, p) - fromThreshold(a, reverse, q));
-  return ordered.find((t) => fromThreshold(a, reverse, t) >= ROLL_TILES[size]) ?? ordered[ordered.length - 1]!;
+  return exitsFor(a, reverse, size)[0]!;
 }
 
 export interface TaxiNetwork {
