@@ -12,7 +12,15 @@ import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type
 
 /** Timings *(first guess, from the prototypes)*. */
 export const TIMINGS = {
+  /** Straight-line taxi speed of Small and Medium aircraft. */
   taxiTilesPerMinute: 6,
+  /** Taxi speed by Size Class on straight Taxiway (wide-bodies taxi a little slower). */
+  taxiSpeedFactor: { small: 1, medium: 1, large: 0.85 },
+  /**
+   * A tile where the route turns costs this many tiles' worth of time: everyone slows down for a turn (real airliners
+   * taxi at ~20 kt straight and ~10 kt in turns), the larger the aircraft the more.
+   */
+  turnTileCost: { small: 1.3, medium: 1.6, large: 2 },
   turnaroundMinutes: { small: 25, medium: 40, large: 60 },
   remoteStandFactor: 1.5,
   /** Arrival Fee is paid when unloading finishes, this far into the Turnaround. */
@@ -1128,7 +1136,9 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
     case 'taxiIn':
     case 'taxiOut': {
       if (now < f.stoppedUntil) break;
-      f.routeProgress = taxiAhead(sim, f, now, closed, Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * sim.taxiSpeedFactor * STEP_MINUTES));
+      const size = AIRCRAFT_TYPES[f.type].size;
+      const budget = TIMINGS.taxiTilesPerMinute * TIMINGS.taxiSpeedFactor[size] * sim.taxiSpeedFactor * STEP_MINUTES;
+      f.routeProgress = taxiAhead(sim, f, now, closed, advanceAlong(f.route, f.routeProgress, budget, TIMINGS.turnTileCost[size]));
       if (f.routeProgress < f.route.length - 1) break;
       if (f.phase === 'taxiOut') {
         // the Runway may have turned round while it was taxiing: carry on to the new hold point
@@ -1223,6 +1233,29 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       break;
   }
   return f;
+}
+
+/**
+ * How far along a route an aircraft gets with `budget` tiles' worth of taxiing from `progress`: each tile where the
+ * route turns costs `turnCost` instead of 1, so aircraft slow down through turns.
+ */
+export function advanceAlong(route: readonly Tile[], progress: number, budget: number, turnCost: number): number {
+  const last = route.length - 1;
+  let at = progress;
+  let left = budget;
+  while (left > 1e-9 && at < last) {
+    const i = Math.floor(at);
+    const a = route[i - 1];
+    const b = route[i]!;
+    const c = route[i + 1]!;
+    // the tile being crossed is a turn when the way in and the way out differ
+    const turning = !!a && (b.x - a.x !== c.x - b.x || b.y - a.y !== c.y - b.y);
+    const cost = turning ? turnCost : 1;
+    const step = Math.min(i + 1 - at, left / cost);
+    at += step;
+    left -= step * cost;
+  }
+  return Math.min(at, last);
 }
 
 /** Approach before the threshold, in world units (drawn descending onto the Runway). */
