@@ -130,3 +130,20 @@ export function buyPerk(meta: MetaState, id: PerkId): MetaState {
   if (!item.available) throw new Error(item.reason ?? 'Not available');
   return { ...meta, airMiles: meta.airMiles - item.cost, perks: [...meta.perks, id] };
 }
+
+/** Milestones this Run has reached that the Player doesn't own yet (they unlock from the next Run). */
+export function newMilestones(meta: MetaState, run: RunState): MilestoneId[] {
+  const before = new Set(meta.milestones);
+  return awardRun(meta, run).milestones.filter((m) => !before.has(m));
+}
+
+/** Progress towards Milestones not reached yet, e.g. "Land 100 Large aircraft: 37 / 100". */
+export function milestoneProgress(meta: MetaState, run: RunState): Array<{ id: MilestoneId; text: string }> {
+  const owned = new Set(awardRun(meta, run).milestones);
+  const large = meta.lifetime.largeLandings + run.stats.largeLandings;
+  const out: Array<{ id: MilestoneId; text: string }> = [];
+  if (!owned.has('surviveWeek1')) out.push({ id: 'surviveWeek1', text: `Survive Week 1: ${run.stats.daysSurvived} / 7 Days` });
+  if (!owned.has('surviveWeek2')) out.push({ id: 'surviveWeek2', text: `Survive Week 2: ${run.stats.daysSurvived} / 14 Days` });
+  if (!owned.has('land100Large')) out.push({ id: 'land100Large', text: `Land 100 Large aircraft: ${large} / 100` });
+  return out;
+}

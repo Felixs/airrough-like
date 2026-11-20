@@ -8,7 +8,7 @@ import { planDay, type DayPlan } from './schedule';
 import { simulationEffects, twistsFor, type Twist } from './twists';
 import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
 import { AIRCRAFT_TYPES } from './aircraft';
-import { acknowledgeAlert, carryOver, createSimulation, daySettled, finishDay, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
+import { acknowledgeAlert, type DiversionReason, carryOver, createSimulation, daySettled, finishDay, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
   readonly px: number;
@@ -47,6 +47,23 @@ export interface DayReport {
   readonly diversions: number;
   readonly quotaMet: boolean;
   readonly moneyAfter: number;
+  /** Fees minus Upkeep, Crash Fines and Incident costs. */
+  readonly net: number;
+  /** Aircraft that landed today, by Purpose. */
+  readonly landed: { readonly passenger: number; readonly cargo: number };
+  readonly diversionsByReason: Readonly<Record<DiversionReason, number>>;
+  /** Hour with the most Movements. */
+  readonly busiestHour: number;
+  /** Crashes and Incidents, in order. */
+  readonly highlights: readonly DayHighlight[];
+}
+
+export interface DayHighlight {
+  readonly minute: number;
+  readonly kind: 'crash' | 'incident' | 'taxiIncident';
+  readonly callsign: string;
+  readonly aircraft: string;
+  readonly cost: number;
 }
 
 export type RunStatus = 'planning' | 'lost' | 'won';
@@ -217,9 +234,20 @@ export function endDay(run: RunState, sim: Simulation): RunState {
   const cost = upkeep(run);
   const penalties = sim.events.reduce((n, e) => n + e.cost, 0);
   const money = sim.money - cost;
+  const byId = new Map(sim.flights.map((f) => [f.id, f]));
+  const diversionsByReason: Record<DiversionReason, number> = { curfew: 0, dark: 0, noRunway: 0, manual: 0 };
+  for (const e of sim.events) if (e.kind === 'diversion') diversionsByReason[e.reason ?? 'noRunway']++;
+  const landed = { passenger: 0, cargo: 0 };
+  for (const f of sim.flights) {
+    if (f.landedSeq > 0 && !['holding', 'landing', 'crashed', 'diverted'].includes(f.phase)) landed[AIRCRAFT_TYPES[f.type].purpose]++;
+  }
+  const highlights: DayHighlight[] = sim.events
+    .filter((e): e is typeof e & { kind: DayHighlight['kind'] } => e.kind === 'crash' || e.kind === 'incident' || e.kind === 'taxiIncident')
+    .map((e) => ({ minute: e.minute, kind: e.kind, callsign: byId.get(e.flightId)?.callsign ?? e.flightId, aircraft: byId.get(e.flightId)?.type ?? '', cost: e.cost }));
   const report: DayReport = {
     week: run.week, weekday: run.weekday, quota, movements: sim.movements, fees: sim.fees, upkeep: cost, penalties,
-    crashes: sim.crashes, diversions: sim.diversions, quotaMet, moneyAfter: money,
+    crashes: sim.crashes, diversions: sim.diversions, quotaMet, moneyAfter: money, net: sim.fees - cost - penalties,
+    landed, diversionsByReason, busiestHour: sim.movementsByHour.indexOf(Math.max(...sim.movementsByHour)), highlights,
   };
   const won = quotaMet && !run.endless && endOfWeek && run.week === WEEKS_TO_WIN;
   return {

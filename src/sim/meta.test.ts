@@ -101,3 +101,13 @@ describe('Starting Perks', () => {
     expect(run.towerModules.radar).toBe(2);
   });
 });
+
+describe('Milestones in the Day report', () => {
+  it('show which were just reached and how far the others are', async () => {
+    const { newMilestones, milestoneProgress } = await import('./meta');
+    const run = ended({ daysSurvived: 7, largeLandings: 12 });
+    expect(newMilestones(emptyMeta(), run)).toEqual(['surviveWeek1']);
+    expect(newMilestones({ ...emptyMeta(), milestones: ['surviveWeek1'] }, run)).toEqual([]);
+    expect(milestoneProgress(emptyMeta(), run).map((p) => p.text)).toEqual(['Survive Week 2: 7 / 14 Days', 'Land 100 Large aircraft: 12 / 100']);
+  });
+});

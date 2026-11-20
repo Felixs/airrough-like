@@ -237,3 +237,20 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 
 .auto-slow { display: flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 11px; color: var(--mute); cursor: pointer; }
 .speed.slowed .auto-slow { color: var(--amber); }
+
+/* Day report */
+.report { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+.report h2 .ok, .report .ok { color: var(--green); }
+.report h2 .bad, .report .bad { color: var(--red); }
+.report .warn { color: var(--amber); }
+.report-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.report section { margin-top: 10px; }
+.report dl { margin: 0 0 8px; }
+.report dt.sub { padding-left: 10px; font-size: 11px; }
+.report .events, .report .progress { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+.report .events .t { color: var(--mute); }
+.report .progress { color: var(--mute); }
+.report .milestone { margin: 0 0 6px; color: var(--amber); font-size: 13px; }
+.report p { font-size: 12px; margin: 0; }
+.report > .lead { margin: 12px 0; }
+@media (max-width: 640px) { .report-cols { grid-template-columns: 1fr; } }
