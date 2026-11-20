@@ -275,7 +275,7 @@ A negative money balance; allowed, but nothing can be built or upgraded while in
 _Avoid_: Bankruptcy, overdraft
 
 **Demolish**:
-Removing a building or Runway in Plan Mode for a 50% refund, which also removes its Upkeep.
+Removing a building or Runway in Plan Mode; it refunds what building the same thing again would cost and removes its Upkeep.
 _Avoid_: Sell, delete
 
 ### Safety
@@ -338,12 +338,16 @@ _Avoid_: Danger level, threat
 The layout every Run begins with. In v1 there is one: Medium Asphalt Runway, small Terminal with two Small and one Medium Stand, small Cargo Hub with one Medium and one Small Stand, a Small and a Medium Holding Bay, and an ATC Tower.
 _Avoid_: Difficulty, map, scenario
 
+**Music**:
+Background loops (Options: a song, Random or off, and a volume); never affects play.
+_Avoid_: Soundtrack, BGM
+
 **Player**:
 The person playing; designs and manages the airport.
 _Avoid_: User
 
 **Score Screen**:
-The end-of-Run view: like the Day report for the last Day, marked won or lost, plus the Run's totals, Score and Air Miles awarded. "Finish Run" leads to the Main Menu; a won Run can continue into Endless Mode instead.
+The end-of-Run view, marked won or lost: Score, Air Miles awarded and Days survived up front, with the Run's totals and the last Day's report under Details. "Finish Run" leads to the Main Menu; a won Run can continue into Endless Mode instead.
 _Avoid_: Game over screen, results page
 
 **Score**:
