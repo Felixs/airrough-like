@@ -288,3 +288,13 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .alert-banner[hidden] { display: none; }
 .report dt.sub { grid-column: 1 / -1; }
 .report-cols dd { white-space: nowrap; }
+
+/* Seed / bug-report info */
+.seed-chip { height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--mute); font: 11px var(--mono); cursor: pointer; }
+.seed-chip:hover, .seed-chip:focus-visible { color: var(--text); border-color: var(--teal); outline: none; }
+.seed-line { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+.seed-line small { color: var(--mute); font-size: 11px; }
+.seed-input { display: grid; gap: 4px; font-size: 12px; color: var(--mute); }
+.seed-input small { font-size: 10px; }
+.seed-input input { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); font: 13px var(--mono); }
+.notice { white-space: normal; word-break: break-word; }

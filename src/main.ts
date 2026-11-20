@@ -4,7 +4,7 @@ import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
-import { continueEndless, dayPlan, dayTwists, endDay, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
+import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, daySettled, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
@@ -15,6 +15,7 @@ import { awardRun } from './sim/meta';
 import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
 import { showNotice } from './ui/resume';
+import { BUILD, copyText } from './ui/seed';
 
 // `?seed=123` makes every New Run use that seed (used for README screenshots and bug reports).
 const fixedSeed = Number(new URLSearchParams(location.search).get('seed'));
@@ -81,7 +82,7 @@ async function start(): Promise<void> {
     ended = false;
     const twists = dayTwists(run);
     dayLabel.textContent = dayName(run.week, run.weekday) + (run.endless ? ' · Endless' : '') + twists.map((t) => ` · ${t.name}`).join('');
-    dayLabel.title = twists.map((t) => `${t.name}: ${t.description}`).join('\n');
+    dayLabel.title = [...twists.map((t) => `${t.name}: ${t.description}`), runInfo(run, BUILD)].join('\n');
     mountAirfield();
   };
   const openPlan = () => {
@@ -122,6 +123,15 @@ async function start(): Promise<void> {
     });
   };
 
+  // Something broke: tell the Player, with the bug-report info to send along.
+  const reportError = (message: string) => {
+    const info = runInfo(run, BUILD);
+    showNotice(appEl, `Something went wrong: ${message}. Bug-report info (copied): ${info}`);
+    void copyText(`${info}\nError: ${message}`);
+  };
+  window.addEventListener('error', (e) => reportError(e.message));
+  window.addEventListener('unhandledrejection', (e) => reportError(String((e as PromiseRejectionEvent).reason)));
+
   const openMenu = () => {
     ended = true;
     const saved = loadRun(store);
@@ -133,9 +143,9 @@ async function start(): Promise<void> {
         if (run.status === 'won') showScore();
         else openPlan();
       },
-      onNewRun() {
+      onNewRun(seed) {
         clearRun(store);
-        run = startRun(newSeed(), meta);
+        run = startRun(seed ?? newSeed(), meta);
         openPlan();
       },
       onMeta(next) {

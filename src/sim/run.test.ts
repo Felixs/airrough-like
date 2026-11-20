@@ -108,3 +108,17 @@ describe('Day report', () => {
     for (const h of r.highlights) expect(h.callsign.length).toBeGreaterThan(0);
   });
 });
+
+describe('Seed and bug-report info', () => {
+  it('describes where a Run is, so a bug can be replayed', async () => {
+    const { runInfo, parseSeed } = await import('./run');
+    const run = { ...startRun(123456), week: 2, weekday: 1, dayIndex: 8 };
+    expect(runInfo(run, 'abc1234')).toBe('Seed 123456 · Week 2 · Tue · Day 9 · build abc1234');
+    expect(runInfo({ ...run, endless: true }, 'abc1234')).toContain('Endless');
+    expect(parseSeed(' 42 ')).toBe(42);
+    expect(parseSeed('Seed 42')).toBe(42);
+    expect(parseSeed('')).toBe(null);
+    expect(parseSeed('abc')).toBe(null);
+    expect(parseSeed('0')).toBe(null);
+  });
+});

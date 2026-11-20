@@ -1,6 +1,7 @@
 import { dayTwists, type RunState } from '../sim/run';
 import { formatClock } from '../sim/clock';
 import { dayName } from './dayEnd';
+import { seedButton, wireSeedButtons } from './seed';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
@@ -58,12 +59,14 @@ export function showDayReport(root: HTMLElement, run: RunState, onContinue: () =
     <div class="card report">
       ${daySections(run)}
       <p class="lead">Next: <b>${dayName(run.week, run.weekday)}</b>${run.weekday === 6 ? ' · Boss Day' : run.weekday === 5 ? ' · Rush Day' : ''}${twists.map((t) => ` · ${esc(t.name)}`).join('')}</p>
+      <p class="seed-line">${seedButton(run)} <small>Found a bug? Copy this and send it along.</small></p>
       <button type="button" class="primary">Plan the next Day</button>
     </div>`;
-  el.querySelector('button')!.addEventListener('click', () => {
+  wireSeedButtons(el, () => run);
+  el.querySelector('button.primary')!.addEventListener('click', () => {
     el.remove();
     onContinue();
   });
   root.appendChild(el);
-  el.querySelector<HTMLButtonElement>('button')!.focus();
+  el.querySelector<HTMLButtonElement>('button.primary')!.focus();
 }
