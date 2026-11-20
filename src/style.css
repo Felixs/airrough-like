@@ -188,8 +188,8 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 
 /* Build Mode */
 .plan-build { flex: 1; min-height: 0; padding: 12px; }
-.build { height: 100%; display: grid; grid-template-columns: 150px 1fr 280px; gap: 12px; }
-.palette { display: flex; flex-direction: column; gap: 4px; }
+.build { height: 100%; display: grid; grid-template-columns: 190px 1fr 280px; gap: 12px; }
+.palette { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; }
 .palette button { display: flex; justify-content: space-between; align-items: center; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text); font: 12px var(--mono); }
 .palette button[aria-pressed='true'] { border-color: var(--teal); color: var(--teal); background: #12302a; }
 .palette button:disabled { color: var(--mute); opacity: 0.6; }
@@ -209,10 +209,16 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .build-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
 .hint { margin: 0; font-size: 11px; color: var(--mute); }
 
-.tool-options label[hidden] { display: none; }
-.tool-options { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; color: var(--mute); }
-.tool-options label { display: grid; gap: 2px; }
-.tool-options select { height: 30px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--text); font: 12px var(--mono); }
+.variants[hidden] { display: none; }
+.variants h4 { grid-column: 1 / -1; margin: 4px 0 0; font: 11px var(--mono); color: var(--mute); }
+.variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.palette .variants button.variant { position: relative; display: grid; grid-template-rows: auto auto auto; justify-items: center; align-content: start; gap: 1px; height: auto; padding: 4px 2px 3px; font-size: 11px; text-align: center; line-height: 1.15; }
+.variant svg { width: 100%; max-width: 44px; height: 30px; }
+.variant .v-name { color: var(--text); }
+.variant .cost { color: var(--mute); }
+.variant kbd { position: absolute; top: 2px; left: 3px; font-size: 11px; opacity: 0.7; }
+.palette .variants button.variant:disabled { opacity: 0.45; cursor: not-allowed; }
+.variant.short .cost { color: var(--red); }
 
 .card dd.twist { color: var(--amber); cursor: help; }
 .card dd.expect { cursor: help; }
@@ -336,7 +342,7 @@ button.danger { height: 36px; padding: 0 14px; border-radius: 4px; border: 1px s
   .strip .t { grid-column: 1 / -1; text-align: left; }
   .plan-body { grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.4fr); }
   .plan-body > .col:last-child { grid-column: 1 / -1; }
-  .build { grid-template-columns: 130px 1fr 240px; }
+  .build { grid-template-columns: 170px 1fr 240px; }
 }
 /* Narrow screens: stack the Live Day (map on top, strips and Tower panel below) and Plan Mode */
 @media (max-width: 900px) {
@@ -348,5 +354,6 @@ button.danger { height: 36px; padding: 0 14px; border-radius: 4px; border: 1px s
   .plan-body { grid-template-columns: 1fr; }
   .build { height: auto; grid-template-columns: 1fr; grid-template-rows: auto 60vh auto; }
   .palette { flex-direction: row; flex-wrap: wrap; }
+  .variants { flex: 1 1 100%; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
   .palette button { flex: 1 1 110px; }
 }

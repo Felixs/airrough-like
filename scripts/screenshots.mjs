@@ -35,7 +35,10 @@ await page.screenshot({ path: out('plan-mode') });
 await page.click('.plan-head [data-tab="build"]');
 await page.waitForSelector('.build-map canvas');
 await settle(1200);
+await page.keyboard.press('s'); // show the Stand tiles
+await settle();
 await page.screenshot({ path: out('build-mode') });
+await page.keyboard.press('t');
 
 // Leaving Build Mode with an unconfirmed change asks whether to build it: draw a Taxiway between the two links
 // (tiles 18..32, row 15), then click Overview. The canvas tells where tiles are on screen.
