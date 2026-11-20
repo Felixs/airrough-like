@@ -31,7 +31,7 @@ v1 has one: 1 Medium Asphalt Runway, a small Terminal with 2 Small + 1 Medium St
 ## Run rules (v1)
 
 - A Run is lost by missing a Daily Quota once: a share (first guess 60%) of the Day's Demand, counted in Movements (each landing and each takeoff).
-- Crashes cost a Crash Fine: base by Size Class, escalating with each further Crash in the same Week; resets after Sunday.
+- Incidents and Crashes cost no money; the Runway or Taxiway blockage (by Size Class) is the penalty. (Crash Fines and the Lower Crash Fines Boost were removed; owned levels are refunded in Air Miles.)
 - Saturday is a Rush Day (~2× a normal weekday); Sunday is the Boss Day.
 - Weekday traffic is strong enough that an unbuilt airport should start failing by mid-Week 2.
 - Fire & Rescue Station (levels 1–5) shortens Crash and Incident blockages.

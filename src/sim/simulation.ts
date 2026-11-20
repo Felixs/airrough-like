@@ -58,12 +58,16 @@ export const SAFETY = {
   surfacePilotFactor: { grass: 1.3, asphalt: 1, lit: 1, ils: 0.6 },
   landingOutcomes: { goAround: 0.8, incident: 0.19 },
   takeoffOutcomes: { rejectedTakeoff: 0.85, incident: 0.14 },
-  crashFine: { small: 5_000, medium: 10_000, large: 20_000 },
-  crashFineIncreasePerCrash: 0.5,
-  crashFineCap: 3,
-  incidentCost: { small: 1_000, medium: 2_000, large: 4_000 },
-  crashBlockMinutes: 60,
-  incidentBlockMinutes: 20,
+  /**
+   * How long Incidents and Crashes block their Runway or Taxiway, in minutes, by Size Class (before Fire & Rescue).
+   * Each one varies by ±`blockSpread` around it. Nothing costs money: the blockage is the whole penalty.
+   */
+  blockMinutes: {
+    taxiIncident: { small: 10, medium: 15, large: 20 },
+    incident: { small: 15, medium: 20, large: 30 },
+    crash: { small: 45, medium: 60, large: 90 },
+  },
+  blockSpread: 0.3,
   /** Blockage multiplier by Fire & Rescue Station level 0–5. */
   fireRescueFactor: [1, 0.75, 0.55, 0.4, 0.3, 0.2],
   /** Taxiway Incident chance per step for each extra aircraft taxiing at the same time. */
@@ -120,10 +124,15 @@ export function takeoffOutcome(roll: number): TakeoffOutcome {
   return roll < o.rejectedTakeoff ? 'rejectedTakeoff' : roll < o.rejectedTakeoff + o.incident - 1e-12 ? 'incident' : 'crash';
 }
 
-/** Crash Fine for a Crash after `earlierCrashesThisWeek` others in the same Week. */
-export function crashFine(size: SizeClass, earlierCrashesThisWeek: number): number {
-  const factor = Math.min(SAFETY.crashFineCap, 1 + SAFETY.crashFineIncreasePerCrash * earlierCrashesThisWeek);
-  return SAFETY.crashFine[size] * factor;
+/**
+ * Minutes an Incident or Crash blocks its Runway or Taxiway before Fire & Rescue: by Size Class, times 0.7–1.3 from
+ * the event itself (seed, flight, minute), so it draws nothing from the Day's random rolls.
+ */
+export function blockageMinutes(kind: keyof typeof SAFETY.blockMinutes, size: SizeClass, seed: number, flightId: string, minute: number): number {
+  let h = 0;
+  for (let i = 0; i < flightId.length; i++) h = Math.imul(h ^ flightId.charCodeAt(i), 16777619) >>> 0;
+  const u = mixSeed(seed, h, Math.round(minute * 4), kind.length) / 2 ** 32;
+  return SAFETY.blockMinutes[kind][size] * (1 - SAFETY.blockSpread + 2 * SAFETY.blockSpread * u);
 }
 
 /** Chance per step of a Taxiway Incident with `taxiing` aircraft on the Taxiways. */
@@ -222,8 +231,6 @@ export interface Simulation {
   readonly movementsByHour: readonly number[];
   /** Crashes today. */
   readonly crashes: number;
-  /** Crashes earlier this Week (for Crash Fines). */
-  readonly earlierCrashesThisWeek: number;
   readonly diversions: number;
   readonly landings: number;
   readonly groundRadarLevel: number;
@@ -237,7 +244,6 @@ export interface Simulation {
   readonly cooldownFactor: number;
   readonly turnaroundFactor: number;
   readonly cargoNightTurnaroundFactor: number;
-  readonly crashFineFactor: number;
   readonly blockageFactor: number;
   readonly pauseOnEvents: boolean;
   /** Ask the Player at low fuel: divert, or declare a Mayday (on in a played Live Day; off in a bare simulation). */
@@ -282,12 +288,14 @@ export interface SimEvent {
   readonly minute: number;
   readonly kind: 'lowFuel' | 'mayday' | 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion' | 'runwayChange';
   readonly flightId: string;
-  /** Money paid (Crash Fine, Incident cost). */
+  /** Money paid: always 0 now (Incidents and Crashes cost nothing); kept for saves. */
   readonly cost: number;
   /** Why a Diversion happened. */
   readonly reason?: DiversionReason;
   /** What went wrong, in a line (Go-Arounds, Rejected Takeoffs, Incidents, Crashes); flavour only. */
   readonly story?: string;
+  /** Until when an Incident or Crash blocks its Runway or Taxiway. */
+  readonly blockedUntil?: number;
 }
 
 export type DiversionReason = 'curfew' | 'dark' | 'noRunway' | 'manual' | 'lowFuel';
@@ -307,7 +315,6 @@ export interface SimulationSetup {
   readonly groundRadarLevel?: number;
   /** Fire & Rescue Station level, 0 (none) to 5. */
   readonly fireRescueLevel?: number;
-  readonly earlierCrashesThisWeek?: number;
   readonly riskMultiplier?: number;
   /** Closes every Runway until this minute. */
   readonly runwayBlockedUntil?: number;
@@ -326,7 +333,6 @@ export interface SimulationSetup {
   readonly turnaroundFactor?: number;
   /** Cargo Turnarounds after dusk (Cargo apron lighting). */
   readonly cargoNightTurnaroundFactor?: number;
-  readonly crashFineFactor?: number;
   /** Multiplies how long Crashes and Incidents block a Runway. */
   readonly blockageFactor?: number;
 }
@@ -353,7 +359,6 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     fees: 0,
     movementsByHour: new Array<number>(24).fill(0),
     crashes: 0,
-    earlierCrashesThisWeek: setup.earlierCrashesThisWeek ?? 0,
     diversions: 0,
     landings: 0,
     groundRadarLevel: setup.groundRadarLevel ?? 1,
@@ -365,7 +370,6 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     feeFactor: setup.feeFactor ?? 1,
     turnaroundFactor: setup.turnaroundFactor ?? 1,
     cargoNightTurnaroundFactor: setup.cargoNightTurnaroundFactor ?? 1,
-    crashFineFactor: setup.crashFineFactor ?? 1,
     blockageFactor: setup.blockageFactor ?? 1,
     pauseOnEvents: setup.pauseOnEvents ?? false,
     askOnLowFuel: setup.askOnLowFuel ?? false,
@@ -704,12 +708,13 @@ function earnFee(sim: MutableSim, f: Flight): void {
   sim.fees += fee;
 }
 
-function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, cost = 0): void {
-  sim.money -= cost;
+function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, blockedUntil?: number): void {
   const story = storyKind(kind, f);
-  sim.events.push(story
-    ? { minute: now, kind, flightId: f.id, cost, story: storyFor(story, f.pendingCause, sim.seed, f.id, now) }
-    : { minute: now, kind, flightId: f.id, cost });
+  sim.events.push({
+    minute: now, kind, flightId: f.id, cost: 0,
+    ...(story ? { story: storyFor(story, f.pendingCause, sim.seed, f.id, now) } : {}),
+    ...(blockedUntil !== undefined ? { blockedUntil } : {}),
+  });
 }
 
 /** Which kind of story an event gets, from what the aircraft was doing. */
@@ -732,13 +737,13 @@ function releaseSpots(sim: MutableSim, f: Mutable<Flight>): void {
 }
 
 function crash(sim: MutableSim, f: Mutable<Flight>, now: number, blocksRunway: boolean): void {
-  const fine = Math.round(crashFine(AIRCRAFT_TYPES[f.type].size, sim.earlierCrashesThisWeek + sim.crashes) * sim.crashFineFactor);
   sim.crashes += 1;
-  logEvent(sim, now, 'crash', f, fine);
+  const until = blocksRunway && f.runway >= 0 ? now + blockMinutes(sim, blockageMinutes('crash', AIRCRAFT_TYPES[f.type].size, sim.seed, f.id, now)) : undefined;
+  logEvent(sim, now, 'crash', f, until);
   releaseSpots(sim, f);
   f.phase = 'crashed';
   f.phaseStart = now;
-  if (blocksRunway && f.runway >= 0) block(sim, f.runway, now + blockMinutes(sim, SAFETY.crashBlockMinutes));
+  if (until !== undefined) block(sim, f.runway, until);
 }
 
 function block(sim: MutableSim, runway: number, until: number): void {
@@ -746,8 +751,9 @@ function block(sim: MutableSim, runway: number, until: number): void {
 }
 
 function incident(sim: MutableSim, f: Flight, now: number, kind: 'incident' | 'taxiIncident'): number {
-  logEvent(sim, now, kind, f, SAFETY.incidentCost[AIRCRAFT_TYPES[f.type].size]);
-  return now + blockMinutes(sim, SAFETY.incidentBlockMinutes);
+  const until = now + blockMinutes(sim, blockageMinutes(kind, AIRCRAFT_TYPES[f.type].size, sim.seed, f.id, now));
+  logEvent(sim, now, kind, f, until);
+  return until;
 }
 
 /** More aircraft taxiing at once means more chance two of them meet; the Incident stops one of them. */

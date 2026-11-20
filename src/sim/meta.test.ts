@@ -69,7 +69,7 @@ describe('Unlockables', () => {
 
 describe('Boosts', () => {
   it('cost 500 × the next level, stop at the max, and wait for the building they belong to', () => {
-    expect(BOOSTS.length).toBeGreaterThanOrEqual(13);
+    expect(BOOSTS.length).toBeGreaterThanOrEqual(12);
     let meta = buyBoost(rich(), 'higherFees');
     expect(meta.boosts.higherFees).toBe(1);
     expect(meta.airMiles).toBe(100_000 - 500);

@@ -110,7 +110,6 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             <dt>Movements / Quota</dt><dd>${last.movements} / ${last.quota}</dd>
             <dt>Fees</dt><dd>${money(last.fees)}</dd>
             <dt>Upkeep</dt><dd>${money(-last.upkeep)}</dd>
-            <dt>Fines & Incidents</dt><dd>${money(-last.penalties)}</dd>
             <dt>Crashes · Diversions</dt><dd>${last.crashes} · ${last.diversions}</dd></dl></div>` : ''}
           <div class="card"><h3>Forecast · ${dayName(run.week, run.weekday)}</h3><dl>
             ${twists.map((t) => `<dt>Twist</dt><dd class="twist" title="${esc(t.description)}">${ICON[t.family]} ${esc(t.name)}</dd>`).join('')}

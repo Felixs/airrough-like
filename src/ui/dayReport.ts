@@ -28,7 +28,6 @@ export function daySections(run: RunState): string {
         <section><h3>Money</h3><dl>
           <dt>Fees</dt><dd class="ok">${signed(r.fees)}</dd>
           <dt>Upkeep</dt><dd>${signed(-r.upkeep)}</dd>
-          <dt>Fines &amp; Incidents</dt><dd class="${r.penalties ? 'bad' : ''}">${signed(-r.penalties)}</dd>
           <dt><b>Net</b></dt><dd><b class="${r.net >= 0 ? 'ok' : 'bad'}">${signed(r.net)}</b></dd>
           <dt>Money now</dt><dd class="${run.inDebt ? 'bad' : ''}">${money(r.moneyAfter)}${run.inDebt ? ' · Debt: building blocked' : ''}</dd>
         </dl></section>

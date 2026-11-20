@@ -28,7 +28,7 @@ export interface RunStats {
   readonly daysSurvived: number;
   readonly movements: number;
   readonly fees: number;
-  /** Upkeep, Crash Fines, Incident costs and building. */
+  /** Upkeep and building. */
   readonly spending: number;
   readonly crashes: number;
   readonly diversions: number;
@@ -44,13 +44,13 @@ export interface DayReport {
   readonly movements: number;
   readonly fees: number;
   readonly upkeep: number;
-  /** Crash Fines and Incident costs. */
+  /** Money penalties (none since Incidents and Crashes became free; kept for old saves). */
   readonly penalties: number;
   readonly crashes: number;
   readonly diversions: number;
   readonly quotaMet: boolean;
   readonly moneyAfter: number;
-  /** Fees minus Upkeep, Crash Fines and Incident costs. */
+  /** Fees minus Upkeep. */
   readonly net: number;
   /** Aircraft that landed today, by Purpose. */
   readonly landed: { readonly passenger: number; readonly cargo: number };
@@ -293,14 +293,12 @@ export function startLiveDay(run: RunState): Simulation {
     controllerTrainingLevel: run.towerModules.controllerTraining,
     groundRadarLevel: run.towerModules.groundRadar,
     fireRescueLevel: run.fireRescueLevel,
-    earlierCrashesThisWeek: run.crashesThisWeek,
     pauseOnEvents: true,
     askOnLowFuel: true,
     feeFactor: run.modifiers.feeFactor,
     fuelBonusMinutes: run.modifiers.fuelBonusMinutes + (hasBuilding(run, 'fuelFarm') ? 5 : 0),
     turnaroundFactor: run.modifiers.turnaroundFactor,
     cargoNightTurnaroundFactor: run.modifiers.unlocks.includes('cargoApronLighting') ? 0.8 : 1,
-    crashFineFactor: run.modifiers.crashFineFactor,
     blockageFactor: run.modifiers.blockageFactor,
     cooldownFactor: run.modifiers.cooldownFactor,
   });

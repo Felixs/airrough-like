@@ -59,6 +59,16 @@ describe('Saving meta-progression', () => {
     saveMeta(store, meta);
     expect(loadMeta(store)).toEqual(meta);
   });
+
+  it('refunds the Air Miles of the retired Lower Crash Fines Boost', async () => {
+    const { emptyMeta } = await import('./meta');
+    const { saveMeta, loadMeta } = await import('./save');
+    const store = memoryStore();
+    saveMeta(store, { ...emptyMeta(), airMiles: 100, boosts: { lowerCrashFines: 2, higherFees: 1 } as never });
+    const meta = loadMeta(store);
+    expect(meta.airMiles).toBe(100 + 500 + 1_000);
+    expect(meta.boosts).toEqual({ higherFees: 1 });
+  });
 });
 
 describe('Options', () => {

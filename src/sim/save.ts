@@ -4,7 +4,7 @@
  */
 import { createLayout } from './layout';
 import type { RunState } from './run';
-import { emptyMeta, type MetaState } from './meta';
+import { BOOST_COST_PER_LEVEL, emptyMeta, type MetaState } from './meta';
 
 export const SAVE_VERSION = 4; // 4: square Land Plots and the new starting airport
 /** Meta-progression has its own version so Run format changes don't wipe Air Miles. */
@@ -110,7 +110,21 @@ export function saveMeta(store: KeyValueStore, meta: MetaState): boolean {
 export function loadMeta(store: KeyValueStore): MetaState {
   const r = readSave(store, KEYS.meta, META_VERSION);
   if (r.kind !== 'ok' || !r.data || typeof r.data !== 'object') return emptyMeta();
-  return { ...emptyMeta(), ...(r.data as Partial<MetaState>) };
+  return refundRetiredBoosts({ ...emptyMeta(), ...(r.data as Partial<MetaState>) });
+}
+
+/** Boosts the game no longer has (Lower Crash Fines went with the fines): their Air Miles come back. */
+const RETIRED_BOOSTS = ['lowerCrashFines'];
+
+function refundRetiredBoosts(meta: MetaState): MetaState {
+  const boosts: Record<string, number> = { ...meta.boosts };
+  let airMiles = meta.airMiles;
+  for (const id of RETIRED_BOOSTS) {
+    const level = boosts[id] ?? 0;
+    for (let l = 1; l <= level; l++) airMiles += BOOST_COST_PER_LEVEL * l;
+    delete boosts[id];
+  }
+  return { ...meta, airMiles, boosts: boosts as MetaState['boosts'] };
 }
 
 /** Player options, kept between sessions. */

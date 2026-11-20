@@ -156,8 +156,13 @@ Screen, which turns Score into Air Miles for the meta-progression.
   on the Runway, a blocked radio call; wind shear, a bird strike, an engine fire warning), and ground trouble on the
   Taxiways (a broken-down tug, a fuel truck in the way, debris). The line is picked from the event itself (seed,
   flight, time), never from the Day's random rolls, so it changes no outcome and a replayed seed tells the same story.
-- Incidents cost money and block the Runway 20 min; Crashes cost an escalating Crash Fine and block it 60 min; Fire &
-  Rescue levels cut blockages to as little as 20%.
+- **Blockages are the only penalty:** Incidents and Crashes cost no money. They block their Runway (or, for a Taxiway
+  Incident, the Taxiway round the stopped aircraft) for a time set by the aircraft's Size Class (`simulation.ts →
+  SAFETY.blockMinutes`, Small / Medium / Large): Taxiway Incident 10 / 15 / 20 min, Runway Incident 15 / 20 / 30,
+  Crash 45 / 60 / 90; each one varies ±30%, picked from the event itself (seed, flight, time) so it draws nothing
+  from the Day's random rolls. Fire & Rescue levels cut blockages to as little as 20%. The alert says until when the
+  Runway or Taxiway is closed. (Tried against flat 20 / 60 min and a harsher table on 20 unbuilt Runs: the table by
+  size played the same as flat times; the harsher one lost a Run on Day 1.)
 - From Radar 3/4 the game pauses before an imminent Crash and a second roll can save the aircraft. The game can also
   pause on Incidents, Crashes and Diversions (option).
 
@@ -190,7 +195,7 @@ cooldown (`simulation.ts → ACTIONS`).
 - **Expected money** (Plan Mode Forecast): the fees the next Day earns if every flight that comes is handled —
   each arrival's Arrival Fee, and the Departure Fee of every aircraft that can still leave that Day (its Turnaround
   ends before dusk, or a fitting Lit/ILS Runway works tonight; overnight aircraft count too). Upkeep is taken off for
-  the expected net and the money after the Day. Incidents, Crash Fines and Diversions are not included.
+  the expected net and the money after the Day. Lost fees from Incidents, Crashes and Diversions are not included.
 - Twists (`twists.ts`, Severity 1–4 rising with the Week): Weather, Infrastructure and Traffic Surge families, shown in
   advance on the Run Calendar.
 
@@ -229,7 +234,7 @@ cooldown (`simulation.ts → ACTIONS`).
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day
-  with its Twists and the button to plan it. Details lists money (fees, Upkeep, fines, net), traffic (landed by Purpose,
+  with its Twists and the button to plan it. Details lists money (fees, Upkeep, net), traffic (landed by Purpose,
   diversions by reason, parked overnight, busiest hour), every Crash and Incident with its time, and the Run Seed. The
   Score Screen's Summary shows Score, Air Miles earned and Days survived (and, after a loss, how many Movements the last
   Day was short); its Details hold the Run totals and the last Day's details.
