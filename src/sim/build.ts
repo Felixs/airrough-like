@@ -2,7 +2,7 @@
  * Build Mode: a session of pending placements on top of the Run's layout, validated with a checks list,
  * paid for and applied on Confirm. The simulation routes on the new layout from the next Day.
  */
-import { createLayout, WORLD, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
+import { createLayout, sharesEdge, spotEntry, WORLD, type Facing, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
 import { UPKEEP, type LandPlot, type RunState } from './run';
 import { AIRCRAFT_TYPES, sizeRank } from './aircraft';
 import { unlockableName, type UnlockableId } from './meta';
@@ -140,13 +140,38 @@ function nextId(layout: AirportLayout, prefix: string, numeric: boolean): string
 }
 
 /** A new Stand with its top-left tile at `at`. Contact Stands get the building's numbering (1, 2… / C1, C2…), Remote ones R1, R2… */
+const FACINGS: readonly Facing[] = ['south', 'north', 'east', 'west'];
+
+/**
+ * Footprint and facing for a new Stand or Holding Bay with its top-left at `at`: it opens towards whichever side has
+ * a Taxiway right in front (preferring the side away from its building), so it can sit on any side of a building.
+ */
+export function placeSpot(layout: AirportLayout, at: Tile, size: SizeClass, building?: 'terminal' | 'cargoHub'): TileRect & { facing: Facing } {
+  const options = FACINGS.map((facing) => {
+    const dims = facing === 'south' || facing === 'north' ? FOOTPRINT[size] : { w: FOOTPRINT[size].h, h: FOOTPRINT[size].w };
+    return { x: at.x, y: at.y, ...dims, facing };
+  });
+  const back: Record<Facing, (r: TileRect) => TileRect> = {
+    south: (r) => ({ x: r.x, y: r.y - 1, w: r.w, h: 1 }),
+    north: (r) => ({ x: r.x, y: r.y + r.h, w: r.w, h: 1 }),
+    east: (r) => ({ x: r.x - 1, y: r.y, w: 1, h: r.h }),
+    west: (r) => ({ x: r.x + r.w, y: r.y, w: 1, h: r.h }),
+  };
+  const open = options.filter((o) => isTaxiwayAt(layout, spotEntry(o)));
+  const towardsBuilding = building
+    ? open.find((o) => layout.structures.some((b) => b.kind === building && overlaps(b, back[o.facing](o))))
+    : undefined;
+  return towardsBuilding ?? open[0] ?? options[0]!;
+}
+
 export function newStand(session: BuildSession, at: Tile, size: SizeClass, placement: Stand['placement'], serves: Stand['serves']): Stand {
   const id = placement === 'remote' ? nextId(session.layout, 'R', false) : serves === 'terminal' ? nextId(session.layout, '', true) : nextId(session.layout, 'C', false);
-  return { kind: 'stand', id, x: at.x, y: at.y, ...FOOTPRINT[size], size, serves, placement };
+  const spot = placeSpot(session.layout, at, size, placement === 'contact' ? serves : undefined);
+  return { kind: 'stand', id, ...spot, size, serves, placement };
 }
 
 export function newHoldingBay(session: BuildSession, at: Tile, size: SizeClass): HoldingBay {
-  return { kind: 'holdingBay', id: nextId(session.layout, 'B', false), x: at.x, y: at.y, ...FOOTPRINT[size], size };
+  return { kind: 'holdingBay', id: nextId(session.layout, 'B', false), ...placeSpot(session.layout, at, size), size };
 }
 
 const SIZE_NAME: Record<SizeClass, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
@@ -242,7 +267,7 @@ const without = (layout: AirportLayout, ...gone: Structure[]) =>
 /** Contact Stands attached to a Terminal or Cargo Hub building (they move with it). */
 export function attachedStands(layout: AirportLayout, b: Structure): Stand[] {
   if (b.kind !== 'terminal' && b.kind !== 'cargoHub') return [];
-  return layout.stands.filter((st) => st.placement === 'contact' && st.serves === b.kind && b.y + b.h === st.y && st.x >= b.x && st.x + st.w <= b.x + b.w);
+  return layout.stands.filter((st) => st.placement === 'contact' && st.serves === b.kind && sharesEdge(b, st));
 }
 
 /** Collinear, touching Taxiways (or same-height building wings) become one structure. */
@@ -277,10 +302,10 @@ function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure, 
     case 'stand':
     case 'holdingBay': {
       items.push({ label: 'Clear of other structures', ok: clearOfAll });
-      items.push({ label: 'Taxiway access', ok: isTaxiwayAt(layout, { x: s.x + Math.floor(s.w / 2), y: s.y + s.h }) });
+      items.push({ label: 'Taxiway access', ok: isTaxiwayAt(layout, spotEntry(s)) });
       if (s.kind === 'stand' && s.placement === 'contact') {
         const building = s.serves === 'terminal' ? 'terminal' : 'cargoHub';
-        const attached = layout.structures.some((b) => b.kind === building && b.y + b.h === s.y && s.x >= b.x && s.x + s.w <= b.x + b.w);
+        const attached = layout.structures.some((b) => b.kind === building && sharesEdge(b, s));
         items.push({ label: s.serves === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: attached });
       }
       break;
@@ -351,7 +376,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       const withBuilding = createLayout(rest.width, rest.height, [...rest.structures, change.to, ...movedStands]);
       if (movedStands.length) {
         items.push({ label: 'Its Stands stay clear', ok: movedStands.every((st) => !rest.structures.some((o) => overlaps(o, st))) });
-        items.push({ label: 'Its Stands keep Taxiway access', ok: movedStands.every((st) => isTaxiwayAt(withBuilding, { x: st.x + Math.floor(st.w / 2), y: st.y + st.h })) });
+        items.push({ label: 'Its Stands keep Taxiway access', ok: movedStands.every((st) => isTaxiwayAt(withBuilding, spotEntry(st))) });
       }
       break;
     }
@@ -374,7 +399,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       if (s.kind === 'terminal' || s.kind === 'cargoHub') {
         const left = after.structures.filter((b) => b.kind === s.kind);
         const orphan = layout.stands.some((st) => st.placement === 'contact' && st.serves === s.kind &&
-          !left.some((b) => b.y + b.h === st.y && st.x >= b.x && st.x + st.w <= b.x + b.w));
+          !left.some((b) => sharesEdge(b, st)));
         items.push({ label: 'No Contact Stands attached', ok: !orphan });
       }
       if (s.kind === 'stand') items.push({ label: 'Not in use by an aircraft', ok: overnightFits(run, after) });

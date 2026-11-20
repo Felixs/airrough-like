@@ -4,7 +4,7 @@
  */
 import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
-import { TILE_SIZE, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
+import { TILE_SIZE, parkedHeading, spotEntry, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
 import { buildTaxiNetwork, exitFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type TaxiNetwork, type Tile } from './taxi';
 import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type WindSetup } from './wind';
@@ -578,7 +578,8 @@ function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight)
   const queue = (a: RunwayAccess) => flights.filter((o) => o.runway === a.index && (o.phase === 'taxiOut' || o.phase === 'holdShort')).length;
   // only Runways whose hold point is reachable from the aircraft's Stand
   const stand = standById(sim, f.standId);
-  const here = stand ? sim.network.component.get(`${stand.x + Math.floor(stand.w / 2)},${stand.y + stand.h}`) : undefined;
+  const entry = stand ? spotEntry(stand) : undefined;
+  const here = entry ? sim.network.component.get(`${entry.x},${entry.y}`) : undefined;
   const reachable = (a: RunwayAccess) => {
     const hold = holdOf(sim, a);
     return here === undefined || sim.network.component.get(`${hold.x},${hold.y}`) === here;
@@ -879,7 +880,7 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
     case 'onStand': {
       const stand = (standById(sim, f.standId) ?? bayById(sim, f.bayId))!;
       f.position = { x: (stand.x + stand.w / 2) * T, y: (stand.y + stand.h / 2) * T };
-      f.heading = 0;
+      f.heading = parkedHeading(stand);
       break;
     }
     case 'holdShort':

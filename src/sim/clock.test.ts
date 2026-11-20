@@ -46,3 +46,17 @@ describe('parseSpeed', () => {
     expect(parseSpeed(undefined)).toBe(undefined);
   });
 });
+
+describe('daylight', () => {
+  it('is dark early, brightens at sunrise, full by day, dims in the evening and is dark at night', async () => {
+    const { daylight, NIGHT_DARKNESS } = await import('./clock');
+    expect(daylight(5 * 60).darkness).toBe(NIGHT_DARKNESS);
+    const sunrise = daylight(6.5 * 60);
+    expect(sunrise.darkness).toBe(0.25);
+    expect(sunrise.warmth).toBeGreaterThan(0.5);
+    expect(daylight(12 * 60).darkness).toBe(0);
+    expect(daylight(19.5 * 60).darkness).toBeGreaterThan(0);
+    expect(daylight(19.5 * 60).darkness).toBeLessThan(0.3);
+    expect(daylight(23 * 60)).toEqual({ darkness: NIGHT_DARKNESS, warmth: 0 });
+  });
+});

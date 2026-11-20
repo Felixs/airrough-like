@@ -36,17 +36,21 @@ export interface Terminal extends TileRect {
 export interface CargoHub extends TileRect {
   readonly kind: 'cargoHub';
 }
+/** The side a Stand or Holding Bay opens onto the Taxiway (default: south). */
+export type Facing = 'north' | 'south' | 'east' | 'west';
 export interface Stand extends TileRect {
   readonly kind: 'stand';
   readonly id: string;
   readonly size: SizeClass;
   readonly serves: 'terminal' | 'cargoHub';
   readonly placement: 'contact' | 'remote';
+  readonly facing?: Facing;
 }
 export interface HoldingBay extends TileRect {
   readonly kind: 'holdingBay';
   readonly id: string;
   readonly size: SizeClass;
+  readonly facing?: Facing;
 }
 export interface AtcTower extends TileRect {
   readonly kind: 'atcTower';
@@ -126,4 +130,30 @@ export function startingAirport(): AirportLayout {
     { kind: 'taxiway', x: 39, y: 19, w: 3, h: 3 },
     { kind: 'runway', x: 6, y: 22, w: 36, h: 4, length: 'medium', surface: 'asphalt' },
   ]);
+}
+
+type Spot = TileRect & { readonly facing?: Facing };
+
+/** The Taxiway tile right in front of a Stand's or Holding Bay's open side. */
+export function spotEntry(s: Spot): { x: number; y: number } {
+  const cx = s.x + Math.floor(s.w / 2);
+  const cy = s.y + Math.floor(s.h / 2);
+  switch (s.facing ?? 'south') {
+    case 'north': return { x: cx, y: s.y - 1 };
+    case 'east': return { x: s.x + s.w, y: cy };
+    case 'west': return { x: s.x - 1, y: cy };
+    default: return { x: cx, y: s.y + s.h };
+  }
+}
+
+/** Heading of an aircraft parked nose-in on a Stand (it faces away from the open side). */
+export function parkedHeading(s: Spot): number {
+  return { south: 0, north: 180, east: 270, west: 90 }[s.facing ?? 'south'];
+}
+
+/** Whether two rectangles share at least one full tile of edge. */
+export function sharesEdge(a: TileRect, b: TileRect): boolean {
+  const xOverlap = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const yOverlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return ((a.x + a.w === b.x || b.x + b.w === a.x) && yOverlap >= 1) || ((a.y + a.h === b.y || b.y + b.h === a.y) && xOverlap >= 1);
 }
