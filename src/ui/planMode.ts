@@ -34,6 +34,50 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
   let tab: 'overview' | 'build' = 'overview';
   let build: BuildModeView | null = null;
 
+  /**
+   * Leaving Build Mode (another tab, or Start Day) with changes placed but not confirmed: ask whether to build or
+   * discard them, so they are never lost without the Player noticing.
+   */
+  const leaveBuild = (then: () => void) => {
+    const open = tab === 'build' ? build?.pending() : undefined;
+    if (!build || !open || open.count === 0) return then();
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog';
+    dialog.setAttribute('role', 'alertdialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-label', 'Unconfirmed building');
+    dialog.innerHTML = `<div class="box">
+      <h3>Build your changes?</h3>
+      <p>${open.count} change${open.count === 1 ? '' : 's'} in Build Mode ${open.count === 1 ? 'is' : 'are'} not confirmed yet (${open.cost < 0 ? `refund ${money(-open.cost)}` : money(open.cost)}). Unconfirmed changes are not built.</p>
+      <div class="buttons">
+        <button type="button" data-choice="build" class="primary">Build them</button>
+        <button type="button" data-choice="discard">Discard</button>
+        <button type="button" data-choice="stay">Keep building</button>
+      </div></div>`;
+    el.appendChild(dialog);
+    const close = () => {
+      window.removeEventListener('keydown', onKey, true);
+      dialog.remove();
+    };
+    const choose = (choice: string | undefined) => {
+      close();
+      if (choice === 'build') {
+        if (build?.confirm()) then(); // on failure the reason shows in the Build panel and the Player stays
+      } else if (choice === 'discard') then();
+    };
+    // Esc keeps building; Enter is the focused button (and never reaches Build Mode's own shortcuts)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        e.stopPropagation();
+        e.preventDefault();
+        choose(e.key === 'Escape' ? 'stay' : (document.activeElement as HTMLElement | null)?.dataset.choice);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    for (const b of dialog.querySelectorAll<HTMLButtonElement>('button[data-choice]')) b.addEventListener('click', () => choose(b.dataset.choice));
+    dialog.querySelector<HTMLButtonElement>('button[data-choice="build"]')!.focus();
+  };
+
   const render = (focusId?: string) => {
     build?.destroy();
     build = null;
@@ -108,19 +152,22 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
         </section>
       </div>`}`;
 
-    el.querySelector<HTMLButtonElement>('.start')!.addEventListener('click', () => {
+    el.querySelector<HTMLButtonElement>('.start')!.addEventListener('click', () => leaveBuild(() => {
       build?.destroy();
       el.remove();
       handlers.onStartDay();
-    });
+    }));
     el.querySelector<HTMLInputElement>('input[data-bonus]')?.addEventListener('change', (e) => {
       run = handlers.onBonusTwist((e.target as HTMLInputElement).checked);
       render();
     });
     for (const b of el.querySelectorAll<HTMLButtonElement>('button[data-tab]')) {
       b.addEventListener('click', () => {
-        tab = b.dataset.tab as typeof tab;
-        render();
+        if (b.dataset.tab === tab) return;
+        leaveBuild(() => {
+          tab = b.dataset.tab as typeof tab;
+          render();
+        });
       });
     }
     if (tab === 'build') {

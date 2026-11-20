@@ -36,7 +36,20 @@ await page.click('.plan-head [data-tab="build"]');
 await page.waitForSelector('.build-map canvas');
 await settle(1200);
 await page.screenshot({ path: out('build-mode') });
+
+// Leaving Build Mode with an unconfirmed change asks whether to build it: draw a Taxiway between the two apron
+// connectors (tiles 15..28, row 12; screen positions from the 1600×900 Build view), then click Overview.
+await page.mouse.move(545, 460);
+await page.mouse.down();
+await page.mouse.move(700, 460, { steps: 8 });
+await page.mouse.up();
+await settle();
+if (!(await page.$('.pending li:not(.empty)'))) throw new Error('The scripted Taxiway was not placed; adjust its screen position');
 await page.click('.plan-head [data-tab="overview"]');
+await page.waitForSelector('.confirm-dialog');
+await settle();
+await page.screenshot({ path: out('build-confirm') });
+await page.click('.confirm-dialog [data-choice="discard"]');
 await page.waitForSelector('.start');
 await page.click('.start');
 

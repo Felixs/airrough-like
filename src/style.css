@@ -222,6 +222,15 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .secondary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .plan-head .endless { color: var(--amber); }
 
+.confirm-dialog { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgb(0 0 0 / 55%); }
+.confirm-dialog .box { width: min(440px, 90vw); padding: 18px 20px; border: 1px solid var(--amber); border-radius: 8px; background: var(--panel); color: var(--text); font: 13px var(--mono); }
+.confirm-dialog h3 { margin: 0 0 8px; color: var(--amber); font-size: 14px; }
+.confirm-dialog p { margin: 0 0 14px; line-height: 1.5; }
+.confirm-dialog .buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.confirm-dialog .buttons button { width: auto; flex: 0 0 auto; margin: 0; }
+.confirm-dialog button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.confirm-dialog button.primary { border-color: var(--teal); background: var(--teal); color: #08110e; font-weight: 700; }
+.confirm-dialog button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .notice { position: fixed; right: 16px; bottom: 16px; z-index: 20; max-width: 360px; padding: 10px 14px; border: 1px solid var(--amber); border-radius: 6px; background: #2a2214; color: var(--text); font: 12px var(--mono); }
 
 .meta-card { width: min(760px, calc(100vw - 32px)); }
