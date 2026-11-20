@@ -2,6 +2,7 @@ import type { RunState } from '../sim/run';
 import { airMiles, runScore } from '../sim/run';
 import { WEEKDAY_NAMES } from '../sim/schedule';
 import { daySections } from './dayReport';
+import { seedButton, wireSeedButtons } from './seed';
 
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 
@@ -40,6 +41,7 @@ export function showScoreScreen(root: HTMLElement, run: RunState, handlers: Scor
         ['Score', runScore(run).toLocaleString('en-US')],
         ['Air Miles earned', `✈ ${airMiles(run).toLocaleString('en-US')}`],
       ])}</dl></section>
+      <p class="seed-line">${seedButton(run)} <small>Play this Run again with the same seed from the Main Menu, or send it with a bug report.</small></p>
       <div class="score-buttons">
         ${won ? '<button type="button" class="primary" data-act="endless">Continue in Endless Mode</button>' : ''}
         <button type="button" class="${won ? 'secondary' : 'primary'}" data-act="finish">Finish Run</button>
@@ -53,5 +55,6 @@ export function showScoreScreen(root: HTMLElement, run: RunState, handlers: Scor
     else handlers.onFinish();
   });
   root.appendChild(el);
-  el.querySelector<HTMLButtonElement>('button')!.focus();
+  wireSeedButtons(el, () => run);
+  el.querySelector<HTMLButtonElement>('.score-buttons button')!.focus();
 }

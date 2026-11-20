@@ -1,5 +1,5 @@
 import { buyBoost, buyUnlockable, metaShop, type BoostId, type MetaState, type ShopItem, type UnlockableId } from '../sim/meta';
-import type { RunState } from '../sim/run';
+import { parseSeed, type RunState } from '../sim/run';
 import type { Options } from '../sim/save';
 import { dayName } from './dayEnd';
 
@@ -10,7 +10,8 @@ type Tab = 'play' | 'shop' | 'options' | 'about';
 
 export interface MainMenuHandlers {
   onContinue(): void;
-  onNewRun(): void;
+  /** Starts a Run; with a seed to replay a particular Run. */
+  onNewRun(seed: number | null): void;
   onMeta(meta: MetaState): void;
   onOptions(options: Options): void;
   onResetProgress(): void;
@@ -42,6 +43,7 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
         <div class="play">
           ${saved ? `<button type="button" class="primary big" data-go="continue">Continue<small>${saved.status === 'won' ? 'Won Run' : `Next: ${dayName(saved.week, saved.weekday)}`}${saved.endless ? ' · Endless' : ''} · ${money(saved.money)} · ${saved.stats.daysSurvived} Days survived</small></button>` : ''}
           <button type="button" class="${saved ? 'secondary' : 'primary'} big" data-go="new">New Run${saved ? '<small>Replaces the saved Run</small>' : ''}</button>
+          <label class="seed-input">Seed <small>(optional: replay a Run or a bug report)</small><input type="text" inputmode="numeric" id="seed-input" placeholder="random" autocomplete="off"></label>
           <p class="lead">Survive four Weeks. Every Day has a Daily Quota of Movements, and missing one ends the Run. Spend Air Miles from finished Runs on Unlockables and Boosts.</p>
         </div>`,
       shop: () => `
@@ -67,6 +69,8 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
             <li><b>Money</b>: aircraft pay when they unload and when they take off. Upkeep is paid at midnight. You may go into Debt, but then you can't build.</li>
             <li><b>Between Runs</b>: the Air Miles you earn buy Unlockables (buildings and features) and Boosts.</li>
           </ol>
+          <h3>Bug reports</h3>
+          <p class="lead">Every Run has a seed (shown in Plan Mode, the Day report and at the end of a Run). Click it to copy the bug-report info (seed, Week, Day, build) and include it with what happened. Typing the seed under New Run replays the same Run.</p>
           <h3>About</h3>
           <p class="lead">Airport Auto Battler: a roguelite about running an airport. Designed by Felix, built with Claude. Aircraft art and callsigns are fictional flavour.</p>
         </div>`,
@@ -92,8 +96,10 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
     }
     const go = b.dataset.go;
     if (go === 'continue' || go === 'new') {
+      const seed = parseSeed(el.querySelector<HTMLInputElement>('#seed-input')?.value);
       el.remove();
-      (go === 'continue' ? handlers.onContinue : handlers.onNewRun)();
+      if (go === 'continue') handlers.onContinue();
+      else handlers.onNewRun(seed);
       return;
     }
     if (go === 'reset') confirmReset = true;

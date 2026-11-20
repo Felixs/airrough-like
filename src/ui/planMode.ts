@@ -4,6 +4,7 @@ import { FAMILY_NAME, type Twist } from '../sim/twists';
 import { WEEKDAY_NAMES } from '../sim/schedule';
 import { mountBuildMode, type BuildModeView } from './buildMode';
 import { dayName } from './dayEnd';
+import { seedButton, wireSeedButtons } from './seed';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
@@ -29,6 +30,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
   el.setAttribute('aria-modal', 'true');
   el.setAttribute('aria-label', 'Plan Mode');
   root.appendChild(el);
+  wireSeedButtons(el, () => run);
   let tab: 'overview' | 'build' = 'overview';
   let build: BuildModeView | null = null;
 
@@ -52,6 +54,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
           <button type="button" role="tab" data-tab="build" aria-selected="${tab === 'build'}">Build</button>
         </div>
         <span class="next">${run.endless ? '<b class="endless">Endless</b> · ' : ''}Next: <b>${dayName(run.week, run.weekday)}</b>${plan.weekday === 6 ? ' · Boss Day' : plan.weekday === 5 ? ' · Rush Day' : ''}</span>
+        ${seedButton(run)}
         <span class="spacer"></span>
         <span class="money${run.inDebt ? ' debt' : ''}" title="Upkeep ${money(upkeep(run))} per Day, paid at 24:00">${money(run.money)}</span>
         <button type="button" class="start">Start Day ▶</button>

@@ -4,7 +4,7 @@
  */
 import { createLayout, startingAirport, type AirportLayout, type Structure, type SupportRole } from './layout';
 import { mixSeed } from './random';
-import { planDay, type DayPlan } from './schedule';
+import { WEEKDAY_NAMES, planDay, type DayPlan } from './schedule';
 import { FAMILIES, describeTwist, simulationEffects, twistsFor, type Twist } from './twists';
 import { createRandom } from './random';
 import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
@@ -334,4 +334,15 @@ function bonusTwistFor(seed: number, week: number, weekday: number, existing: re
   const rng = createRandom(mixSeed(seed, week, weekday, 0xb0b));
   const families = FAMILIES.filter((f) => !existing.some((t) => t.family === f));
   return describeTwist({ family: rng.pick(families.length ? families : FAMILIES), severity: Math.min(3, week + 1) }, false);
+}
+
+/** One line that pins down where a Run is, for bug reports: replay with the same seed (`?seed=` or the Main Menu). */
+export function runInfo(run: RunState, build: string): string {
+  return `Seed ${run.seed} · Week ${run.week} · ${WEEKDAY_NAMES[run.weekday]} · Day ${run.dayIndex + 1}${run.endless ? ' · Endless' : ''} · build ${build}`;
+}
+
+/** Reads a seed typed by the Player ("42", "Seed 42"); null when there is none. */
+export function parseSeed(text: string | null | undefined): number | null {
+  const n = Number((text ?? '').replace(/[^0-9]/g, ''));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }

@@ -7,6 +7,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY . .
+# Commit id shown in the game's bug-report info
+ARG BUILD_ID=""
+ENV BUILD_ID=$BUILD_ID
 RUN npm run build
 
 FROM nginx:1.27-alpine
