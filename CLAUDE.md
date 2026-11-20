@@ -18,3 +18,9 @@ rebuild it from `docs/game-design.md`, `CONTEXT.md` and the tuning tables in `sr
 rules, numbers, flows or visuals updates the doc that describes it **in the same change**, in engine-neutral terms
 (what happens and what the player sees, not how the TypeScript does it). New terms go into `CONTEXT.md`; a doc that a
 change makes wrong is corrected, not appended to. Docs that are also in the claude.ai Project get the same update there.
+
+## Deploying
+
+Pages (`.github/workflows/pages.yml`) deploys on every push to main, but merges made through the GitHub API from a
+Claude session do not fire push workflows. After merging that way, start the deploy by hand:
+`gh api -X POST repos/Felixs/airrough-like/actions/workflows/pages.yml/dispatches -f ref=main`.
