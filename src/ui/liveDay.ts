@@ -114,7 +114,7 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       fill('holding', strips.holding.map((f) =>
         `<li data-id="${esc(f.id)}" tabindex="0" class="strip${f.lowFuel ? ' low' : ''}${f.id === selected ? ' selected' : ''}" title="${esc(`${f.spoken} · ${f.type} · Holding since ${hhmm(f.since)} · Fuel Reserve ${Math.ceil(f.fuelMinutes)} min`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t fuel">⛽ ${Math.ceil(f.fuelMinutes)}′</span></li>`), strips.holding.length);
       fill('ground', strips.ground.map((f) =>
-        `<li class="strip" title="${esc(`${f.spoken} · ${f.type} · ${PHASE[f.phase] ?? f.phase}${f.spot ? ` · ${f.spot}` : ''}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${PHASE[f.phase] ?? f.phase}</span></li>`), strips.ground.length);
+        `<li class="strip" title="${esc(`${f.spoken} · ${f.type} · ${(f.waiting ? 'Waiting' : PHASE[f.phase] ?? f.phase)}${f.spot ? ` · ${f.spot}` : ''}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${(f.waiting ? 'Waiting' : PHASE[f.phase] ?? f.phase)}</span></li>`), strips.ground.length);
 
       // Emergency Actions
       const availability = actionAvailability(sim);

@@ -1,64 +1,154 @@
 import { Container, Graphics, GraphicsPath } from 'pixi.js';
-import { AIRCRAFT_TYPES, type AircraftTypeId } from '../sim/aircraft';
+import type { AircraftTypeId } from '../sim/aircraft';
 import type { Flight } from '../sim/simulation';
 
-/** Aircraft length in world units by Size Class (UI baseline): about 9 / 13 / 18. */
-const LENGTH = { small: 9, medium: 13, large: 18 } as const;
+/**
+ * Top-down aircraft, nose up, drawn in a 40-unit frame (nose y −20, tail y +20) and scaled to the aircraft's length.
+ * Each type has its own silhouette so it can be told apart at a glance: wing sweep and span, wingtip devices, nose
+ * shape, engine count and size, props, T-tail, the 747's hump, the A350's dark cockpit mask, and window lines on
+ * passenger aircraft (freighters have none).
+ */
+interface Spec {
+  /** Length on the map, in world units. */
+  readonly length: number;
+  /** Fuselage half-width. */
+  readonly body: number;
+  readonly nose: 'round' | 'pointed' | 'blunt';
+  readonly tailCone?: 'blade';
+  readonly wing: { readonly y: number; readonly chord: number; readonly sweep: number; readonly span: number; readonly tip: number };
+  readonly tipDevice?: 'sharklet' | 'scimitar' | 'raked' | 'curl';
+  readonly stab: { readonly y: number; readonly span: number; readonly chord: number; readonly sweep: number };
+  readonly tTail?: boolean;
+  /** Engine nacelles as ellipses [x, y, rx, ry] (mirrored to both sides). */
+  readonly engines: readonly (readonly [number, number, number, number])[];
+  /** Propeller discs [x, y, radius]; x 0 is a single nose prop, otherwise mirrored. */
+  readonly props?: readonly (readonly [number, number, number])[];
+  readonly upperDeck?: boolean;
+  readonly mask?: boolean;
+  readonly windows: boolean;
+}
 
-type Shape = 'prop' | 'narrow' | 'wide' | 'jumbo';
-const SHAPE: Record<AircraftTypeId, Shape> = {
-  C208: 'prop', C208F: 'prop', Q400: 'prop', A320: 'narrow', B738: 'narrow', B738F: 'narrow', B77W: 'wide', A350: 'wide', B748F: 'jumbo',
+const CARAVAN: Spec = {
+  length: 8, body: 2.6, nose: 'blunt', windows: true,
+  wing: { y: -7, chord: 4.4, sweep: 0, span: 27, tip: 3.6 },
+  stab: { y: 14, span: 9, chord: 3.4, sweep: 0.6 },
+  engines: [], props: [[0, -20.4, 6]],
 };
+const B737: Spec = {
+  length: 13.5, body: 2, nose: 'pointed', windows: true,
+  wing: { y: -2, chord: 7.6, sweep: 10, span: 18, tip: 1.6 }, tipDevice: 'scimitar',
+  stab: { y: 13.6, span: 7.8, chord: 3.6, sweep: 3.6 },
+  engines: [[5.4, -1.8, 1.3, 3.4]],
+};
+const SPECS: Record<AircraftTypeId, Spec> = {
+  C208: CARAVAN,
+  C208F: { ...CARAVAN, windows: false },
+  Q400: {
+    length: 11, body: 1.9, nose: 'pointed', windows: true,
+    wing: { y: -3, chord: 3.4, sweep: 0.4, span: 17, tip: 2.2 },
+    stab: { y: 17, span: 6.5, chord: 2, sweep: 1.2 }, tTail: true,
+    engines: [[6, -4.2, 1.3, 4.2]], props: [[6, -8.6, 5.2]],
+  },
+  A320: {
+    length: 12.5, body: 2.2, nose: 'round', windows: true,
+    wing: { y: -3, chord: 7.2, sweep: 10.6, span: 18, tip: 1.7 }, tipDevice: 'sharklet',
+    stab: { y: 13.4, span: 7.4, chord: 3.6, sweep: 3.8 },
+    engines: [[6.8, 0.4, 1.5, 3]],
+  },
+  B738: B737,
+  B738F: { ...B737, windows: false },
+  A350: {
+    length: 17, body: 2.9, nose: 'round', windows: true, mask: true,
+    wing: { y: -4, chord: 8.4, sweep: 11.8, span: 19.4, tip: 1.6 }, tipDevice: 'curl',
+    stab: { y: 13.4, span: 8.2, chord: 3.8, sweep: 4 },
+    engines: [[8, -0.6, 2.1, 4]],
+  },
+  B77W: {
+    length: 18.5, body: 2.7, nose: 'round', tailCone: 'blade', windows: true,
+    wing: { y: -3.6, chord: 8.2, sweep: 11.4, span: 17.4, tip: 1.6 }, tipDevice: 'raked',
+    stab: { y: 13.2, span: 8, chord: 3.8, sweep: 4 },
+    engines: [[8, -0.6, 2.6, 4.6]],
+  },
+  B748F: {
+    length: 19, body: 3.1, nose: 'round', upperDeck: true, windows: false,
+    wing: { y: -5, chord: 9, sweep: 12.5, span: 18.4, tip: 1.8 }, tipDevice: 'raked',
+    stab: { y: 13, span: 8.6, chord: 4, sweep: 4 },
+    engines: [[7.2, -1.4, 1.6, 3.2], [13.2, 3.2, 1.5, 3]],
+  },
+};
+
 const TAIL: Record<AircraftTypeId, number> = {
   C208: 0x7aa7ff, C208F: 0xf2a33a, Q400: 0x38d0b0, A320: 0x38d0b0, B738: 0x7aa7ff, B738F: 0xf2a33a, B77W: 0xe86f63, A350: 0x38d0b0, B748F: 0xf2a33a,
 };
 
-const C = { fuselage: 0xe8f0ed, fuselageEdge: 0xaebdb8, wing: 0xb4c3be, engine: 0x7d8a86, cockpit: 0x0d1513, upperDeck: 0xf6fbf9 } as const;
+const C = {
+  fuselage: 0xe8f0ed, wing: 0xb4c3be, engine: 0x7d8a86, cockpit: 0x0d1513, upperDeck: 0xc6d3ce, mask: 0x161d1b, window: 0x51605b, prop: 0x55625e,
+} as const;
 
-/** Top-down silhouettes, nose up, 40 long (y −20…20); from the accepted UI baseline (v5). */
-interface Part { readonly d: string; readonly fill: keyof typeof C | 'tail'; readonly stroke?: number }
-const fuselage = (w: number): string =>
-  `M0,-20 C${w * 0.7},-19.6 ${w},-17.5 ${w},-14 L${w},12 C${w},15.5 ${w * 0.5},18.5 0,20 C${-w * 0.5},18.5 ${-w},15.5 ${-w},12 L${-w},-14 C${-w},-17.5 ${-w * 0.7},-19.6 0,-20 Z`;
+interface Part { readonly d: string; readonly fill: keyof typeof C | 'tail'; readonly alpha?: number }
+
 const ellipse = (cx: number, cy: number, rx: number, ry: number) =>
   `M${cx - rx},${cy} A${rx},${ry} 0 1 0 ${cx + rx},${cy} A${rx},${ry} 0 1 0 ${cx - rx},${cy} Z`;
-
-const SHAPES: Record<Shape, readonly Part[]> = {
-  prop: [
-    { d: 'M1.8,-7 L19,-6 L19,-3.4 L1.8,-2.6 Z M-1.8,-7 L-19,-6 L-19,-3.4 L-1.8,-2.6 Z', fill: 'wing' },
-    { d: 'M6,-11 L8.6,-11 L8.6,-3 L6,-3 Z M-8.6,-11 L-6,-11 L-6,-3 L-8.6,-3 Z', fill: 'engine' },
-    { d: fuselage(2), fill: 'fuselage' },
-    { d: 'M0,15 L7,17 L7,18.6 L0,17.6 L-7,18.6 L-7,17 Z', fill: 'wing' },
-    { d: 'M-1.1,-17.8 Q0,-18.4 1.1,-17.8 L1,-17 Q0,-17.5 -1,-17 Z', fill: 'cockpit' },
-    { d: 'M-0.6,12 L0.6,12 L0.6,17.4 L-0.6,17.4 Z', fill: 'tail' },
-  ],
-  narrow: [
-    { d: 'M2.1,-3 L18.5,7.6 L18.8,9.4 L2.1,4.6 Z M-2.1,-3 L-18.5,7.6 L-18.8,9.4 L-2.1,4.6 Z', fill: 'wing' },
-    { d: 'M1.6,13.5 L7.6,17.6 L7.6,19 L1.3,17.4 Z M-1.6,13.5 L-7.6,17.6 L-7.6,19 L-1.3,17.4 Z', fill: 'wing' },
-    { d: `${ellipse(7.6, 0.6, 1.35, 3)} ${ellipse(-7.6, 0.6, 1.35, 3)}`, fill: 'engine' },
-    { d: fuselage(2.2), fill: 'fuselage' },
-    { d: 'M-1.3,-17.6 Q0,-18.4 1.3,-17.6 L1.2,-16.8 Q0,-17.4 -1.2,-16.8 Z', fill: 'cockpit' },
-    { d: 'M-0.65,12.5 L0.65,12.5 L0.65,19.6 L-0.65,19.6 Z', fill: 'tail' },
-  ],
-  wide: [
-    { d: 'M3,-4 L20,8.6 L20.2,10.6 L3,5.4 Z M-3,-4 L-20,8.6 L-20.2,10.6 L-3,5.4 Z', fill: 'wing' },
-    { d: 'M2.2,13 L9,17.2 L9,18.8 L1.8,17.2 Z M-2.2,13 L-9,17.2 L-9,18.8 L-1.8,17.2 Z', fill: 'wing' },
-    { d: `${ellipse(8.6, 0.2, 2, 3.8)} ${ellipse(-8.6, 0.2, 2, 3.8)}`, fill: 'engine' },
-    { d: fuselage(3.1), fill: 'fuselage' },
-    { d: 'M-1.8,-17.4 Q0,-18.4 1.8,-17.4 L1.7,-16.4 Q0,-17.2 -1.7,-16.4 Z', fill: 'cockpit' },
-    { d: 'M-0.8,12 L0.8,12 L0.8,19.6 L-0.8,19.6 Z', fill: 'tail' },
-  ],
-  jumbo: [
-    { d: 'M3,-5 L20,8 L20.2,10 L3,4.4 Z M-3,-5 L-20,8 L-20.2,10 L-3,4.4 Z', fill: 'wing' },
-    { d: 'M2.2,13 L9,17.2 L9,18.8 L1.8,17.2 Z M-2.2,13 L-9,17.2 L-9,18.8 L-1.8,17.2 Z', fill: 'wing' },
-    { d: `${ellipse(7.4, -0.6, 1.6, 3.2)} ${ellipse(-7.4, -0.6, 1.6, 3.2)} ${ellipse(13.4, 3.6, 1.5, 3)} ${ellipse(-13.4, 3.6, 1.5, 3)}`, fill: 'engine' },
-    { d: fuselage(3.15), fill: 'fuselage' },
-    { d: 'M0,-17 C1.6,-16.6 2,-14 2,-10 L1.4,-6 L-1.4,-6 L-2,-10 C-2,-14 -1.6,-16.6 0,-17 Z', fill: 'upperDeck' },
-    { d: 'M-0.8,12 L0.8,12 L0.8,19.6 L-0.8,19.6 Z', fill: 'tail' },
-  ],
+const poly = (pts: readonly (readonly [number, number])[], mirror = true): string => {
+  const one = (sx: number) => `M${pts.map(([x, y]) => `${x * sx},${y}`).join(' L')} Z`;
+  return mirror ? `${one(1)} ${one(-1)}` : one(1);
 };
 
-function drawShape(g: Graphics, shape: Shape, colour: (fill: Part['fill']) => number, alpha = 1): void {
-  for (const part of SHAPES[shape]) g.path(new GraphicsPath(part.d)).fill({ color: colour(part.fill), alpha });
+function fuselagePath(w: number, nose: Spec['nose'], tailCone?: Spec['tailCone']): string {
+  // right side from the nose (0, −20) to (w, n[5]), and from (w, 12) round the tail to (0, t[5])
+  const n = { round: [w * 0.85, -20, w, -18.4, w, -15.6], pointed: [w * 0.4, -19.8, w, -16.6, w, -13], blunt: [w * 0.9, -20, w, -19.2, w, -17.6] }[nose];
+  const t = tailCone === 'blade' ? [w, 15, w * 0.2, 18.4, 0, 20.4] : [w, 15.5, w * 0.5, 18.5, 0, 20];
+  return `M0,-20 C${n[0]},${n[1]} ${n[2]},${n[3]} ${w},${n[5]} L${w},12 C${t[0]},${t[1]} ${t[2]},${t[3]} 0,${t[5]} ` +
+    `C${-t[2]!},${t[3]} ${-t[0]!},${t[1]} ${-w},12 L${-w},${n[5]} C${-n[2]!},${n[3]} ${-n[0]!},${n[1]} 0,-20 Z`;
+}
+
+/** Where the wingtips end, for the navigation and strobe lights. */
+function wingtip(s: Spec): { x: number; y: number } {
+  const { y, sweep, span, tip } = s.wing;
+  const ext = s.tipDevice === 'raked' ? 2.4 : s.tipDevice ? 1 : 0;
+  return { x: span + ext, y: y + sweep + tip / 2 + (s.tipDevice === 'raked' ? 1 : 0) };
+}
+
+function parts(s: Spec): Part[] {
+  const w = s.body;
+  const { y, chord, sweep, span, tip } = s.wing;
+  const st = s.stab;
+  const stab: Part = { d: poly([[w * 0.6, st.y], [st.span, st.y + st.sweep], [st.span, st.y + st.sweep + st.chord * 0.5], [w * 0.5, st.y + st.chord]]), fill: 'wing' };
+  const ty = y + sweep;
+  const tips: Record<NonNullable<Spec['tipDevice']>, Part> = {
+    sharklet: { d: poly([[span, ty + 0.2], [span + 0.8, ty + 1.4], [span + 0.8, ty + tip + 0.8], [span, ty + tip]]), fill: 'tail' },
+    scimitar: { d: poly([[span, ty - 0.2], [span + 0.5, ty - 1.4], [span + 1, ty + 0.8], [span + 1, ty + tip + 1], [span, ty + tip]]), fill: 'tail' },
+    raked: { d: poly([[span, ty], [span + 2.4, ty + tip + 1.6], [span + 1.6, ty + tip + 1.8], [span, ty + tip]]), fill: 'wing' },
+    curl: { d: `M${span},${ty} Q${span + 1.6},${ty + 0.4} ${span + 1.4},${ty + tip + 1.8} L${span},${ty + tip} Z M${-span},${ty} Q${-span - 1.6},${ty + 0.4} ${-span - 1.4},${ty + tip + 1.8} L${-span},${ty + tip} Z`, fill: 'wing' },
+  };
+  const cy = s.nose === 'pointed' ? -16.8 : s.nose === 'blunt' ? -17.4 : -17.8;
+  const out: Part[] = [];
+  if (!s.tTail) out.push(stab);
+  out.push({ d: poly([[w * 0.9, y], [span, ty], [span, ty + tip], [w * 0.9, y + chord]]), fill: 'wing' });
+  if (s.tipDevice) out.push(tips[s.tipDevice]);
+  if (s.engines.length) out.push({ d: s.engines.map(([x, ey, rx, ry]) => `${ellipse(x, ey, rx, ry)} ${ellipse(-x, ey, rx, ry)}`).join(' '), fill: 'engine' });
+  out.push({ d: fuselagePath(w, s.nose, s.tailCone), fill: 'fuselage' });
+  if (s.windows) {
+    const end = s.length < 10 ? 2 : 10;
+    out.push({ d: poly([[w - 0.9, -13], [w - 0.45, -13], [w - 0.45, end], [w - 0.9, end]]), fill: 'window' });
+  }
+  if (s.upperDeck) {
+    out.push({ d: `M0,-17 C${w * 0.5},-16.6 ${w * 0.65},-14 ${w * 0.65},-10 L${w * 0.45},-4 L${-w * 0.45},-4 L${-w * 0.65},-10 C${-w * 0.65},-14 ${-w * 0.5},-16.6 0,-17 Z`, fill: 'upperDeck' });
+  }
+  if (s.mask) out.push({ d: `M${-w * 0.8},${cy} Q0,${cy - 1.6} ${w * 0.8},${cy} L${w * 0.86},${cy + 1.8} Q0,${cy + 0.6} ${-w * 0.86},${cy + 1.8} Z`, fill: 'mask' });
+  out.push({ d: `M${-w * 0.55},${cy} Q0,${cy - 0.8} ${w * 0.55},${cy} L${w * 0.5},${cy + 0.8} Q0,${cy + 0.2} ${-w * 0.5},${cy + 0.8} Z`, fill: 'cockpit' });
+  out.push({ d: `M-0.65,12.5 L0.65,12.5 L0.65,${s.tTail ? 18 : 19.6} L-0.65,${s.tTail ? 18 : 19.6} Z`, fill: 'tail' });
+  if (s.tTail) out.push(stab, { d: poly([[-0.65, st.y], [0.65, st.y], [0.65, st.y + st.chord], [-0.65, st.y + st.chord]], false), fill: 'tail' });
+  for (const [x, py, r] of s.props ?? []) {
+    out.push({ d: x === 0 ? ellipse(0, py, r, 0.6) : `${ellipse(x, py, r, 0.6)} ${ellipse(-x, py, r, 0.6)}`, fill: 'prop', alpha: 0.85 });
+  }
+  return out;
+}
+
+const PARTS = Object.fromEntries((Object.keys(SPECS) as AircraftTypeId[]).map((id) => [id, parts(SPECS[id])])) as Record<AircraftTypeId, Part[]>;
+
+function drawParts(g: Graphics, list: readonly Part[], colour: (fill: Part['fill']) => number, alpha = 1): void {
+  for (const part of list) g.path(new GraphicsPath(part.d)).fill({ color: colour(part.fill), alpha: alpha * (part.alpha ?? 1) });
 }
 
 /** How high the aircraft is, as a shadow offset in world units. */
@@ -68,39 +158,102 @@ function altitude(f: Flight): number {
   return 0.6;
 }
 
+const RED = 0xff3b30;
+const GREEN = 0x34e07a;
+const WHITE = 0xfff8e8;
+
+/** Lights, drawn above the night tint so they glow: navigation, beacon, strobes and the landing/taxi beam. */
+interface Lights {
+  readonly root: Container;
+  readonly nav: Graphics;
+  readonly beacon: Graphics;
+  readonly strobes: Graphics;
+  readonly landing: Graphics;
+  readonly taxi: Graphics;
+}
+
+function aircraftLights(spec: Spec, scale: number): Lights {
+  const r = (world: number) => world / scale; // light sizes in world units, whatever the aircraft's size
+  const tip = wingtip(spec);
+  const glow = (g: Graphics, x: number, y: number, color: number, size = 1) => {
+    g.circle(x, y, r(1.6 * size)).fill({ color, alpha: 0.25 });
+    g.circle(x, y, r(0.75 * size)).fill({ color, alpha: 0.5 });
+    g.circle(x, y, r(0.32 * size)).fill({ color: 0xffffff, alpha: 0.95 });
+  };
+  const nav = new Graphics();
+  glow(nav, -tip.x, tip.y, RED); // port (left)
+  glow(nav, tip.x, tip.y, GREEN); // starboard (right)
+  glow(nav, 0, 20.6, WHITE, 0.8);
+  const beacon = new Graphics();
+  glow(beacon, 0, -1, RED, 1.2);
+  const strobes = new Graphics();
+  for (const sx of [-1, 1]) glow(strobes, sx * tip.x, tip.y + 0.6, WHITE, 1.4);
+  const beam = (length: number, spread: number, alpha: number) => {
+    const g = new Graphics();
+    g.moveTo(-r(0.4), -20).lineTo(-r(spread), -20 - r(length)).lineTo(r(spread), -20 - r(length)).lineTo(r(0.4), -20).closePath()
+      .fill({ color: WHITE, alpha });
+    g.moveTo(-r(0.4), -20).lineTo(-r(spread * 0.5), -20 - r(length * 0.6)).lineTo(r(spread * 0.5), -20 - r(length * 0.6)).lineTo(r(0.4), -20).closePath()
+      .fill({ color: WHITE, alpha });
+    glow(g, 0, -19.6, WHITE, 0.9);
+    return g;
+  };
+  const landing = beam(16, 4.5, 0.16);
+  const taxi = beam(6, 2.4, 0.18);
+  const root = new Container();
+  root.addChild(landing, taxi, nav, strobes, beacon);
+  for (const g of [landing, taxi, nav, strobes, beacon]) g.blendMode = 'add';
+  root.scale.set(scale);
+  return { root, nav, beacon, strobes, landing, taxi };
+}
+
 interface Sprite {
   readonly root: Container;
   readonly shadow: Graphics;
   readonly body: Graphics;
+  readonly lights: Lights;
+  /** Offset so not every beacon flashes at once. */
+  readonly phaseMs: number;
 }
 
 function aircraftSprite(flight: Flight): Sprite {
-  const shape = SHAPE[flight.type];
-  const scale = LENGTH[AIRCRAFT_TYPES[flight.type].size] / 40;
+  const spec = SPECS[flight.type];
+  const scale = spec.length / 40;
   const shadow = new Graphics();
-  drawShape(shadow, shape, () => 0x000000, 0.45);
+  drawParts(shadow, PARTS[flight.type], () => 0x000000, 0.45);
   const body = new Graphics();
-  drawShape(body, shape, (fill) => (fill === 'tail' ? TAIL[flight.type] : C[fill]));
+  drawParts(body, PARTS[flight.type], (fill) => (fill === 'tail' ? TAIL[flight.type] : C[fill]));
   shadow.scale.set(scale);
   body.scale.set(scale);
   const root = new Container();
   root.addChild(shadow, body);
-  return { root, shadow, body };
+  const phaseMs = [...flight.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7);
+  return { root, shadow, body, lights: aircraftLights(spec, scale), phaseMs };
 }
 
-/** Keeps one sprite per flight on the airfield in sync with the simulation. Holding aircraft are not drawn. */
+const ON_RUNWAY = new Set<Flight['phase']>(['landing', 'takeoff']);
+const TAXIING = new Set<Flight['phase']>(['taxiIn', 'taxiOut', 'holdShort']);
+
+/**
+ * Keeps one sprite per flight on the airfield in sync with the simulation. Holding aircraft are not drawn.
+ * `container` holds the aircraft; `lights` holds their lights and goes above the daylight tint.
+ */
 export class FlightLayer {
   readonly container = new Container();
+  readonly lights = new Container();
   private readonly sprites = new Map<string, Sprite>();
 
-  update(flights: readonly Flight[]): void {
+  /** `darkness` 0 (day) … ~0.6 (night) from the daylight curve; lights fade in as it gets dark. */
+  update(flights: readonly Flight[], darkness = 0, nowMs = performance.now()): void {
     const present = new Set(flights.filter((f) => f.position).map((f) => f.id));
     for (const [id, s] of this.sprites) {
       if (!present.has(id)) {
         s.root.destroy({ children: true });
+        s.lights.root.destroy({ children: true });
         this.sprites.delete(id);
       }
     }
+    this.lights.visible = darkness > 0.1;
+    this.lights.alpha = Math.min(1, (darkness - 0.1) / 0.25);
     for (const f of flights) {
       if (!f.position) continue;
       let s = this.sprites.get(f.id);
@@ -108,6 +261,7 @@ export class FlightLayer {
         s = aircraftSprite(f);
         this.sprites.set(f.id, s);
         this.container.addChild(s.root);
+        this.lights.addChild(s.lights.root);
       }
       const rotation = (f.heading * Math.PI) / 180;
       const alt = altitude(f);
@@ -115,6 +269,18 @@ export class FlightLayer {
       s.body.rotation = rotation;
       s.shadow.position.set(f.position.x + alt, f.position.y + alt);
       s.shadow.rotation = rotation;
+      if (!this.lights.visible) continue;
+      const l = s.lights;
+      l.root.position.set(f.position.x, f.position.y);
+      l.root.rotation = rotation;
+      const runway = ON_RUNWAY.has(f.phase);
+      const moving = runway || TAXIING.has(f.phase);
+      const t = (nowMs + s.phaseMs) % 1200;
+      l.nav.visible = f.phase !== 'onStand';
+      l.beacon.visible = moving && t % 1000 < 130; // red anti-collision beacon while the engines run
+      l.strobes.visible = runway && (t < 60 || (t > 160 && t < 220)); // white double flash on the Runway
+      l.landing.visible = runway;
+      l.taxi.visible = TAXIING.has(f.phase) && f.phase !== 'holdShort';
     }
   }
 }

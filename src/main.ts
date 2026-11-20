@@ -42,23 +42,24 @@ async function start(): Promise<void> {
   const light = new Graphics();
   light.rect(WORLD.x0 * TILE_SIZE, WORLD.y0 * TILE_SIZE, WORLD.width * TILE_SIZE, WORLD.height * TILE_SIZE).fill(0xffffff);
   light.eventMode = 'none';
-  const showDaylight = (minute: number | null) => {
+  const showDaylight = (minute: number | null): number => {
     const { darkness, warmth } = minute === null ? { darkness: 0, warmth: 0 } : daylight(minute);
     const mix = (a: number, b: number) => Math.round(a + (b - a) * warmth);
     light.tint = (mix(0x04, 0x3a) << 16) | (mix(0x0a, 0x1c) << 8) | mix(0x1e, 0x08);
     light.alpha = darkness;
+    return darkness;
   };
   let airfield = drawAirfield(run.layout);
   const fit = () => fitToScreen(airfield, run.layout, app.screen.width, app.screen.height);
   const mountAirfield = () => {
-    airfield.removeChild(flightLayer.container, light);
+    airfield.removeChild(flightLayer.container, light, flightLayer.lights);
     airfield.destroy({ children: true });
     airfield = drawAirfield(run.layout);
-    airfield.addChild(flightLayer.container, light);
+    airfield.addChild(flightLayer.container, light, flightLayer.lights);
     app.stage.addChild(airfield);
     fit();
   };
-  airfield.addChild(flightLayer.container, light);
+  airfield.addChild(flightLayer.container, light, flightLayer.lights);
   app.stage.addChild(airfield);
   fit();
   app.renderer.on('resize', fit);
@@ -194,8 +195,7 @@ async function start(): Promise<void> {
     if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, effective));
     // Nothing left to happen today (last departure gone, the rest parked for the night): end the Day now.
     if (!ended && !sim.pendingAlert && daySettled(sim)) sim = finishDay(sim);
-    flightLayer.update(sim.flights);
-    showDaylight(ended ? null : sim.clock.minute);
+    flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute));
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
     if (!ended && isDayOver(sim.clock)) {

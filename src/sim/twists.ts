@@ -27,7 +27,7 @@ export const FAMILY_NAME: Record<TwistFamily, string> = { weather: 'Weather', in
 export const BOSS_TWISTS: Record<TwistFamily, ReadonlyArray<{ readonly name: string; readonly description: string }>> = {
   weather: [
     { name: 'Windy', description: 'More Go-Arounds and Pilot Errors.' },
-    { name: 'Heavy Rain & Crosswind', description: 'Higher error chances; a Wind Shift closes every Runway for 15 minutes.' },
+    { name: 'Heavy Rain & Crosswind', description: 'Higher error chances; a Wind Shift turns the wind round, so Runways change direction.' },
     { name: 'Storm', description: 'For about three hours only ILS Runways can take landings.' },
     { name: 'Thunderstorm', description: 'ILS-only landings for hours, and the airport closes completely for an hour.' },
   ],

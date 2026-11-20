@@ -28,6 +28,8 @@ export interface HoldingStrip extends StripBase {
 }
 export interface GroundStrip extends StripBase {
   readonly phase: FlightPhase;
+  /** Stopped in line in front of a Taxiway closed by an Incident. */
+  readonly waiting: boolean;
   /** Stand or Holding Bay id. */
   readonly spot: string | null;
 }
@@ -45,7 +47,7 @@ export function flightStrips(sim: Simulation): { inbound: InboundStrip[]; holdin
     holding: sim.flights.filter((f) => f.phase === 'holding').sort((a, b) => a.fuelMinutes - b.fuelMinutes)
       .map((f) => ({ ...base(f), fuelMinutes: f.fuelMinutes, lowFuel: f.fuelMinutes < ATC.lowFuelMinutes, since: f.phaseStart })),
     ground: sim.flights.filter((f) => GROUND.includes(f.phase))
-      .map((f) => ({ ...base(f), phase: f.phase, spot: f.standId ?? f.bayId })),
+      .map((f) => ({ ...base(f), phase: f.phase, waiting: f.waitingSince !== undefined, spot: f.standId ?? f.bayId })),
   };
 }
 
