@@ -6,7 +6,8 @@ import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
 import { TILE_SIZE, parkedHeading, runwayNames, spotEntry, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
-import { buildTaxiNetwork, detour, exitFor, exitsFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type Spot, type TaxiNetwork, type Tile } from './taxi';
+import { storyFor, type StoryKind } from './stories';
+import { buildTaxiNetwork, departureHolds, detour, exitFor, exitsFor, holdPointFor, rejectExit, routeBetween, TAKEOFF_TILES, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type Spot, type TaxiNetwork, type Tile } from './taxi';
 import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type WindSetup } from './wind';
 
 /** Timings *(first guess, from the prototypes)*. */
@@ -198,9 +199,13 @@ export interface Flight extends ScheduledFlight {
   readonly priority: boolean;
   /** Rush Turnaround: shorter Turnaround on its Stand. */
   readonly rushed: boolean;
+  /** Where a departure holds short and lines up (an intersection, when that is a shorter taxi); null = full length. */
+  readonly holdTile: Tile | null;
   /** World position (units) and heading in degrees (0 = north, 90 = east); null when not on the airfield. */
   readonly position: Point | null;
   readonly heading: number;
+  /** How high it flies, 0 (on the ground) … 1 (leaving the airfield), for drawing the climb and descent. */
+  readonly altitude: number;
 }
 
 export interface Simulation {
@@ -281,6 +286,8 @@ export interface SimEvent {
   readonly cost: number;
   /** Why a Diversion happened. */
   readonly reason?: DiversionReason;
+  /** What went wrong, in a line (Go-Arounds, Rejected Takeoffs, Incidents, Crashes); flavour only. */
+  readonly story?: string;
 }
 
 export type DiversionReason = 'curfew' | 'dark' | 'noRunway' | 'manual' | 'lowFuel';
@@ -389,6 +396,8 @@ export function createSimulation(setup: SimulationSetup): Simulation {
       stoppedUntil: 0,
       waitingSince: undefined, // every flight has every field, so copying flights each step stays fast
       exitTile: null,
+      holdTile: null,
+      altitude: 0,
       pendingCause: null,
       priority: false,
       rushed: false,
@@ -559,6 +568,34 @@ export function windAt(sim: Simulation, minute: number): Wind {
 /** Where departures hold short for a Runway in its current direction. */
 export const holdOf = (sim: Simulation, a: RunwayAccess): Tile => holdPointFor(a, sim.runwayReverse[a.index] ?? false);
 
+const sameTile = (p: Tile, q: Tile) => p.x === q.x && p.y === q.y;
+
+/** Where this departure holds short: its intersection if it still has enough Runway ahead, else the full length. */
+export function holdFor(sim: Simulation, f: Flight, a: RunwayAccess): Tile {
+  const h = f.holdTile;
+  if (h && departureHolds(a, sim.runwayReverse[a.index] ?? false, AIRCRAFT_TYPES[f.type].size).some((t) => sameTile(t, h))) return h;
+  return holdOf(sim, a);
+}
+
+/**
+ * The hold point a departure taxis to from `from`: of the full-length hold and the intersections with enough Runway
+ * ahead for its takeoff run, the one with the shortest taxi. The Tower still clears them in the order they got there.
+ */
+function chooseHold(sim: Simulation, f: Flight, a: RunwayAccess, route: (hold: Tile) => readonly Tile[]): { hold: Tile; route: Tile[] } {
+  const holds = departureHolds(a, sim.runwayReverse[a.index] ?? false, AIRCRAFT_TYPES[f.type].size);
+  let best: { hold: Tile; route: Tile[] } | null = null;
+  for (const hold of holds) {
+    let r: Tile[];
+    try {
+      r = [...route(hold)];
+    } catch {
+      continue;
+    }
+    if (!best || r.length < best.route.length) best = { hold, route: r };
+  }
+  return best ?? { hold: holds[0]!, route: [...route(holds[0]!)] };
+}
+
 /**
  * The ATC Tower turns a Runway round when the tailwind gets too strong: a short changeover with no new
  * Movements; departures already heading for the old hold point taxi on to the new one.
@@ -572,10 +609,12 @@ function updateDirections(sim: MutableSim, flights: Mutable<Flight>[], now: numb
     sim.runwayReverse[a.index] = !current;
     sim.changeoverUntil[a.index] = Math.max(now, sim.runwayBusyUntil[a.index] ?? 0) + WIND_RULES.changeoverMinutes;
     sim.events.push({ minute: now, kind: 'runwayChange', flightId: `RWY ${activeName(sim, a, !current)}`, cost: 0 });
-    const hold = holdOf(sim, a);
     for (const f of flights) {
       if (f.runway !== a.index || f.phase !== 'holdShort') continue;
-      f.route = taxiRoute(sim.network, f.route[f.route.length - 1] ?? holdPointFor(a, current), hold);
+      const at = f.route[f.route.length - 1] ?? holdPointFor(a, current);
+      const next = chooseHold(sim, f, a, (h) => taxiRoute(sim.network, at, h));
+      f.holdTile = next.hold;
+      f.route = next.route;
       f.routeProgress = 0;
       f.phase = 'taxiOut';
       f.phaseStart = now;
@@ -611,7 +650,7 @@ function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight,
  */
 function nightTurnBack(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   const access = accessOf(sim, f);
-  const at = f.phase === 'holdShort' && access ? holdOf(sim, access) : f.route[Math.min(Math.floor(f.routeProgress), f.route.length - 1)];
+  const at = f.phase === 'holdShort' && access ? holdFor(sim, f, access) : f.route[Math.min(Math.floor(f.routeProgress), f.route.length - 1)];
   if (!at || !sim.network.tiles.has(`${at.x},${at.y}`)) return; // still leaving its Stand: decide once on the Taxiway
   const here = sim.network.component.get(`${at.x},${at.y}`);
   const litOut = fittingRunways(sim, f).find((a) => {
@@ -620,7 +659,9 @@ function nightTurnBack(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   });
   if (litOut) {
     f.runway = litOut.index;
-    f.route = taxiRoute(sim.network, at, holdOf(sim, litOut));
+    const next = chooseHold(sim, f, litOut, (h) => taxiRoute(sim.network, at, h));
+    f.holdTile = next.hold;
+    f.route = next.route;
   } else {
     const stand = freeFittingStand(sim, f);
     const spot = stand ?? freeFittingBay(sim, f);
@@ -665,7 +706,22 @@ function earnFee(sim: MutableSim, f: Flight): void {
 
 function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, cost = 0): void {
   sim.money -= cost;
-  sim.events.push({ minute: now, kind, flightId: f.id, cost });
+  const story = storyKind(kind, f);
+  sim.events.push(story
+    ? { minute: now, kind, flightId: f.id, cost, story: storyFor(story, f.pendingCause, sim.seed, f.id, now) }
+    : { minute: now, kind, flightId: f.id, cost });
+}
+
+/** Which kind of story an event gets, from what the aircraft was doing. */
+function storyKind(kind: SimEvent['kind'], f: Flight): StoryKind | null {
+  switch (kind) {
+    case 'goAround': return 'goAround';
+    case 'rejectedTakeoff': return 'rejectedTakeoff';
+    case 'taxiIncident': return 'taxiIncident';
+    case 'incident': return f.phase === 'takeoff' ? 'takeoffIncident' : 'landingIncident';
+    case 'crash': return f.phase === 'takeoff' ? 'takeoffCrash' : f.phase === 'holding' ? 'fuelCrash' : 'landingCrash';
+    default: return null;
+  }
 }
 
 function releaseSpots(sim: MutableSim, f: Mutable<Flight>): void {
@@ -866,7 +922,7 @@ function taxiwayClosures(sim: Simulation, flights: readonly Flight[], now: numbe
     // holding short, or taking off (a Rejected Takeoff comes back to the hold point, so it stays claimed until airborne)
     if (f.phase === 'holdShort' || f.phase === 'takeoff') {
       const access = sim.network.runways.find((a) => a.index === f.runway);
-      occupants.push({ id: f.id, at: access ? holdOf(sim, access) : f.route[f.route.length - 1]!, clearance, heading: null });
+      occupants.push({ id: f.id, at: access ? holdFor(sim, f, access) : f.route[f.route.length - 1]!, clearance, heading: null });
       continue;
     }
     if (f.phase !== 'taxiIn' && f.phase !== 'taxiOut') continue;
@@ -1071,7 +1127,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       if (f.phase === 'taxiOut') {
         // the Runway may have turned round while it was taxiing: carry on to the new hold point
         const access = accessOf(sim, f);
-        const hold = access ? holdOf(sim, access) : undefined;
+        const hold = access ? holdFor(sim, f, access) : undefined;
         const at = f.route[f.route.length - 1]!;
         if (hold && (hold.x !== at.x || hold.y !== at.y)) {
           f.route = taxiRoute(sim.network, at, hold);
@@ -1108,7 +1164,9 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       const out = departureRunway(sim, sim.flights, f, now);
       if (!out) break; // no usable Runway at all
       f.runway = out.index;
-      f.route = routeFromStand(sim.network, stand!, holdOf(sim, out));
+      const leave = chooseHold(sim, f, out, (h) => routeFromStand(sim.network, stand!, h));
+      f.holdTile = leave.hold;
+      f.route = leave.route;
       f.routeProgress = 0;
       delete sim.standOccupant[stand!.id];
       f.standId = null;
@@ -1127,9 +1185,25 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
         break;
       }
       if (outcome === 'rejectedTakeoff' || outcome === 'incident') {
+        const access = accessOf(sim, f);
         logEvent(sim, now, 'rejectedTakeoff', f);
         if (outcome === 'incident') block(sim, f.runway, incident(sim, f, now, 'incident'));
-        enter('holdShort');
+        // it has braked to a stop and left the Runway at the next exit: taxi back and line up again
+        const exit = access ? rejectExit(access, f.reverse, AIRCRAFT_TYPES[f.type].size, holdFor(sim, f, access)) : null;
+        let back: { hold: Tile; route: Tile[] } | null = null;
+        try {
+          back = access && exit ? chooseHold(sim, f, access, (h) => taxiRoute(sim.network, exit, h)) : null;
+        } catch {
+          back = null;
+        }
+        if (!back) {
+          enter('holdShort');
+          break;
+        }
+        f.holdTile = back.hold;
+        f.route = back.route;
+        f.routeProgress = 0;
+        enter('taxiOut');
         break;
       }
       earnFee(sim, f);
@@ -1145,8 +1219,34 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
   return f;
 }
 
+/** Approach before the threshold, in world units (drawn descending onto the Runway). */
+const APPROACH_UNITS = 60;
+/** Touchdown point past the threshold, in world units. */
+const TOUCHDOWN_UNITS = 2 * T;
+
+/**
+ * A landing over its share `s` (0…1) of the landing time: a steady descent from the approach to touchdown, then braking
+ * evenly to taxi speed at the exit (`exitAlong` from the threshold). Altitude 1 at the start of the approach, 0 on the ground.
+ */
+export function landingPath(exitAlong: number, s: number): { along: number; altitude: number } {
+  const air = APPROACH_UNITS + TOUCHDOWN_UNITS;
+  const roll = Math.max(1, exitAlong - TOUCHDOWN_UNITS);
+  // same speed at touchdown, braking evenly to a stop: the roll takes twice as long per unit as the air part
+  const flare = air / (air + 2 * roll);
+  if (s < flare) return { along: -APPROACH_UNITS + air * (s / flare), altitude: 1 - s / flare };
+  const u = (s - flare) / (1 - flare);
+  return { along: TOUCHDOWN_UNITS + roll * (1 - (1 - u) * (1 - u)), altitude: 0 };
+}
+
+/** A takeoff over its share `s`: accelerating down the Runway, lifting off after `rotate` units and climbing away. */
+export function takeoffPath(total: number, rotate: number, s: number): { along: number; altitude: number } {
+  const along = total * s * s;
+  return { along, altitude: along <= rotate ? 0 : Math.min(1, (along - rotate) / Math.max(1, total - rotate)) };
+}
+
 /** Sets the flight's world position for rendering, as of minute `t`. */
 function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
+  f.altitude = 0;
   const share = (minutes: number) => Math.min(1, (t - f.phaseStart) / minutes);
   const access = accessOf(sim, f);
   /** Point along the Runway centre line: `along` in world units from its landing threshold. */
@@ -1166,9 +1266,11 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
     case 'landing': {
       if (!access) break;
       const exit = f.exitTile ?? exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size);
-      f.position = onRunway(access, f.reverse, fromStart(access, f.reverse, exit) * share(separationOf(sim).landing));
+      const path = landingPath(fromStart(access, f.reverse, exit), share(separationOf(sim).landing));
+      f.position = onRunway(access, f.reverse, path.along);
+      f.altitude = path.altitude;
       f.heading = landingHeading(access.vertical, f.reverse);
-      break;
+      return;
     }
     case 'taxiIn':
     case 'taxiOut': {
@@ -1185,16 +1287,28 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
       break;
     }
     case 'holdShort':
-      f.position = tileCentre(access ? holdOf(sim, access) : sim.network.holdPoint);
+      f.position = tileCentre(access ? holdFor(sim, f, access) : sim.network.holdPoint);
       f.heading = access?.vertical ? 90 : 180;
       break;
     case 'takeoff': {
       if (!access) break;
-      const from = fromStart(access, f.reverse, holdPointFor(access, f.reverse));
-      const to = (access.vertical ? access.runway.h : access.runway.w) * T + 40;
-      f.position = onRunway(access, f.reverse, from + (to - from) * share(separationOf(sim).takeoff));
+      const size = AIRCRAFT_TYPES[f.type].size;
+      const lineUp = holdFor(sim, f, access);
+      const from = fromStart(access, f.reverse, lineUp);
+      const s = share(separationOf(sim).takeoff);
       f.heading = landingHeading(access.vertical, f.reverse);
-      break;
+      if (f.pendingOutcome === 'rejectedTakeoff' || f.pendingOutcome === 'incident') {
+        // accelerates, aborts and brakes to a stop at the exit it leaves by
+        const stop = fromStart(access, f.reverse, rejectExit(access, f.reverse, size, lineUp));
+        f.position = onRunway(access, f.reverse, from + (stop - from) * (s * s * (3 - 2 * s)));
+        f.altitude = 0;
+        return;
+      }
+      const to = (access.vertical ? access.runway.h : access.runway.w) * T + 60;
+      const path = takeoffPath(to - from, TAKEOFF_TILES[size] * T * 0.8, s);
+      f.position = onRunway(access, f.reverse, from + path.along);
+      f.altitude = path.altitude;
+      return;
     }
     default:
       f.position = null;

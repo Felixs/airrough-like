@@ -40,7 +40,7 @@ export function daySections(run: RunState): string {
         </dl></section>
       </div>
       <section><h3>Safety</h3>${r.highlights.length
-        ? `<ul class="events">${r.highlights.map((h) => `<li class="${h.kind === 'crash' ? 'bad' : 'warn'}"><span class="t">${hhmm(h.minute)}</span> ${KIND[h.kind]}: ${esc(h.callsign)} (${esc(h.aircraft)})${h.cost ? ` · ${signed(-h.cost)}` : ''}</li>`).join('')}</ul>`
+        ? `<ul class="events">${r.highlights.map((h) => `<li class="${h.kind === 'crash' ? 'bad' : 'warn'}"><span class="t">${hhmm(h.minute)}</span> ${KIND[h.kind]}: ${esc(h.callsign)} (${esc(h.aircraft)})${h.story ? `, ${esc(h.story)}` : ''}${h.cost ? ` · ${signed(-h.cost)}` : ''}</li>`).join('')}</ul>`
         : '<p class="ok">No Crashes or Incidents today.</p>'}</section>`;
 }
 

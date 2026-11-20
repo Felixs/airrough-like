@@ -151,11 +151,14 @@ function drawParts(g: Graphics, list: readonly Part[], colour: (fill: Part['fill
   for (const part of list) g.path(new GraphicsPath(part.d)).fill({ color: colour(part.fill), alpha: alpha * (part.alpha ?? 1) });
 }
 
-/** How high the aircraft is, as a shadow offset in world units. */
-function altitude(f: Flight): number {
-  if (f.phase === 'landing') return 3.5;
-  if (f.phase === 'takeoff') return 3;
-  return 0.6;
+/**
+ * Height illusion from the flight's altitude (0 on the ground … 1 leaving the airfield): the aircraft draws larger, as
+ * if nearer the camera, while its shadow stays on the ground at its true size, falls further away (the sun is to the
+ * north-west) and fades.
+ */
+export function heightLook(altitude: number): { scale: number; shadowOffset: number; shadowAlpha: number } {
+  const a = Math.min(1, Math.max(0, altitude));
+  return { scale: 1 + 0.45 * a, shadowOffset: 0.6 + 22 * a, shadowAlpha: 1 - 0.6 * a };
 }
 
 const RED = 0xff3b30;
@@ -218,6 +221,11 @@ interface Sprite {
   readonly lights: Lights;
   /** Offset so not every beacon flashes at once. */
   readonly phaseMs: number;
+  /** Drawing scale for the aircraft's length on the ground. */
+  readonly scale: number;
+  /** Altitude at the last step and now; drawn between the two like the position. */
+  altFrom: number;
+  altTo: number;
 }
 
 function aircraftSprite(flight: Flight): Sprite {
@@ -233,7 +241,7 @@ function aircraftSprite(flight: Flight): Sprite {
   root.addChild(shadow, body);
   const phaseMs = [...flight.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7);
   const at = { x: flight.position?.x ?? 0, y: flight.position?.y ?? 0, heading: flight.heading };
-  return { from: at, to: { ...at }, root, shadow, body, lights: aircraftLights(spec, scale), phaseMs };
+  return { from: at, to: { ...at }, root, shadow, body, lights: aircraftLights(spec, scale), phaseMs, scale, altFrom: flight.altitude, altTo: flight.altitude };
 }
 
 const ON_RUNWAY = new Set<Flight['phase']>(['landing', 'takeoff']);
@@ -244,7 +252,7 @@ const TAXIING = new Set<Flight['phase']>(['taxiIn', 'taxiOut', 'holdShort']);
  * `container` holds the aircraft; `lights` holds their lights and goes above the daylight tint.
  */
 export class FlightLayer {
-  readonly container = new Container();
+  readonly container = new Container({ sortableChildren: true });
   readonly lights = new Container();
   private readonly sprites = new Map<string, Sprite>();
   private minute = -1;
@@ -281,22 +289,31 @@ export class FlightLayer {
       if (stepped) {
         s.from = s.to;
         s.to = { x: f.position.x, y: f.position.y, heading: f.heading };
+        s.altFrom = s.altTo;
+        s.altTo = f.altitude;
         // a long jump (onto a Stand, a new phase) is not a glide
-        if (Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y) > 120) s.from = { ...s.to };
+        if (Math.hypot(s.to.x - s.from.x, s.to.y - s.from.y) > 120) {
+          s.from = { ...s.to };
+          s.altFrom = s.altTo;
+        }
       }
       const k = minute < 0 ? 1 : fraction;
       const turn = ((((s.to.heading - s.from.heading) % 360) + 540) % 360) - 180;
       const pose = { x: s.from.x + (s.to.x - s.from.x) * k, y: s.from.y + (s.to.y - s.from.y) * k, heading: s.from.heading + turn * k };
       const rotation = (pose.heading * Math.PI) / 180;
-      const alt = altitude(f);
+      const look = heightLook(s.altFrom + (s.altTo - s.altFrom) * k);
       s.body.position.set(pose.x, pose.y);
       s.body.rotation = rotation;
-      s.shadow.position.set(pose.x + alt, pose.y + alt);
+      s.body.scale.set(s.scale * look.scale);
+      s.root.zIndex = look.scale > 1 ? 1 : 0; // aircraft in the air draw above those on the ground
+      s.shadow.position.set(pose.x + look.shadowOffset, pose.y + look.shadowOffset);
       s.shadow.rotation = rotation;
+      s.shadow.alpha = look.shadowAlpha;
       if (!this.lights.visible) continue;
       const l = s.lights;
       l.root.position.set(pose.x, pose.y);
       l.root.rotation = rotation;
+      l.root.scale.set(s.scale * look.scale);
       const runway = ON_RUNWAY.has(f.phase);
       const moving = runway || TAXIING.has(f.phase);
       const t = (nowMs + s.phaseMs) % 1200;

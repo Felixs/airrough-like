@@ -64,6 +64,8 @@ export interface DayReport {
 export interface DayHighlight {
   readonly minute: number;
   readonly kind: 'crash' | 'incident' | 'taxiIncident';
+  /** What went wrong, in a line. */
+  readonly story?: string;
   readonly callsign: string;
   readonly aircraft: string;
   readonly cost: number;
@@ -321,7 +323,7 @@ export function endDay(run: RunState, sim: Simulation): RunState {
   }
   const highlights: DayHighlight[] = sim.events
     .filter((e): e is typeof e & { kind: DayHighlight['kind'] } => e.kind === 'crash' || e.kind === 'incident' || e.kind === 'taxiIncident')
-    .map((e) => ({ minute: e.minute, kind: e.kind, callsign: byId.get(e.flightId)?.callsign ?? e.flightId, aircraft: byId.get(e.flightId)?.type ?? '', cost: e.cost }));
+    .map((e) => ({ minute: e.minute, kind: e.kind, callsign: byId.get(e.flightId)?.callsign ?? e.flightId, aircraft: byId.get(e.flightId)?.type ?? '', cost: e.cost, ...(e.story ? { story: e.story } : {}) }));
   const report: DayReport = {
     week: run.week, weekday: run.weekday, quota, movements: sim.movements, fees: sim.fees, upkeep: cost, penalties,
     crashes: sim.crashes, diversions: sim.diversions, quotaMet, moneyAfter: money, net: sim.fees - cost - penalties,

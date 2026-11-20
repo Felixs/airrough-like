@@ -86,6 +86,10 @@ _Avoid_: Runway heading, orientation
 A Taxiway connector where landing aircraft leave the Runway. Each aircraft takes the first Exit its Size Class can reach after its landing roll; smaller aircraft can use Exits part-way along.
 _Avoid_: Turn-off, high-speed exit
 
+**Intersection Departure**:
+A takeoff that lines up at a connector part-way along the Runway instead of at its end; allowed when the aircraft still has its takeoff run of Runway ahead, and taken when it is the shorter taxi.
+_Avoid_: Short takeoff, mid-runway departure
+
 **Endless Mode**:
 Optional continuation of a Run after it has been won by surviving four Weeks; played for score until the Run is lost. Traffic keeps rising and Boss Days stack multiple Severity-4 Boss Twists.
 _Avoid_: Free play, overtime
@@ -315,6 +319,14 @@ _Avoid_: Human error
 **Go-Around**:
 An aborted landing after which the aircraft returns to Holding; the most common, harmless result of an error.
 _Avoid_: Missed approach, abort
+
+**Rejected Takeoff**:
+A takeoff abandoned on the roll: the aircraft brakes to a stop, leaves the Runway at the next Exit and taxis back to line up again.
+_Avoid_: Aborted takeoff, RTO
+
+**Story**:
+The one line saying what went wrong in a Go-Around, Rejected Takeoff, Incident or Crash (a bird strike, a tug broken down on the Taxiway); flavour only, it never changes the outcome.
+_Avoid_: Cause, reason
 
 **Risk Meter**:
 The visible indicator of how likely errors currently are, so Crashes never feel random.
