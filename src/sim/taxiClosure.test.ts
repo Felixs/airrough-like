@@ -67,3 +67,79 @@ describe('Taxi routes', () => {
     expect(off.length).toBeLessThanOrEqual(3); // the hold point / exit and the Stand entry only
   });
 });
+
+describe('In-trail spacing', () => {
+  it('lines departures up behind the hold point instead of stacking them, all through a busy Day', () => {
+    const schedule = Array.from({ length: 24 }, (_, k) => ({ id: `F${k}`, type: (k % 3 ? 'A320' : 'Q400') as 'A320' | 'Q400', arrivalMinute: 6 * 60 + k * 6 }));
+    let sim: Simulation = createSimulation({ layout, schedule, seed: 3 });
+    let worstHolding = 0;
+    let stacked = 0;
+    while (sim.clock.minute < 15 * 60) {
+      sim = stepSimulation(sim);
+      if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+      worstHolding = Math.max(worstHolding, sim.flights.filter((f) => f.phase === 'holdShort').length);
+      const still = sim.flights.filter((f) => f.position && (f.phase === 'holdShort' || f.waitingSince !== undefined));
+      for (const a of still) for (const b of still) {
+        if (a.id < b.id && Math.hypot(a.position!.x - b.position!.x, a.position!.y - b.position!.y) < 8) stacked++;
+      }
+    }
+    expect(sim.flights.filter((f) => f.phase === 'departed').length).toBeGreaterThan(10);
+    expect(worstHolding).toBeLessThanOrEqual(1); // one at the hold point, the rest queue behind it
+    expect(stacked).toBe(0);
+  });
+});
+
+describe('Oncoming traffic', () => {
+  it('never passes on the same Taxiway: one of the two takes another', () => {
+    const east = taxiRoute(network, { x: 8, y: 10 }, { x: 40, y: 10 });
+    const west = taxiRoute(network, { x: 40, y: 10 }, { x: 8, y: 10 });
+    const base = createSimulation({ layout, seed: 4, schedule: ['A', 'B'].map((id) => ({ id, type: 'A320' as const, arrivalMinute: 1200 })) });
+    const go = (route: Tile[]): Partial<Flight> => ({ phase: 'taxiIn', route, routeProgress: 0, stoppedUntil: 0, standId: null, bayId: 'B1', position: { x: 0, y: 0 }, runway: 0 });
+    const crafted: Partial<Record<string, Partial<Flight>>> = { A: go(east), B: go(west) };
+    let sim: Simulation = { ...base, flights: base.flights.map((f) => ({ ...f, ...crafted[f.id] }) as Flight) };
+    let closest = Infinity;
+    let tookOther = false;
+    const start = sim.clock.minute;
+    while (sim.clock.minute < start + 10) {
+      sim = stepSimulation(sim);
+      const [a, b] = ['A', 'B'].map((id) => sim.flights.find((f) => f.id === id)!);
+      tookOther ||= [a!, b!].some((f) => f.route.some((t) => t.y >= 16));
+      if (a!.phase === 'taxiIn' && b!.phase === 'taxiIn') closest = Math.min(closest, Math.hypot(a!.position!.x - b!.position!.x, a!.position!.y - b!.position!.y));
+    }
+    expect(closest).toBeGreaterThanOrEqual(16);
+    expect(tookOther).toBe(true); // one of them went round by the lower Taxiway
+  });
+});
+
+describe('A blocked Runway exit', () => {
+  it('keeps arrivals in Holding and lets departures go', async () => {
+    const { exitFor } = await import('./taxi');
+    const access = network.runways[0]!;
+    const exit = exitFor(access, false, 'medium');
+    const hold = network.holdPoint;
+    let sim: Simulation = createSimulation({ layout, seed: 4, schedule: ['X', 'H', 'D'].map((id) => ({ id, type: 'A320' as const, arrivalMinute: 1200 })) });
+    while (sim.clock.minute < 6 * 60 + 5) sim = stepSimulation(sim);
+    const now = sim.clock.minute;
+    const lane = taxiRoute(network, exit, { x: 40, y: 10 });
+    const crafted: Partial<Record<string, Partial<Flight>>> = {
+      // stopped by an Incident right at the exit
+      X: { phase: 'taxiIn', route: lane, routeProgress: 1, stoppedUntil: now + 30, standId: null, bayId: 'B1', position: { x: 0, y: 0 }, runway: 0 },
+      H: { phase: 'holding', phaseStart: now - 1, fuelMinutes: 40 },
+      D: { phase: 'holdShort', phaseStart: now - 1, runway: 0, route: [hold], routeProgress: 0, position: { x: 0, y: 0 } },
+    };
+    sim = { ...sim, flights: sim.flights.map((f) => ({ ...f, ...crafted[f.id] }) as Flight) };
+    const phases: string[] = [];
+    while (sim.clock.minute < now + 10) {
+      sim = stepSimulation(sim);
+      if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+      phases.push(sim.flights.find((f) => f.id === 'H')!.phase);
+    }
+    expect(phases.every((p) => p === 'holding')).toBe(true);
+    expect(['takeoff', 'departed']).toContain(sim.flights.find((f) => f.id === 'D')!.phase);
+    while (sim.clock.minute < now + 45) {
+      sim = stepSimulation(sim);
+      if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+    }
+    expect(sim.flights.find((f) => f.id === 'H')!.phase).not.toBe('holding'); // lands once the exit is clear again
+  });
+});

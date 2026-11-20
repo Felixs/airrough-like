@@ -216,11 +216,16 @@ const OFF_CENTRE_COST = 6;
  * OFF_CENTRE_COST, so aircraft follow the centre line and leave it only where they have to (a Stand entry, a hold
  * point). Ties go to the neighbour found first (east, west, south, north), so routes are deterministic.
  */
-function searchPath(network: TaxiNetwork, from: Tile, to: Tile, avoid?: ReadonlySet<string>): Tile[] | null {
+/** Tiles a route must keep off: a fixed set, or a test given the tile and how many steps from the start it is reached. */
+export type Avoid = ReadonlySet<string> | ((key: string, steps: number) => boolean);
+const avoids = (avoid: Avoid | undefined, k: string, steps: number) => !!avoid && (typeof avoid === 'function' ? avoid(k, steps) : avoid.has(k));
+
+function searchPath(network: TaxiNetwork, from: Tile, to: Tile, avoid?: Avoid): Tile[] | null {
   const start = key(from);
   const goal = key(to);
   const cost = new Map<string, number>([[start, 0]]);
   const prev = new Map<string, string | null>([[start, null]]);
+  const steps = new Map<string, number>([[start, 0]]);
   const done = new Set<string>();
   // binary heap of [cost, order, tile]
   const heap: [number, number, Tile][] = [[0, 0, from]];
@@ -261,11 +266,13 @@ function searchPath(network: TaxiNetwork, from: Tile, to: Tile, avoid?: Readonly
     if (k === goal) break;
     for (const n of [{ x: t.x + 1, y: t.y }, { x: t.x - 1, y: t.y }, { x: t.x, y: t.y + 1 }, { x: t.x, y: t.y - 1 }]) {
       const nk = key(n);
-      if (!network.tiles.has(nk) || done.has(nk) || avoid?.has(nk)) continue;
+      const ns = steps.get(k)! + 1;
+      if (!network.tiles.has(nk) || done.has(nk) || avoids(avoid, nk, ns)) continue;
       const nc = c + (network.centre.has(nk) ? 1 : OFF_CENTRE_COST);
       if (nc < (cost.get(nk) ?? Infinity)) {
         cost.set(nk, nc);
         prev.set(nk, k);
+        steps.set(nk, ns);
         push([nc, ++order, n]);
       }
     }
@@ -284,12 +291,13 @@ function searchPath(network: TaxiNetwork, from: Tile, to: Tile, avoid?: Readonly
  * start of the route and its end off the Taxiway (the walk into a Stand) stay as they are. Null when there is no way
  * round.
  */
-export function detour(network: TaxiNetwork, route: readonly Tile[], from: number, avoid: ReadonlySet<string>): Tile[] | null {
+export function detour(network: TaxiNetwork, route: readonly Tile[], from: number, avoid: Avoid): Tile[] | null {
   let end = route.length - 1;
   while (end > from && !network.tiles.has(key(route[end]!))) end--;
   const a = route[from];
   const b = route[end];
-  if (!a || !b || end <= from || avoid.has(key(a)) || avoid.has(key(b)) || !network.tiles.has(key(a))) return null;
+  if (!a || !b || end <= from || avoids(avoid, key(a), 0) || !network.tiles.has(key(a))) return null;
+  if (typeof avoid !== 'function' && avoid.has(key(b))) return null;
   const path = searchPath(network, a, b, avoid);
   return path ? [...route.slice(0, from), ...path, ...route.slice(end + 1)] : null;
 }

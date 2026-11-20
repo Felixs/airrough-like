@@ -21,6 +21,7 @@ change makes wrong is corrected, not appended to. Docs that are also in the clau
 
 ## Deploying
 
-Pages (`.github/workflows/pages.yml`) deploys on every push to main, but merges made through the GitHub API from a
-Claude session do not fire push workflows. After merging that way, start the deploy by hand:
-`gh api -X POST repos/Felixs/airrough-like/actions/workflows/pages.yml/dispatches -f ref=main`.
+Pages (`.github/workflows/pages.yml`) deploys on every push to main. Keep `[skip ci]` out of every commit message:
+a squash merge copies all branch commit messages into the merge commit, and `[skip ci]` there skips the deploy.
+Commits pushed by a workflow (e.g. the screenshots) start no workflows, so run CI on such a branch head by hand
+(`gh api -X POST repos/Felixs/airrough-like/actions/workflows/ci.yml/dispatches -f ref=<branch>`).

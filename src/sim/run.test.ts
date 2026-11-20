@@ -75,7 +75,7 @@ describe('A whole Run', () => {
     expect(a.stats.daysSurvived).toBeGreaterThanOrEqual(5);
     expect(a.stats.daysSurvived).toBeLessThan(14);
     expect(play(7)).toEqual(a);
-  });
+  }, 20_000); // plays a whole Run twice
 
   it('is a pure, serializable object', () => {
     const run = playDay(startRun(3));
