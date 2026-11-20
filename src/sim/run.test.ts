@@ -93,3 +93,18 @@ describe('A whole Run', () => {
     expect(startLiveDay(next).flights.filter((f: { overnight?: boolean }) => f.overnight).length).toBe(left);
   });
 });
+
+describe('Day report', () => {
+  it('sums up the Day: net money, landings by Purpose, Diversions by reason, busiest hour, Crashes and Incidents', () => {
+    const run = startRun(5);
+    const next = playDay(run);
+    const r = next.history[0]!;
+    expect(r.net).toBe(r.fees - r.upkeep - r.penalties);
+    expect(r.landed.passenger + r.landed.cargo).toBeGreaterThan(0);
+    const reasons = r.diversionsByReason;
+    expect(reasons.curfew + reasons.dark + reasons.noRunway + reasons.manual).toBe(r.diversions);
+    expect(r.busiestHour).toBeGreaterThanOrEqual(6);
+    expect(r.highlights.filter((h) => h.kind === 'crash')).toHaveLength(r.crashes);
+    for (const h of r.highlights) expect(h.callsign.length).toBeGreaterThan(0);
+  });
+});

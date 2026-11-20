@@ -261,7 +261,11 @@ export interface SimEvent {
   readonly flightId: string;
   /** Money paid (Crash Fine, Incident cost). */
   readonly cost: number;
+  /** Why a Diversion happened. */
+  readonly reason?: DiversionReason;
 }
+
+export type DiversionReason = 'curfew' | 'dark' | 'noRunway' | 'manual';
 
 export interface SimulationSetup {
   readonly layout: AirportLayout;
@@ -419,7 +423,7 @@ export function stepSimulation(prev: Simulation): Simulation {
   const blocked = releaseBays(sim, flights, now);
   assignRunway(sim, flights, now, blocked, rng);
   if (now + STEP_MINUTES >= HOURS.curfew) {
-    for (const f of flights) if (f.phase === 'holding' || f.phase === 'scheduled') divert(sim, f, now);
+    for (const f of flights) if (f.phase === 'holding' || f.phase === 'scheduled') divert(sim, f, now, 'curfew');
   } else if (sim.pauseOnEvents && !sim.pendingAlert) {
     const fresh = sim.events.slice(prev.events.length).filter((e) => PAUSING_EVENTS.has(e.kind));
     if (fresh.length) sim.pendingAlert = { kind: 'event', flightId: fresh[0]!.flightId, minute: now, events: fresh };
@@ -511,9 +515,9 @@ function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight)
     ?? sim.network.runways.find(reachable);
 }
 
-function divert(sim: MutableSim, f: Mutable<Flight>, now: number): void {
+function divert(sim: MutableSim, f: Mutable<Flight>, now: number, reason: DiversionReason): void {
   sim.diversions += 1;
-  logEvent(sim, now, 'diversion', f);
+  sim.events.push({ minute: now, kind: 'diversion', flightId: f.id, cost: 0, reason });
   releaseSpots(sim, f);
   f.phase = 'diverted';
   f.phaseStart = now;
@@ -658,7 +662,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     case 'scheduled':
       if (now < f.arrivalMinute) break;
       if (now >= HOURS.holdingCloses) {
-        divert(sim, f, now);
+        divert(sim, f, now, 'curfew');
         break;
       }
       enter('holding');
@@ -667,7 +671,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     case 'holding':
       const nightfall = isDark(now) && !nightRunwayFor(sim, f);
       if (nightfall || (f.fuelMinutes <= ATC.minimumFuelMinutes && !runwayUsableFor(sim, f, now))) {
-        divert(sim, f, now);
+        divert(sim, f, now, nightfall ? 'dark' : 'noRunway');
         break;
       }
       if (f.fuelMinutes <= 0) {
@@ -872,7 +876,7 @@ export function useAction(prev: Simulation, id: ActionId, targetId?: string): Si
       holdingTarget().priority = true;
       break;
     case 'manualDivert':
-      divert(sim, holdingTarget(), now);
+      divert(sim, holdingTarget(), now, 'manual');
       break;
     case 'rushTurnaround': {
       // The Stand the most urgent Holding aircraft waits for: of the Stands that fit it, the one that frees first.

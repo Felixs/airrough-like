@@ -13,6 +13,7 @@ import { mountTopBar } from './ui/topBar';
 import { browserStore, clearRun, loadMeta, loadRun, saveMeta, saveRun } from './sim/save';
 import { awardRun } from './sim/meta';
 import { showMetaShop } from './ui/metaShop';
+import { showDayReport } from './ui/dayReport';
 import { showNotice, showResume } from './ui/resume';
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 31);
@@ -149,11 +150,11 @@ async function start(): Promise<void> {
       run = endDay(run, sim);
       if (run.status === 'lost') clearRun(store);
       if (run.status === 'won') saveRun(store, run);
-      if (run.status === 'lost' || run.status === 'won') {
-        showScore();
-      } else {
-        openPlan();
-      }
+      // Every Day ends with its report; a lost or won Run goes on to the Score Screen.
+      showDayReport(appEl, run, meta, () => {
+        if (run.status === 'lost' || run.status === 'won') showScore();
+        else openPlan();
+      });
     }
   });
 }
