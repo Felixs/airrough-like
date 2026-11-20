@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { TILE_SIZE, WORLD, type AirportLayout, type Structure, type TileRect } from '../sim/layout';
+import { sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, taxiwayEdgeLights } from '../sim/markings';
 import { drawCentreLines } from './taxiLines';
 
@@ -107,7 +107,8 @@ function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Cont
   const at = (along: number) => (vertical ? [x + wid / 2, y + along] : [x + along, y + wid / 2]) as [number, number];
   text(labels, a!, ...at(14), 5, COLOURS.marking, vertical ? 0 : -rot);
   text(labels, b!, ...at(len - 14), 5, COLOURS.marking, vertical ? Math.PI : rot);
-  // white edge lights, green threshold lights, approach lights
+  // white edge and green threshold lights once the Runway is Lit; approach lights only with an ILS
+  if (s.surface !== 'lit' && s.surface !== 'ils') return;
   for (let d = 4; d < len; d += 8) {
     dot(d, -0.6, 0.45, COLOURS.edgeWhite);
     dot(d, wid + 0.6, 0.45, COLOURS.edgeWhite);
@@ -116,56 +117,96 @@ function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Cont
     dot(-0.6, c, 0.45, COLOURS.thresholdGreen);
     dot(len + 0.6, c, 0.45, COLOURS.thresholdGreen);
   }
+  if (s.surface !== 'ils') return;
   for (let k = 1; k <= 5; k++) {
     dot(-3 - k * 3, wid / 2, 0.5, COLOURS.edgeWhite);
     dot(len + 3 + k * 3, wid / 2, 0.5, COLOURS.edgeWhite);
   }
 }
 
-function drawStand(g: Graphics, s: Structure & { kind: 'stand' }, labels: Container, layout: AirportLayout): void {
+/**
+ * Maps points given in a Stand's own frame — `u` across its open side, `v` from the back (building side, 0) to the
+ * open side (depth) — onto the map, so every marking is drawn once and turns with the Stand's facing.
+ */
+function spotFrame(s: TileRect & { facing?: Facing }) {
   const x = s.x * T;
   const y = s.y * T;
   const w = s.w * T;
   const h = s.h * T;
-  const cx = x + w / 2;
-  g.rect(x, y, w, h).fill(COLOURS.asphalt);
-  // dashed outline (footprint minus clearance)
-  const ox = x + 1.5;
-  const oy = y + 1;
-  const ow = w - 3;
-  const oh = h - 2;
-  const dash = (x0: number, y0: number, x1: number, y1: number) => {
-    const len = Math.hypot(x1 - x0, y1 - y0);
-    for (let p = 0; p < len; p += 2.2) {
-      const t0 = p / len;
-      const t1 = Math.min(1, (p + 1.2) / len);
-      g.moveTo(x0 + (x1 - x0) * t0, y0 + (y1 - y0) * t0).lineTo(x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1);
+  const facing = s.facing ?? 'south';
+  const across = facing === 'south' || facing === 'north' ? w : h;
+  const depth = facing === 'south' || facing === 'north' ? h : w;
+  const p = (u: number, v: number): [number, number] => {
+    switch (facing) {
+      case 'north': return [x + w - u, y + h - v];
+      case 'east': return [x + v, y + u];
+      case 'west': return [x + w - v, y + u];
+      default: return [x + u, y + v];
     }
   };
-  dash(ox, oy, ox + ow, oy);
-  dash(ox + ow, oy, ox + ow, oy + oh);
-  dash(ox, oy + oh, ox + ow, oy + oh);
-  dash(ox, oy, ox, oy + oh);
-  g.stroke({ width: 0.35, color: COLOURS.standOutline, alpha: 0.85 });
-  // lead-in line from the taxilane with curves both ways, and the stop bar (the yellow T)
-  const lane = y + h + 1.5 * T;
-  g.moveTo(cx, y + 3).lineTo(cx, lane - 6).stroke({ width: 0.6, color: COLOURS.taxiLine, cap: 'round' });
-  g.moveTo(cx - 6, lane).quadraticCurveTo(cx, lane, cx, lane - 6).stroke({ width: 0.6, color: COLOURS.taxiLine, cap: 'round' });
-  g.moveTo(cx + 6, lane).quadraticCurveTo(cx, lane, cx, lane - 6).stroke({ width: 0.6, color: COLOURS.taxiLine, cap: 'round' });
-  g.moveTo(cx - 3.5, y + 3).lineTo(cx + 3.5, y + 3).stroke({ width: 0.9, color: COLOURS.taxiLine });
-  // number inside the outline, in the corner away from the taxilane
-  const num = new Text({ text: s.id, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 3.2, fontWeight: '700', fill: COLOURS.taxiLine } });
+  const rect = (g: Graphics, u: number, v: number, du: number, dv: number) => {
+    const [ax, ay] = p(u, v);
+    const [bx, by] = p(u + du, v + dv);
+    return g.rect(Math.min(ax, bx), Math.min(ay, by), Math.abs(bx - ax), Math.abs(by - ay));
+  };
+  return { across, depth, p, rect };
+}
+
+/** Lead-in line from the taxilane in front, curving in from both directions, with the yellow stop bar. */
+function leadIn(g: Graphics, f: ReturnType<typeof spotFrame>, stopAt: number): void {
+  const { p } = f;
+  const c = f.across / 2;
+  const lane = f.depth + 1.5 * T;
+  const line = { width: 0.6, color: COLOURS.taxiLine, cap: 'round' } as const;
+  g.moveTo(...p(c, stopAt)).lineTo(...p(c, lane - 6)).stroke(line);
+  for (const side of [-6, 6]) g.moveTo(...p(c + side, lane)).quadraticCurveTo(...p(c, lane), ...p(c, lane - 6)).stroke(line);
+  g.moveTo(...p(c - 3.5, stopAt)).lineTo(...p(c + 3.5, stopAt)).stroke({ width: 0.9, color: COLOURS.taxiLine });
+}
+
+/** Small id (a Stand number or B1, B2…) inside a spot, in the corner away from the taxilane. */
+function spotNumber(labels: Container, f: ReturnType<typeof spotFrame>, id: string): void {
+  const num = new Text({ text: id, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 3.2, fontWeight: '700', fill: COLOURS.taxiLine } });
   num.resolution = 6;
-  num.position.set(ox + 0.8, oy + 0.6);
+  const [ax, ay] = f.p(2.3, 1.6);
+  const [bx, by] = f.p(2.3 + 2.2 * id.length, 1.6 + 3.6);
+  num.position.set(Math.min(ax, bx), Math.min(ay, by));
   labels.addChild(num);
-  // jet bridge from the building for Contact Stands
-  if (s.placement === 'contact') {
-    const building = layout.structures.find((b) => (b.kind === 'terminal' || b.kind === 'cargoHub') && b.y + b.h === s.y && s.x >= b.x && s.x + s.w <= b.x + b.w);
-    if (building?.kind === 'terminal') {
-      g.rect(cx + 2.2, y - 0.5, 1.8, 5).fill(0x3a4943).stroke({ width: 0.3, color: 0x141a17 });
-      g.rect(cx + 1.6, y + 4, 3, 1.6).fill(0x4a5a54);
+}
+
+function drawStand(g: Graphics, s: Structure & { kind: 'stand' }, labels: Container, layout: AirportLayout): void {
+  const f = spotFrame(s);
+  g.rect(s.x * T, s.y * T, s.w * T, s.h * T).fill(COLOURS.asphalt);
+  // dashed outline (footprint minus clearance)
+  const dash = (u0: number, v0: number, u1: number, v1: number) => {
+    const len = Math.hypot(u1 - u0, v1 - v0);
+    for (let q = 0; q < len; q += 2.2) {
+      const t0 = q / len;
+      const t1 = Math.min(1, (q + 1.2) / len);
+      g.moveTo(...f.p(u0 + (u1 - u0) * t0, v0 + (v1 - v0) * t0)).lineTo(...f.p(u0 + (u1 - u0) * t1, v0 + (v1 - v0) * t1));
     }
+  };
+  const [ou, ov, ow, oh] = [1.5, 1, f.across - 3, f.depth - 2];
+  dash(ou, ov, ou + ow, ov);
+  dash(ou + ow, ov, ou + ow, ov + oh);
+  dash(ou, ov + oh, ou + ow, ov + oh);
+  dash(ou, ov, ou, ov + oh);
+  g.stroke({ width: 0.35, color: COLOURS.standOutline, alpha: 0.85 });
+  leadIn(g, f, 3);
+  spotNumber(labels, f, s.id);
+  // jet bridge from the Terminal for Contact Stands
+  if (s.placement === 'contact' && layout.structures.some((b) => b.kind === 'terminal' && sharesEdge(b, s))) {
+    const c = f.across / 2;
+    f.rect(g, c + 2.2, -0.5, 1.8, 5).fill(0x3a4943).stroke({ width: 0.3, color: 0x141a17 });
+    f.rect(g, c + 1.6, 4, 3, 1.6).fill(0x4a5a54);
   }
+}
+
+function drawHoldingBay(g: Graphics, s: Structure & { kind: 'holdingBay' }, labels: Container): void {
+  const f = spotFrame(s);
+  g.rect(s.x * T, s.y * T, s.w * T, s.h * T).fill(COLOURS.asphalt);
+  f.rect(g, 1, 1, f.across - 2, f.depth - 2).stroke({ width: 0.4, color: COLOURS.taxiLine });
+  leadIn(g, f, 4);
+  spotNumber(labels, f, s.id);
 }
 
 function drawStructure(g: Graphics, s: Structure, labels: Container, layout: AirportLayout): void {
@@ -193,7 +234,7 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
       g.rect(x, y + d, w, wall).fill(0x1c4440);
       g.rect(x, y + d + 1, w, 1.4).fill({ color: 0x3f8a82, alpha: 0.6 });
       for (let xx = x; xx < x + w; xx += 3) g.rect(xx, y + d, 0.3, wall).fill(0x0f2422);
-      if (w >= 60) labels.addChild(label('TERMINAL', x + w / 2, y - 1.5));
+      if (w >= 40) labels.addChild(label('TERMINAL', x + w / 2, y + d / 2 + 2));
       break;
     }
     case 'cargoHub': {
@@ -206,19 +247,15 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
         g.rect(x + 4 + k * 12.5, y + d + 1, 8, wall - 1).fill(0x2a2420);
         g.rect(x + 4 + k * 12.5, y + d + 1, 8, 0.8).fill(COLOURS.taxiLine);
       }
-      if (w >= 40) labels.addChild(label('CARGO', x + w / 2, y - 1.5));
+      if (w >= 30) labels.addChild(label('CARGO', x + w / 2, y + d / 2 + 2));
       break;
     }
     case 'stand':
       drawStand(g, s, labels, layout);
       break;
-    case 'holdingBay': {
-      g.rect(x, y, w, h).fill(COLOURS.asphalt);
-      g.rect(x + 1, y + 1, w - 2, h - 2).stroke({ width: 0.4, color: COLOURS.taxiLine });
-      g.moveTo(x + w / 2, y + 3).lineTo(x + w / 2, y + h).stroke({ width: 0.6, color: COLOURS.taxiLine });
-      labels.addChild(label('BAY', x + w / 2, y - 1));
+    case 'holdingBay':
+      drawHoldingBay(g, s, labels);
       break;
-    }
     case 'supportBuilding': {
       const name = {
         rampAgentStation: 'RAMP', adminOffice: 'ADMIN', airlineOffice: 'AIRLINE', fireRescueStation: 'FIRE & RESCUE', fuelFarm: 'FUEL', deIcingPad: 'DE-ICING',

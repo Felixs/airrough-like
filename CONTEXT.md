@@ -233,11 +233,11 @@ A parking spot sized Small, Medium or Large where one aircraft stays for its Tur
 _Avoid_: Gate, parking spot, slot
 
 **Holding Bay**:
-A buildable waiting spot (Small, Medium or Large) next to a Taxiway, where a landed aircraft waits until a fitting Stand frees up. If no Holding Bay is free either, the aircraft stays in Holding.
+A buildable waiting spot (Small, Medium or Large) next to a Taxiway, where a landed aircraft waits until a fitting Stand frees up. If no Holding Bay is free either, the aircraft stays in Holding. Holding Bays are numbered B1, B2, B3…
 _Avoid_: Penalty box, waiting apron, parking
 
 **Contact Stand**:
-A Stand directly attached to a Terminal or Cargo Hub; fastest Turnaround.
+A Stand directly attached to a Terminal or Cargo Hub (touching it along at least one full tile, on any side); fastest Turnaround. It opens onto the Taxiway in front of it.
 _Avoid_: Gate, jet bridge
 
 **Remote Stand**:

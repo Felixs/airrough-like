@@ -2,10 +2,10 @@
  * Taxi network: a graph of Taxiway tiles (4-neighbour) built from the layout.
  * Routes are lists of tiles; aircraft move along tile centres.
  */
-import type { AirportLayout, Runway, TileRect } from './layout';
+import { spotEntry, type AirportLayout, type Facing, type Runway, type TileRect } from './layout';
 
 /** A Stand or Holding Bay: a spot an aircraft taxis into from the Taxiway below it. */
-export type Spot = TileRect & { readonly id: string };
+export type Spot = TileRect & { readonly id: string; readonly facing?: Facing };
 
 export interface Tile {
   readonly x: number;
@@ -124,7 +124,7 @@ export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {
   const withHold = new Set(runways.map((a) => component.get(key(a.holdPoint))));
   const reachableSpots = new Set<string>();
   for (const s of [...layout.stands, ...layout.holdingBays]) {
-    const c = component.get(key({ x: centreTile(s).x, y: s.y + s.h }));
+    const c = component.get(key(spotEntry(s)));
     if (c !== undefined && withExit.has(c) && withHold.has(c)) reachableSpots.add(s.id);
   }
   return {
@@ -136,7 +136,7 @@ export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {
 /** The Taxiway tile directly in front of a Stand's open side (below it) and the Stand's centre tile. */
 function standAccess(network: TaxiNetwork, stand: Spot): { entry: Tile; centre: Tile } {
   const centre = centreTile(stand);
-  const entry = { x: centre.x, y: stand.y + stand.h };
+  const entry = spotEntry(stand);
   if (!network.tiles.has(key(entry))) throw new Error(`Stand ${stand.id} has no Taxiway in front of it`);
   return { entry, centre };
 }
@@ -191,6 +191,11 @@ export function routeBetween(network: TaxiNetwork, from: Spot, to: Spot): Tile[]
 /** Tiles from just inside the Stand up to its centre (excluding the entry tile). */
 function walkInto(entry: Tile, centre: Tile): Tile[] {
   const out: Tile[] = [];
-  for (let y = entry.y - 1; y >= centre.y; y--) out.push({ x: entry.x, y });
+  const dx = Math.sign(centre.x - entry.x);
+  const dy = Math.sign(centre.y - entry.y);
+  for (let x = entry.x + dx, y = entry.y + dy; ; x += dx, y += dy) {
+    out.push({ x, y });
+    if ((dx === 0 || x === centre.x) && (dy === 0 || y === centre.y)) break;
+  }
   return out;
 }

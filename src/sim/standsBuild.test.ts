@@ -47,7 +47,7 @@ describe('Invalid placements explain why', () => {
   it('covers overlap, Taxiway access, owned land and attachment', () => {
     const session = openBuild(run());
     expect(failing(session, newStand(session, { x: 17, y: 6 }, 'medium', 'contact', 'terminal'))).toContain('Clear of other structures');
-    expect(failing(session, newStand(session, { x: 20, y: 12 }, 'medium', 'remote', 'terminal'))).toContain('Taxiway access');
+    expect(failing(session, newStand(session, { x: 44, y: 13 }, 'medium', 'remote', 'terminal'))).toContain('Taxiway access');
     expect(failing(session, newStand(session, { x: 50, y: 13 }, 'medium', 'remote', 'terminal'))).toContain('Inside owned land');
     expect(failing(session, newStand(session, { x: 20, y: 13 }, 'medium', 'contact', 'terminal'))).toContain('Attached to the Terminal');
   });
@@ -69,5 +69,35 @@ describe('After building', () => {
     const built = confirmBuild(addPending(session, newStand(session, { x: 32, y: 6 }, 'medium', 'contact', 'cargoHub')));
     const day = (layout: typeof before.layout) => planDay({ layout, week: 4, weekday: 5, seed: 5 }).forecast;
     expect(day(built.layout).turnedAway.standCapacity).toBeLessThan(day(before.layout).turnedAway.standCapacity);
+  });
+});
+
+describe('Contact Stands on any side of a building', () => {
+  it('count as attached when at least one full tile touches the building', async () => {
+    const { sharesEdge } = await import('./layout');
+    expect(sharesEdge({ x: 0, y: 0, w: 3, h: 3 }, { x: 3, y: 2, w: 3, h: 3 })).toBe(true); // one tile of the side
+    expect(sharesEdge({ x: 0, y: 0, w: 3, h: 3 }, { x: 3, y: 3, w: 3, h: 3 })).toBe(false); // corner only
+  });
+
+  it('can sit beside the Cargo Hub and open onto the Taxiway in front of them', () => {
+    let session = openBuild(run());
+    // a short spur off the apron taxilane, right of the Cargo Hub (x 25–34, y 2–5)
+    session = addPending(session, { kind: 'taxiway', x: 35, y: 6, w: 3, h: 3 });
+    const stand = newStand(session, { x: 35, y: 3 }, 'medium', 'contact', 'cargoHub');
+    expect(stand).toMatchObject({ facing: 'south' });
+    expect(placementChecks(session, stand).ok).toBe(true);
+    const built = confirmBuild(addPending(session, stand));
+    expect(buildTaxiNetwork(built.layout).reachableSpots.has(stand.id)).toBe(true);
+  });
+
+  it('turn to whichever side has a Taxiway', () => {
+    const session = openBuild(run());
+    const stand = newStand(session, { x: 42, y: 9 }, 'medium', 'remote', 'terminal'); // the apron taxilane ends at x 41
+    expect(stand.facing).toBe('west');
+    expect(placementChecks(session, stand).items.find((i) => i.label === 'Taxiway access')!.ok).toBe(true);
+    const built = confirmBuild(addPending(session, stand));
+    const network = buildTaxiNetwork(built.layout);
+    const route = routeToStand(network, network.runwayExit, built.layout.stands.find((s) => s.id === stand.id)!);
+    expect(route.slice(-2)).toEqual([{ x: 42, y: 10 }, { x: 43, y: 10 }]);
   });
 });

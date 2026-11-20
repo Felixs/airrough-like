@@ -1,10 +1,10 @@
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
 import { drawAirfield, fitToScreen, worldBounds } from '../render/airfield';
 import {
-  applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild,
+  applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
   ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
-import { TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
+import { spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { UnlockableId } from '../sim/meta';
 import type { Tile } from '../sim/taxi';
@@ -141,6 +141,14 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     if (!candidate) return;
     const color = candidate.change.kind === 'remove' ? 0xff6b5e : candidate.check.ok ? 0x6fd08c : 0xff6b5e;
     for (const r of candidate.rects) ghost.rect(r.x * T, r.y * T, r.w * T, r.h * T).fill({ color, alpha: 0.32 }).stroke({ width: 0.6, color });
+    // the lead-in a Stand or Holding Bay will get, from the Taxiway tile in front into its centre
+    const spot = candidate.change.kind === 'add' ? candidate.change.structure : candidate.change.kind === 'move' ? candidate.change.to : null;
+    if (spot && (spot.kind === 'stand' || spot.kind === 'holdingBay')) {
+      const e = spotEntry(spot);
+      ghost.moveTo((e.x + 0.5) * T, (e.y + 0.5) * T).lineTo((spot.x + spot.w / 2) * T, (spot.y + spot.h / 2) * T)
+        .stroke({ width: 0.8, color: 0xf0d24a, cap: 'round' });
+      ghost.circle((e.x + 0.5) * T, (e.y + 0.5) * T, 1.2).fill(0xf0d24a);
+    }
     const c = candidate.check;
     const r0 = candidate.rects[0]!;
     ghostLabel.text = `${c.label} · ${c.cost < 0 ? `refund ${money(-c.cost)}` : money(c.cost)}${c.upkeep ? ` · ${c.upkeep > 0 ? '+' : '−'}${money(Math.abs(c.upkeep))}/Day` : ''}`;
@@ -216,7 +224,11 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
       }
       case 'move': {
         if (!moving) return null;
-        const to = { ...moving, x: t.x, y: t.y } as Structure;
+        const to = (moving.kind === 'stand'
+          ? { ...moving, ...placeSpot(session.layout, t, moving.size, moving.placement === 'contact' ? moving.serves : undefined) }
+          : moving.kind === 'holdingBay'
+            ? { ...moving, ...placeSpot(session.layout, t, moving.size) }
+            : { ...moving, x: t.x, y: t.y }) as Structure;
         return { change: { kind: 'move', from: moving, to }, rects: [to] };
       }
       case 'demolish': {
