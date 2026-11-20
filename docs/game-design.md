@@ -63,7 +63,7 @@ Screen, which turns Score into Air Miles for the meta-progression.
   behind the hold point instead of stacking, and lines never wait on each other in a circle. An aircraft taking off
   keeps the hold point claimed until it is airborne (a Rejected Takeoff returns there).
 - **No passing head-on:** two aircraft that would reach the same tile in opposite directions within 3 tiles' worth of
-  taxiing of each other would meet. One gives way: the one not yet on the other's path, else the one that has another
+  taxiing of each other, within the next 16 tiles, would meet. One gives way: the one not yet on the other's path, else the one that has another
   way round, else the one with the later id. It takes another Taxiway if there is one (crossing the other's path only
   well before or after it), otherwise it waits short of the other's path until it has passed.
 - A Ground Stop (Emergency Action) freezes all taxiing for 5 minutes.
@@ -79,6 +79,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - **Runway Exits**: smaller aircraft need less Runway (`taxi.ts → ROLL_TILES`: 12 / 30 / 44 tiles). A landing aircraft
   leaves at the first connector past its roll distance, measured from the threshold in use. Departures hold short at
   the first connector of the active direction.
+- **Clear exit before landing:** the Tower only clears a landing when the aircraft's way off the Runway is clear: the
+  first 6 tiles of its taxi route from the exit hold no aircraft that is stopped, holding or waiting in line, and no
+  Incident closes its way to the Stand without a way round. Otherwise the arrival stays in Holding and the Runway goes
+  to waiting departures. If the exit gets blocked while an aircraft is on final, it goes around.
 
 ## Flights and ATC
 

@@ -110,3 +110,36 @@ describe('Oncoming traffic', () => {
     expect(tookOther).toBe(true); // one of them went round by the lower Taxiway
   });
 });
+
+describe('A blocked Runway exit', () => {
+  it('keeps arrivals in Holding and lets departures go', async () => {
+    const { exitFor } = await import('./taxi');
+    const access = network.runways[0]!;
+    const exit = exitFor(access, false, 'medium');
+    const hold = network.holdPoint;
+    let sim: Simulation = createSimulation({ layout, seed: 4, schedule: ['X', 'H', 'D'].map((id) => ({ id, type: 'A320' as const, arrivalMinute: 1200 })) });
+    while (sim.clock.minute < 6 * 60 + 5) sim = stepSimulation(sim);
+    const now = sim.clock.minute;
+    const lane = taxiRoute(network, exit, { x: 40, y: 10 });
+    const crafted: Partial<Record<string, Partial<Flight>>> = {
+      // stopped by an Incident right at the exit
+      X: { phase: 'taxiIn', route: lane, routeProgress: 1, stoppedUntil: now + 30, standId: null, bayId: 'B1', position: { x: 0, y: 0 }, runway: 0 },
+      H: { phase: 'holding', phaseStart: now - 1, fuelMinutes: 40 },
+      D: { phase: 'holdShort', phaseStart: now - 1, runway: 0, route: [hold], routeProgress: 0, position: { x: 0, y: 0 } },
+    };
+    sim = { ...sim, flights: sim.flights.map((f) => ({ ...f, ...crafted[f.id] }) as Flight) };
+    const phases: string[] = [];
+    while (sim.clock.minute < now + 10) {
+      sim = stepSimulation(sim);
+      if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+      phases.push(sim.flights.find((f) => f.id === 'H')!.phase);
+    }
+    expect(phases.every((p) => p === 'holding')).toBe(true);
+    expect(['takeoff', 'departed']).toContain(sim.flights.find((f) => f.id === 'D')!.phase);
+    while (sim.clock.minute < now + 45) {
+      sim = stepSimulation(sim);
+      if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+    }
+    expect(sim.flights.find((f) => f.id === 'H')!.phase).not.toBe('holding'); // lands once the exit is clear again
+  });
+});
