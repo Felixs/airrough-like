@@ -46,6 +46,9 @@ Screen, which turns Score into Air Miles for the meta-progression.
   side. Remote Stands stand free (an Unlockable) and turn round 1.5× slower.
 - Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment) and priced before they are
   confirmed; Demolish refunds the base price; Move keeps a structure and re-checks it at the new place.
+  Changes are pending until confirmed. Leaving Build Mode (switching to Overview or pressing Start Day) with pending
+  changes asks: build them (if they can't be built, the reason shows and the Player stays), discard them, or keep
+  building.
 
 ## Taxiing
 

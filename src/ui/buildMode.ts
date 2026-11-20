@@ -38,6 +38,10 @@ export interface BuildModeHandlers {
 }
 
 export interface BuildModeView {
+  /** Changes placed but not confirmed yet, and what confirming them would cost. */
+  pending(): { count: number; cost: number };
+  /** Confirms the pending changes; false (with the reason shown) when they can't be built. */
+  confirm(): boolean;
   destroy(): void;
 }
 
@@ -337,6 +341,11 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   selectTool('taxiway');
 
   return {
+    pending: () => ({ count: session.pending.length, cost: pendingTotal(session).cost }),
+    confirm() {
+      confirm();
+      return session.pending.length === 0;
+    },
     destroy() {
       window.removeEventListener('keydown', onKey);
       app.destroy(true, { children: true });

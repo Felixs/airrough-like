@@ -22,8 +22,8 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 | **Build Mode**: Taxiways, Stands, Runways, buildings and Land | **Day report**: money, traffic and safety at a glance |
 | ![Main Menu](docs/screenshots/main-menu.png) | ![Unlockables and Boosts](docs/screenshots/unlockables-boosts.png) |
 | **Main Menu** | **Unlockables & Boosts** bought with Air Miles |
-| ![Live Day at dawn: aircraft lights over the dark airfield](docs/screenshots/live-day-dawn.png) | |
-| **Dawn**: the day–night cycle, with navigation, beacon and landing lights on the aircraft | |
+| ![Live Day at dawn: aircraft lights over the dark airfield](docs/screenshots/live-day-dawn.png) | ![Leaving Build Mode with unconfirmed changes](docs/screenshots/build-confirm.png) |
+| **Dawn**: the day–night cycle, with navigation, beacon and landing lights on the aircraft | **Build or discard**: leaving Build Mode or starting the Day with unconfirmed changes asks first |
 
 The screenshots are taken automatically from the real game by the [Screenshots workflow](.github/workflows/screenshots.yml) whenever the UI changes (`scripts/screenshots.mjs`).
 
