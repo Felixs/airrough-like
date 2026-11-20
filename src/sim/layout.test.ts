@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLayout, findOverlaps, startingAirport } from './layout';
+import { createLayout, findOverlaps, runwayNames, startingAirport } from './layout';
 
 describe('Starting Airport', () => {
   const airport = startingAirport();
@@ -51,5 +51,27 @@ describe('findOverlaps', () => {
     const overlaps = findOverlaps(layout);
     expect(overlaps).toHaveLength(1);
     expect(overlaps[0]?.[1].kind).toBe('holdingBay');
+  });
+});
+
+describe('Runway names', () => {
+  const runway = (y: number, x = 6, vertical = false) =>
+    ({ kind: 'runway' as const, x, y, w: vertical ? 4 : 36, h: vertical ? 36 : 4, length: 'medium' as const, surface: 'asphalt' as const });
+  const names = (rs: ReturnType<typeof runway>[]) => runwayNames(createLayout(96, 64, rs)).map((n) => `${n.forward}/${n.reverse}`);
+
+  it('are 09/27 and 18/36 for a single Runway of each kind', () => {
+    expect(names([runway(24)])).toEqual(['09/27']);
+    expect(names([runway(24), runway(0, 50, true)])).toEqual(['09/27', '18/36']);
+  });
+
+  it('get L / R and L / C / R for parallels as seen on approach, swapped at the other end', () => {
+    expect(names([runway(24), runway(34)])).toEqual(['09L/27R', '09R/27L']); // the northern one is left landing east
+    expect(names([runway(34), runway(24), runway(44)])).toEqual(['09C/27C', '09L/27R', '09R/27L']);
+    expect(names([runway(0, 10, true), runway(0, 20, true)])).toEqual(['18R/36L', '18L/36R']); // landing south, east is left
+  });
+
+  it('take the next number for a second group from four parallels on', () => {
+    expect(names([runway(4), runway(14), runway(24), runway(34)])).toEqual(['09L/27R', '09R/27L', '10L/28R', '10R/28L']);
+    expect(names([4, 14, 24, 34, 44].map((y) => runway(y)))).toEqual(['09L/27R', '09C/27C', '09R/27L', '10L/28R', '10R/28L']);
   });
 });

@@ -4,7 +4,7 @@
  */
 import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
-import { TILE_SIZE, parkedHeading, spotEntry, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
+import { TILE_SIZE, parkedHeading, runwayNames, spotEntry, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
 import { buildTaxiNetwork, detour, exitFor, exitsFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type Spot, type TaxiNetwork, type Tile } from './taxi';
 import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type WindSetup } from './wind';
@@ -73,18 +73,17 @@ export const SAFETY = {
 
 /** Emergency Actions *(first guess)*. */
 export const ACTIONS = {
-  groundStop: { cooldownMinutes: 8 * 60, needs: null },
   rushTurnaround: { cooldownMinutes: 90, needs: 'rampAgentStation' },
   manualDivert: { cooldownMinutes: 60, needs: 'adminOffice' },
   priorityLanding: { cooldownMinutes: 90, needs: 'airlineOffice' },
 } as const satisfies Record<string, { cooldownMinutes: number; needs: SupportRole | null }>;
 export type ActionId = keyof typeof ACTIONS;
 export const ACTION_IDS = Object.keys(ACTIONS) as ActionId[];
-/** How long a Ground Stop freezes taxiing, and how much a Rush Turnaround keeps. */
-export const ACTION_EFFECTS = { groundStopMinutes: 5, rushTurnaroundFactor: 0.5 } as const;
+/** How much of the Turnaround a Rush Turnaround keeps. */
+export const ACTION_EFFECTS = { rushTurnaroundFactor: 0.5 } as const;
 
 /** Radar levels that unlock the automatic pauses. */
-export const ALERTS = { fuelAlertRadar: 3, atcEmergencyRadar: 3, pilotEmergencyRadar: 4, secondRollBase: 0.5, secondRollPerTraining: 0.1 } as const;
+export const ALERTS = { atcEmergencyRadar: 3, pilotEmergencyRadar: 4, secondRollBase: 0.5, secondRollPerTraining: 0.1 } as const;
 
 /** Chance the Emergency Alert's second roll avoids the Crash. */
 export function secondRollChance(controllerTrainingLevel: number): number {
@@ -236,14 +235,16 @@ export interface Simulation {
   readonly crashFineFactor: number;
   readonly blockageFactor: number;
   readonly pauseOnEvents: boolean;
+  /** Ask the Player at low fuel: divert, or declare a Mayday (on in a played Live Day; off in a bare simulation). */
+  readonly askOnLowFuel: boolean;
   /** Per Runway (layout order): can't be used before this minute (Crash, Incident, Twist). */
   readonly runwayBlockedUntil: readonly number[];
   /** Everything notable that happened today, oldest first. */
   readonly events: readonly SimEvent[];
   /** Minute each Emergency Action is ready again. */
   readonly cooldownUntil: Readonly<Record<ActionId, number>>;
-  /** Taxiing is frozen until this minute (Ground Stop). */
-  readonly groundStopUntil: number;
+  /** Aircraft that declared a Mayday, in order: every Runway stops for them until they are down. */
+  readonly mayday: readonly string[];
   /** A Fuel or Emergency Alert waiting for the Player; the Day is paused until it is handled. */
   readonly pendingAlert: PendingAlert | null;
   readonly radarLevel: number;
@@ -274,7 +275,7 @@ export interface RunwayWindow {
 
 export interface SimEvent {
   readonly minute: number;
-  readonly kind: 'lowFuel' | 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion' | 'runwayChange';
+  readonly kind: 'lowFuel' | 'mayday' | 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion' | 'runwayChange';
   readonly flightId: string;
   /** Money paid (Crash Fine, Incident cost). */
   readonly cost: number;
@@ -282,7 +283,7 @@ export interface SimEvent {
   readonly reason?: DiversionReason;
 }
 
-export type DiversionReason = 'curfew' | 'dark' | 'noRunway' | 'manual';
+export type DiversionReason = 'curfew' | 'dark' | 'noRunway' | 'manual' | 'lowFuel';
 
 export interface SimulationSetup {
   /** Seeded wind for the Day; leave out for calm air. */
@@ -310,6 +311,7 @@ export interface SimulationSetup {
   readonly taxiSpeedFactor?: number;
   /** Pause with an info pop-up on Incidents, Crashes and Diversions (the game; tests leave it off). */
   readonly pauseOnEvents?: boolean;
+  readonly askOnLowFuel?: boolean;
   /** Boosts from meta-progression. */
   readonly feeFactor?: number;
   readonly fuelBonusMinutes?: number;
@@ -359,11 +361,12 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     crashFineFactor: setup.crashFineFactor ?? 1,
     blockageFactor: setup.blockageFactor ?? 1,
     pauseOnEvents: setup.pauseOnEvents ?? false,
+    askOnLowFuel: setup.askOnLowFuel ?? false,
     cooldownFactor: setup.cooldownFactor ?? 1,
     runwayBlockedUntil: setup.layout.runways.map(() => setup.runwayBlockedUntil ?? 0),
     events: [],
-    cooldownUntil: { groundStop: 0, rushTurnaround: 0, manualDivert: 0, priorityLanding: 0 },
-    groundStopUntil: 0,
+    cooldownUntil: { rushTurnaround: 0, manualDivert: 0, priorityLanding: 0 },
+    mayday: [],
     pendingAlert: null,
     radarLevel: setup.radarLevel ?? 1,
     controllerTrainingLevel: setup.controllerTrainingLevel ?? 1,
@@ -567,7 +570,7 @@ function updateDirections(sim: MutableSim, flights: Mutable<Flight>[], now: numb
     if (wantsReverse(wind, a.vertical, current) === current) continue;
     sim.runwayReverse[a.index] = !current;
     sim.changeoverUntil[a.index] = Math.max(now, sim.runwayBusyUntil[a.index] ?? 0) + WIND_RULES.changeoverMinutes;
-    sim.events.push({ minute: now, kind: 'runwayChange', flightId: `RWY ${activeName(a, !current)}`, cost: 0 });
+    sim.events.push({ minute: now, kind: 'runwayChange', flightId: `RWY ${activeName(sim, a, !current)}`, cost: 0 });
     const hold = holdOf(sim, a);
     for (const f of flights) {
       if (f.runway !== a.index || f.phase !== 'holdShort') continue;
@@ -579,7 +582,10 @@ function updateDirections(sim: MutableSim, flights: Mutable<Flight>[], now: numb
   }
 }
 
-const activeName = (a: RunwayAccess, reverse: boolean) => (a.vertical ? (reverse ? '36' : '18') : reverse ? '27' : '09');
+const activeName = (sim: Simulation, a: RunwayAccess, reverse: boolean) => {
+  const ends = runwayNames(sim.layout)[a.index]!;
+  return reverse ? ends.reverse : ends.forward;
+};
 
 function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight, now: number): RunwayAccess | undefined {
   const queue = (a: RunwayAccess) => flights.filter((o) => o.runway === a.index && (o.phase === 'taxiOut' || o.phase === 'holdShort')).length;
@@ -689,7 +695,6 @@ function incident(sim: MutableSim, f: Flight, now: number, kind: 'incident' | 't
 
 /** More aircraft taxiing at once means more chance two of them meet; the Incident stops one of them. */
 function rollTaxiIncident(sim: MutableSim, flights: Mutable<Flight>[], now: number, rng: Random): void {
-  if (now < sim.groundStopUntil) return;
   const taxiing = flights.filter((f) => (f.phase === 'taxiIn' || f.phase === 'taxiOut') && f.stoppedUntil <= now);
   if (rng.next() >= taxiIncidentChance(taxiing.length, sim.groundRadarLevel)) return;
   const f = rng.pick(taxiing);
@@ -707,6 +712,19 @@ function rollError(sim: Simulation, rng: Random, runway: number): { roll: number
 
 /** The ATC Tower gives each Runway to one aircraft at a time. */
 function assignRunway(sim: MutableSim, flights: Mutable<Flight>[], now: number, blocked: ReadonlySet<string>, rng: Random): void {
+  // A Mayday: every Runway stops for it; it lands on the first fitting Runway that is free, and nothing else
+  // lands or takes off anywhere until it is down.
+  const inEmergency = (f: Flight | undefined) => f?.phase === 'holding' || f?.phase === 'landing';
+  sim.mayday = sim.mayday.filter((id) => inEmergency(flights.find((f) => f.id === id)));
+  const mayday = flights.find((f) => f.id === sim.mayday[0]);
+  if (mayday && !flights.some((f) => sim.mayday.includes(f.id) && f.phase === 'landing')) {
+    {
+      const access = sim.network.runways.find((a) => (sim.runwayBusyUntil[a.index] ?? 0) <= now && usable(sim, a, now) && fits(a, mayday) && landingUsable(sim, a, now));
+      if (access) startMovement(sim, mayday, access, now, blocked, rng);
+    }
+    return;
+  }
+  if (sim.mayday.length) return; // a Mayday aircraft is landing: nothing else moves on any Runway
   for (const access of sim.network.runways) {
     if ((sim.runwayBusyUntil[access.index] ?? 0) > now || !usable(sim, access, now)) continue;
     const holding = flights
@@ -768,15 +786,17 @@ function startMovement(sim: MutableSim, next: Mutable<Flight>, access: RunwayAcc
   next.reverse = sim.runwayReverse[access.index] ?? false;
   if (next.phase === 'holding') {
     next.pendingOutcome = error === null ? null : landingOutcome(error.roll);
+    // no fuel to go around: on a Mayday a Go-Around is a Crash
+    if (sim.mayday.includes(next.id) && next.pendingOutcome === 'goAround') next.pendingOutcome = 'crash';
     const stand = freeFittingStand(sim, next, blocked);
+    const bay = stand ? undefined : freeFittingBay(sim, next);
     if (stand) {
       sim.standOccupant[stand.id] = next.id;
       next.standId = stand.id;
-    } else {
-      const bay = freeFittingBay(sim, next)!;
+    } else if (bay) {
       sim.bayOccupant[bay.id] = next.id;
       next.bayId = bay.id;
-    }
+    } // a Mayday may land with nowhere to park: it waits by its exit until a Stand or Holding Bay frees up
     sim.landings += 1;
     next.landedSeq = sim.landings;
     next.phase = 'landing';
@@ -805,7 +825,8 @@ function burnFuel(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   f.fuelMinutes = Math.max(0, f.fuelMinutes - STEP_MINUTES);
   if (before >= ATC.lowFuelMinutes && f.fuelMinutes < ATC.lowFuelMinutes) {
     logEvent(sim, now, 'lowFuel', f);
-    if (sim.radarLevel >= ALERTS.fuelAlertRadar) sim.pendingAlert = { kind: 'fuel', flightId: f.id, minute: now };
+    // a decision for the Player (whatever the Radar or pop-up setting): divert now, or declare a Mayday and land
+    if (sim.askOnLowFuel) sim.pendingAlert = { kind: 'fuel', flightId: f.id, minute: now };
   }
 }
 
@@ -1021,9 +1042,11 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
         break;
       }
       const access = accessOf(sim, f)!;
-      const spot = stand ?? bayById(sim, f.bayId)!;
-      // roll on to the next exit if the planned one got blocked; go around only if none is clear
-      const exit = outcome === 'incident' ? f.exitTile ?? exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size) : clearExit(sim, closed, access, f.reverse, f, spot);
+      const spot = stand ?? bayById(sim, f.bayId);
+      const firstExit = f.exitTile ?? exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size);
+      const mayday = sim.mayday.includes(f.id);
+      // roll on to the next exit if the planned one got blocked; go around only if none is clear (never on a Mayday)
+      const exit = outcome === 'incident' || !spot ? firstExit : clearExit(sim, closed, access, f.reverse, f, spot) ?? (mayday ? firstExit : null);
       if (outcome === 'goAround' || !exit) {
         logEvent(sim, now, 'goAround', f);
         releaseSpots(sim, f);
@@ -1034,14 +1057,14 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       if (outcome === 'incident') block(sim, f.runway, incident(sim, f, now, 'incident'));
       countMovement(sim, now);
       f.exitTile = exit;
-      f.route = routeToStand(sim.network, exit, spot);
+      f.route = spot ? routeToStand(sim.network, exit, spot) : [exit];
       f.routeProgress = 0;
       enter('taxiIn');
       break;
     }
     case 'taxiIn':
     case 'taxiOut': {
-      if (now < f.stoppedUntil || now < sim.groundStopUntil) break;
+      if (now < f.stoppedUntil) break;
       f.routeProgress = taxiAhead(sim, f, now, closed, Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * sim.taxiSpeedFactor * STEP_MINUTES));
       if (f.routeProgress < f.route.length - 1) break;
       if (f.phase === 'taxiOut') {
@@ -1056,7 +1079,21 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
         }
         enter('holdShort');
       }
-      else enter(f.standId ? 'onStand' : 'inBay');
+      else if (!f.standId && !f.bayId) {
+        // landed on a Mayday with nowhere to park: wait here until a Stand or Holding Bay frees up
+        const at = f.route[f.route.length - 1]!;
+        const stand = freeFittingStand(sim, f);
+        const bay = stand ? undefined : freeFittingBay(sim, f);
+        if (stand) {
+          sim.standOccupant[stand.id] = f.id;
+          f.standId = stand.id;
+        } else if (bay) {
+          sim.bayOccupant[bay.id] = f.id;
+          f.bayId = bay.id;
+        } else break;
+        f.route = routeToStand(sim.network, at, (stand ?? bay)!);
+        f.routeProgress = 0;
+      } else enter(f.standId ? 'onStand' : 'inBay');
       break;
     }
     case 'onStand': {
@@ -1225,9 +1262,6 @@ export function useAction(prev: Simulation, id: ActionId, targetId?: string): Si
     return flights.find((f) => f.id === target.id)!;
   };
   switch (id) {
-    case 'groundStop':
-      sim.groundStopUntil = now + ACTION_EFFECTS.groundStopMinutes;
-      break;
     case 'priorityLanding':
       holdingTarget().priority = true;
       break;
@@ -1273,9 +1307,30 @@ export function resolveEmergency(prev: Simulation): Simulation {
   };
 }
 
-/** Clears a pending Alert so the Day can go on. An Emergency Alert takes its second roll. */
+/**
+ * The low-fuel decision: `divert` sends the aircraft away now (no fees, no Movement, no fine); `mayday` declares an
+ * emergency: it lands next, every Runway stops for it until it is down, and if its landing goes wrong it crashes,
+ * having no fuel to go around.
+ */
+export function resolveFuel(prev: Simulation, choice: 'divert' | 'mayday'): Simulation {
+  const alert = prev.pendingAlert;
+  if (!alert || alert.kind !== 'fuel') return prev;
+  const sim = { ...prev, pendingAlert: null, events: [...prev.events], flights: prev.flights.map((f) => ({ ...f })), standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant } } as unknown as MutableSim;
+  const f = sim.flights.find((x) => x.id === alert.flightId) as Mutable<Flight> | undefined;
+  if (!f || f.phase !== 'holding') return { ...prev, pendingAlert: null };
+  if (choice === 'divert') divert(sim, f, prev.clock.minute, 'lowFuel');
+  else {
+    sim.mayday = [...sim.mayday, f.id];
+    f.priority = true;
+    logEvent(sim, prev.clock.minute, 'mayday', f);
+  }
+  return sim as unknown as Simulation;
+}
+
+/** Clears a pending Alert so the Day can go on. An Emergency Alert takes its second roll; a low-fuel aircraft declares a Mayday. */
 export function acknowledgeAlert(sim: Simulation): Simulation {
   if (sim.pendingAlert?.kind === 'emergency') return resolveEmergency(sim);
+  if (sim.pendingAlert?.kind === 'fuel') return resolveFuel(sim, 'mayday');
   return { ...sim, pendingAlert: null };
 }
 

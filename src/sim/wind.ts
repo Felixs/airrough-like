@@ -59,7 +59,3 @@ export function wantsReverse(wind: Wind, vertical: boolean, currentlyReverse: bo
   return tail > WIND_RULES.maxTailwindKnots ? !currentlyReverse : currentlyReverse;
 }
 
-/** The designator in use, e.g. "27" or "18". */
-export function activeDesignator(vertical: boolean, reverse: boolean): string {
-  return vertical ? (reverse ? '36' : '18') : reverse ? '27' : '09';
-}

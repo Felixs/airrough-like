@@ -5,7 +5,7 @@ import { FlightLayer } from './render/flights';
 import { advance, daylight, formatClock, isDayOver, stepFraction, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
 import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
-import { acknowledgeAlert, daySettled, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
+import { acknowledgeAlert, daySettled, resolveFuel, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
@@ -90,6 +90,9 @@ async function start(): Promise<void> {
       } catch (e) {
         liveDay.message((e as Error).message);
       }
+    },
+    onFuelChoice(choice) {
+      sim = resolveFuel(sim, choice);
     },
     onAcknowledgeAlert() {
       sim = acknowledgeAlert(sim);

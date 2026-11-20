@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDesignator, headwind, landingHeading, wantsReverse, windTimeline } from './wind';
+import { headwind, landingHeading, wantsReverse, windTimeline } from './wind';
 
 describe('Wind', () => {
   it('is seeded per Day, drifts, and turns round at a Wind Shift', () => {
@@ -19,6 +19,5 @@ describe('Wind', () => {
     expect(wantsReverse({ direction: 0, knots: 10 }, false, true)).toBe(true); // pure crosswind: keep 27
     expect(wantsReverse({ direction: 120, knots: 4 }, false, true)).toBe(true); // light tailwind: keep
     expect(landingHeading(true, false)).toBe(180);
-    expect(activeDesignator(false, true)).toBe('27');
   });
 });

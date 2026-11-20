@@ -293,6 +293,7 @@ export function startLiveDay(run: RunState): Simulation {
     fireRescueLevel: run.fireRescueLevel,
     earlierCrashesThisWeek: run.crashesThisWeek,
     pauseOnEvents: true,
+    askOnLowFuel: true,
     feeFactor: run.modifiers.feeFactor,
     fuelBonusMinutes: run.modifiers.fuelBonusMinutes + (hasBuilding(run, 'fuelFarm') ? 5 : 0),
     turnaroundFactor: run.modifiers.turnaroundFactor,
@@ -312,7 +313,7 @@ export function endDay(run: RunState, sim: Simulation): RunState {
   const penalties = sim.events.reduce((n, e) => n + e.cost, 0);
   const money = sim.money - cost;
   const byId = new Map(sim.flights.map((f) => [f.id, f]));
-  const diversionsByReason: Record<DiversionReason, number> = { curfew: 0, dark: 0, noRunway: 0, manual: 0 };
+  const diversionsByReason: Record<DiversionReason, number> = { curfew: 0, dark: 0, noRunway: 0, manual: 0, lowFuel: 0 };
   for (const e of sim.events) if (e.kind === 'diversion') diversionsByReason[e.reason ?? 'noRunway']++;
   const landed = { passenger: 0, cargo: 0 };
   for (const f of sim.flights) {

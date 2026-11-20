@@ -3,7 +3,7 @@
 Decided 2026-11-20 after playtest 1. Milestones are gone; Air Miles buy everything.
 
 ## Always available
-Runways (all lengths), Taxiways, Contact Stands, Holding Bays, Land Plots, every Runway Surface (Grass, Asphalt, Lit, ILS), Tower Modules levels 1–3, Ground Stop.
+Runways (all lengths), Taxiways, Contact Stands, Holding Bays, Land Plots, every Runway Surface (Grass, Asphalt, Lit, ILS), Tower Modules levels 1–3.
 
 ## Unlockables (bought once) *(prices are first guesses)*
 | Unlockable | Air Miles | Effect |

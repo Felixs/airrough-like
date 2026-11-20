@@ -80,10 +80,14 @@ Screen, which turns Score into Air Miles for the meta-progression.
   taxiing of each other, within the next 16 tiles, would meet. One gives way: the one not yet on the other's path, else the one that has another
   way round, else the one with the later id. It takes another Taxiway if there is one (crossing the other's path only
   well before or after it), otherwise it waits short of the other's path until it has passed.
-- A Ground Stop (Emergency Action) freezes all taxiing for 5 minutes.
 
 ## Runways, wind and direction
 
+- **Designators** (`layout.ts → runwayNames`): horizontal Runways are 09/27, vertical ones 18/36, numbered for the
+  direction aircraft land. Parallel Runways get letters as seen on approach (ICAO): two L R, three L C R; from four on
+  they are split into groups of up to three and each further group takes the next number (09L 09R 10L 10R). The letter
+  swaps at the other end (09L is 27R). The names are painted on the Runway ends (number upright for the landing pilot,
+  letter under it), shown on the hold-short signs ("09L-27R") and in the Runway chip.
 - Lengths Short / Medium / Long are 24 / 36 / 48 tiles (`BUILD_COSTS.runwayTiles`); a Runway fits aircraft up to
   Small / Medium / Large. A Runway can be lengthened one class at a time for the price difference, on either end:
   clicking its west (north) half grows it that way, its east (south) half the other way; the far end stays put. Surfaces: Grass (Small only, daylight), Asphalt, Lit (night operations), ILS (bad-weather
@@ -130,8 +134,19 @@ Screen, which turns Score into Air Miles for the meta-progression.
 
 ## Emergency Actions
 
-Ground Stop (always), Rush Turnaround (Ramp Agent Station), Manual Divert (Admin Office), Priority Landing (Airline
-Office), each with a cooldown (`simulation.ts → ACTIONS`).
+Rush Turnaround (Ramp Agent Station), Manual Divert (Admin Office), Priority Landing (Airline Office), each with a
+cooldown (`simulation.ts → ACTIONS`).
+
+## Low fuel and Mayday
+
+- When a Holding aircraft's fuel drops below 10 minutes the game always pauses (whatever the Radar level or the
+  pop-up option) and the Player chooses:
+  - **Divert:** it leaves at once. No fees, no Movement, no fine.
+  - **Mayday landing:** it lands next. Every Runway stops for it: no other landing or takeoff starts anywhere until it
+    is down. Its landing rolls the usual error chances, but a Go-Around becomes a Crash (no fuel to try again). It
+    lands even with no Stand or Holding Bay free and then waits by its exit until one frees up. Several Maydays land in
+    the order they were declared.
+- An aircraft that reaches 5 minutes of fuel while no fitting Runway is usable is still diverted automatically.
 
 ## Economy, Quota and Twists
 
