@@ -94,6 +94,10 @@ _Avoid_: Turn-off, high-speed exit
 A takeoff that lines up at a connector part-way along the Runway instead of at its end; allowed when the aircraft still has its takeoff run of Runway ahead, and taken when it is the shorter taxi.
 _Avoid_: Short takeoff, mid-runway departure
 
+**Runway End Zone**:
+The strip 4 tiles deep past each end of a Runway, as wide as the Runway, where nothing may be built (the approach and departure path).
+_Avoid_: Clearway, safety area, RESA
+
 **Endless Mode**:
 Optional continuation of a Run after it has been won by surviving four Weeks; played for score until the Run is lost. Traffic keeps rising and Boss Days stack multiple Severity-4 Boss Twists.
 _Avoid_: Free play, overtime

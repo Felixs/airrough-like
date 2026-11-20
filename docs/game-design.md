@@ -64,7 +64,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
   with no Unlockable, when the airport has none of that kind (e.g. after demolishing the starting ones). With one
   standing, more of it is a wing (3 × 4, an Unlockable) that must touch it; a second free-standing Terminal needs the
   Second Terminal Unlockable. Price 1,500 per tile.
-- Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment) and priced before they are
+- **Runway end zones:** nothing (Taxiways included) may be built in the 4 tiles past each end of a Runway, across
+  its full width (`layout.ts → RUNWAY_END_CLEAR_TILES`); a new or lengthened Runway also needs its own end zones
+  clear. The zones may reach into land not bought yet. Build Mode shows them as red hatching.
+- Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment, Runway end zones) and priced before they are
   confirmed; Demolish refunds what building the same thing again would cost (so removing and rebuilding is free); Move keeps a structure and re-checks it at the new place.
   Changes are pending until confirmed. Leaving Build Mode (switching to Overview or pressing Start Day) with pending
   changes asks: build them (if they can't be built, the reason shows and the Player stays), discard them, or keep
