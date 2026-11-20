@@ -67,6 +67,8 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             <dt>Daily Quota</dt><dd><b>${f.quota}</b> Movements</dd>
             <dt>Demand</dt><dd>${f.demand} flights</dd>
             <dt>Arriving</dt><dd>S ${f.arrivalsBySize.small} · M ${f.arrivalsBySize.medium} · L ${f.arrivalsBySize.large}</dd>
+            <dt class="sub">Passenger</dt><dd title="Need Terminal Stands">S ${f.arrivalsByPurpose.passenger.small} · M ${f.arrivalsByPurpose.passenger.medium} · L ${f.arrivalsByPurpose.passenger.large}</dd>
+            <dt class="sub">Cargo</dt><dd title="Need Cargo Hub Stands">S ${f.arrivalsByPurpose.cargo.small} · M ${f.arrivalsByPurpose.cargo.medium} · L ${f.arrivalsByPurpose.cargo.large}</dd>
             <dt>Peak hour</dt><dd>${String(f.peakHour).padStart(2, '0')}:00</dd>
             <dt>Turned away</dt><dd>${f.turnedAway.total}</dd>
             ${turned.map(([k, v]) => `<dt class="sub">${REASON[k] ?? k}</dt><dd>${v}</dd>`).join('')}

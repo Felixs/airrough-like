@@ -9,6 +9,10 @@ import { ATC, HOURS, TIMINGS, isDark, type FlightPhase, type ScheduledFlight, ty
 
 interface StripBase {
   readonly id: string;
+  /** ATC callsign, e.g. "LH 347". */
+  readonly callsign: string;
+  /** Spoken form, e.g. "Lufthansa 347". */
+  readonly spoken: string;
   readonly type: AircraftTypeId;
   readonly size: SizeClass;
   readonly purpose: Purpose;
@@ -32,7 +36,8 @@ const GROUND: readonly FlightPhase[] = ['landing', 'taxiIn', 'inBay', 'onStand',
 
 export function flightStrips(sim: Simulation): { inbound: InboundStrip[]; holding: HoldingStrip[]; ground: GroundStrip[] } {
   const base = (f: Simulation['flights'][number]): StripBase => ({
-    id: f.id, type: f.type, size: AIRCRAFT_TYPES[f.type].size, purpose: AIRCRAFT_TYPES[f.type].purpose,
+    id: f.id, callsign: f.callsign ?? f.id, spoken: f.spoken ?? f.callsign ?? f.id,
+    type: f.type, size: AIRCRAFT_TYPES[f.type].size, purpose: AIRCRAFT_TYPES[f.type].purpose,
   });
   return {
     inbound: sim.flights.filter((f) => f.phase === 'scheduled').sort((a, b) => a.arrivalMinute - b.arrivalMinute)
@@ -78,11 +83,18 @@ const ALERT_TEXT: Record<SimEvent['kind'], [Alert['severity'], (id: string) => s
 };
 
 /** Newest first. */
+/** The callsign of a flight in the simulation (or its id). */
+export function callsignOf(sim: Simulation, flightId: string): string {
+  return sim.flights.find((f) => f.id === flightId)?.callsign ?? flightId;
+}
+
+/** One line describing an event, e.g. "CRASH: LH 347 (−$10,000)". */
+export function describeEvent(sim: Simulation, e: SimEvent): string {
+  return ALERT_TEXT[e.kind][1](callsignOf(sim, e.flightId)) + (e.cost ? ` (−$${e.cost.toLocaleString('en-US')})` : '');
+}
+
 export function alerts(sim: Simulation): Alert[] {
-  return [...sim.events].reverse().map((e) => {
-    const [severity, text] = ALERT_TEXT[e.kind];
-    return { minute: e.minute, kind: e.kind, severity, text: text(e.flightId) + (e.cost ? ` (−$${e.cost.toLocaleString('en-US')})` : '') };
-  });
+  return [...sim.events].reverse().map((e) => ({ minute: e.minute, kind: e.kind, severity: ALERT_TEXT[e.kind][0], text: describeEvent(sim, e) }));
 }
 
 export interface SpotStatus {

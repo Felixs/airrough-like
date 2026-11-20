@@ -50,6 +50,7 @@ async function start(): Promise<void> {
   let speed: Speed = 1;
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => (speed = s));
   const dayLabel = document.querySelector<HTMLElement>('#day-name')!;
+  const autoSlow = document.querySelector<HTMLInputElement>('#auto-slow')!;
   const liveDay = mountLiveDay(appEl, {
     onAction(id, targetId) {
       try {
@@ -133,7 +134,11 @@ async function start(): Promise<void> {
   }
 
   app.ticker.add((ticker) => {
-    if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, speed));
+    // Auto-slow: watch landings and takeoffs at 1×, rush through the quiet minutes.
+    const moving = sim.flights.some((f) => f.phase === 'landing' || f.phase === 'takeoff');
+    const effective: Speed = autoSlow.checked && moving && speed > 1 ? 1 : speed;
+    document.querySelector('.speed')?.classList.toggle('slowed', effective !== speed);
+    if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, effective));
     flightLayer.update(sim.flights);
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);

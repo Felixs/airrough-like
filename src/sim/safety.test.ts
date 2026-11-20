@@ -23,17 +23,17 @@ const findSeed = (setup: Omit<SimulationSetup, 'seed'>, minute: number, kind: Si
 };
 
 describe('Risk Meter', () => {
-  it('starts at ATC 2.5% and Pilot 1.5% on Asphalt', () => {
+  it('starts at ATC 1.25% and Pilot 0.75% on Asphalt', () => {
     const r = riskMeter(sim([]));
-    expect(r.atc).toBeCloseTo(0.025);
-    expect(r.pilot).toBeCloseTo(0.015);
-    expect(r.total).toBeCloseTo(1 - 0.975 * 0.985);
+    expect(r.atc).toBeCloseTo(0.0125);
+    expect(r.pilot).toBeCloseTo(0.0075);
+    expect(r.total).toBeCloseTo(1 - 0.9875 * 0.9925);
   });
 
   it('drops 15% per Controller Training level and rises 40% per aircraft over Radar capacity', () => {
-    expect(riskMeter(sim([], { controllerTrainingLevel: 3 })).atc).toBeCloseTo(0.025 * 0.7);
+    expect(riskMeter(sim([], { controllerTrainingLevel: 3 })).atc).toBeCloseTo(0.0125 * 0.7);
     const six = ['1', '2', '3', '4', '5', '6'].map((id): ScheduledFlight => ({ id, type: 'B77W', arrivalMinute: 360 }));
-    expect(riskMeter(runUntil(sim(six), 361)).atc).toBeCloseTo(0.025 * 1.8); // 6 airborne, capacity 4
+    expect(riskMeter(runUntil(sim(six), 361)).atc).toBeCloseTo(0.0125 * 1.8); // 6 airborne, capacity 4
   });
 });
 

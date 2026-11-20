@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { startingAirport } from './layout';
 import { airMiles, dayPlan, endDay, playDay, runScore, startLiveDay, startRun, upkeep, type RunState } from './run';
-import { stepSimulation } from './simulation';
+import { acknowledgeAlert, stepSimulation } from './simulation';
 
 describe('Upkeep', () => {
   it('is paid for Runways, Surfaces, Stands, Holding Bays, Tower Modules and Fire & Rescue', () => {
@@ -56,10 +56,10 @@ describe('End of Day', () => {
 });
 
 describe('Score', () => {
-  it('is Days × 1000 + Movements × 50 + fees; Air Miles are Score / 100', () => {
+  it('is Days × 1000 + Movements × 50 + fees; Air Miles are Score / 1000', () => {
     const run: RunState = { ...startRun(1), stats: { daysSurvived: 3, movements: 150, fees: 54_321, spending: 999, crashes: 0, diversions: 0, largeLandings: 0 } };
     expect(runScore(run)).toBe(3_000 + 7_500 + 54_321);
-    expect(airMiles(run)).toBe(648);
+    expect(airMiles(run)).toBe(64);
   });
 });
 
@@ -86,7 +86,7 @@ describe('A whole Run', () => {
   it('carries aircraft left on the ground into the next Day', () => {
     const run = startRun(5);
     let sim = startLiveDay(run);
-    while (sim.clock.minute < 24 * 60) sim = stepSimulation(sim);
+    while (sim.clock.minute < 24 * 60) sim = sim.pendingAlert ? acknowledgeAlert(sim) : stepSimulation(sim);
     const next = endDay(run, sim);
     const left = sim.flights.filter((f: { phase: string }) => ['onStand', 'inBay', 'taxiIn', 'taxiOut', 'holdShort'].includes(f.phase)).length;
     expect(next.overnight.length).toBe(left);

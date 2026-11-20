@@ -7,6 +7,7 @@ import type { AirportLayout, RunwayLength, SizeClass } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
 import type { ScheduledFlight } from './simulation';
 import { trafficEffects, type TrafficEffects, type TwistRef } from './twists';
+import { makeCallsign } from './airlines';
 
 /** Mon..Sun; Saturday is the Rush Day, Sunday the Boss Day. */
 export const DAY_FACTORS = [1, 1.05, 1.1, 1.15, 1.2, 2.0, 1.6] as const;
@@ -47,6 +48,8 @@ export interface Forecast {
   readonly demand: number;
   readonly quota: number;
   readonly arrivalsBySize: Readonly<Record<SizeClass, number>>;
+  /** Arrivals by Purpose and Size Class (passenger flights need Terminal Stands, cargo flights Cargo Hub Stands). */
+  readonly arrivalsByPurpose: Readonly<Record<Purpose, Readonly<Record<SizeClass, number>>>>;
   readonly turnedAway: Readonly<Record<TurnAwayReason | 'total', number>>;
   /** Hour (0–23) with the most arrivals. */
   readonly peakHour: number;
@@ -178,11 +181,15 @@ export function planDay(setup: DayPlanSetup): DayPlan {
   }
 
   flights.sort((a, b) => a.arrivalMinute - b.arrivalMinute);
-  const schedule = flights.map((f, i) => ({ ...f, id: `${f.type}-${i + 1}` }));
+  const names = createRandom(mixSeed(setup.seed, week, weekday, 0xca11));
+  const taken = new Set<string>();
+  const schedule = flights.map((f, i) => ({ ...f, id: `${f.type}-${i + 1}`, ...makeCallsign(f.type, names, taken) }));
   const arrivalsBySize = { small: 0, medium: 0, large: 0 };
+  const arrivalsByPurpose = { passenger: { small: 0, medium: 0, large: 0 }, cargo: { small: 0, medium: 0, large: 0 } };
   const perHour = new Array<number>(24).fill(0);
   for (const f of schedule) {
     arrivalsBySize[AIRCRAFT_TYPES[f.type].size]++;
+    arrivalsByPurpose[AIRCRAFT_TYPES[f.type].purpose][AIRCRAFT_TYPES[f.type].size]++;
     if (!f.overnight) perHour[Math.floor(f.arrivalMinute / 60)]!++;
   }
   const total = turnedAway.noFittingRunway + turnedAway.noFittingStand + turnedAway.standCapacity;
@@ -192,6 +199,6 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     demand,
     quota,
     schedule,
-    forecast: { demand, quota, arrivalsBySize, turnedAway: { ...turnedAway, total }, peakHour: perHour.indexOf(Math.max(...perHour)) },
+    forecast: { demand, quota, arrivalsBySize, arrivalsByPurpose, turnedAway: { ...turnedAway, total }, peakHour: perHour.indexOf(Math.max(...perHour)) },
   };
 }

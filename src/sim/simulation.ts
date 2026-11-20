@@ -47,12 +47,12 @@ export const ATC = {
 
 /** Errors and safety *(first guess, from the prototypes)*. */
 export const SAFETY = {
-  atcErrorChance: 0.025,
+  atcErrorChance: 0.0125,
   /** ATC Error chance drops this share per Controller Training level above 1. */
   trainingReduction: 0.15,
   /** ATC Error chance rises this share per aircraft over Radar capacity. */
   overRadarIncrease: 0.4,
-  pilotErrorChance: 0.015,
+  pilotErrorChance: 0.0075,
   surfacePilotFactor: { grass: 1.3, asphalt: 1, lit: 1, ils: 0.6 },
   landingOutcomes: { goAround: 0.8, incident: 0.19 },
   takeoffOutcomes: { rejectedTakeoff: 0.85, incident: 0.14 },
@@ -91,10 +91,16 @@ export function secondRollChance(controllerTrainingLevel: number): number {
 }
 
 export interface PendingAlert {
-  readonly kind: 'fuel' | 'emergency';
+  /** fuel/emergency: Radar-driven alerts; event: an Incident, Crash or Diversion just happened. */
+  readonly kind: 'fuel' | 'emergency' | 'event';
   readonly flightId: string;
   readonly minute: number;
+  /** For 'event': what happened in that moment. */
+  readonly events?: readonly SimEvent[];
 }
+
+/** Events that pause the Day with an info pop-up when pauseOnEvents is on. */
+export const PAUSING_EVENTS: ReadonlySet<SimEvent['kind']> = new Set(['incident', 'taxiIncident', 'crash', 'diversion']);
 
 const RUNWAY_FITS: Record<RunwayLength, number> = { short: 1, medium: 2, long: 3 };
 
@@ -138,6 +144,10 @@ export function runwaySeparation(radarLevel: number, controllerTrainingLevel: nu
 
 export interface ScheduledFlight {
   readonly id: string;
+  /** ATC callsign shown to the Player, e.g. "LH 347"; falls back to the id. */
+  readonly callsign?: string;
+  /** Spoken form, e.g. "Lufthansa 347". */
+  readonly spoken?: string;
   readonly type: AircraftTypeId;
   readonly arrivalMinute: number;
   /** Parked overnight: starts the Day on a Stand with unloading done. */
@@ -214,6 +224,7 @@ export interface Simulation {
   readonly taxiSpeedFactor: number;
   readonly feeFactor: number;
   readonly cooldownFactor: number;
+  readonly pauseOnEvents: boolean;
   /** Per Runway (layout order): can't be used before this minute (Crash, Incident, Twist). */
   readonly runwayBlockedUntil: readonly number[];
   /** Everything notable that happened today, oldest first. */
@@ -274,6 +285,8 @@ export interface SimulationSetup {
   readonly noLights?: boolean;
   /** Multiplies taxi speed (Taxiway works). */
   readonly taxiSpeedFactor?: number;
+  /** Pause with an info pop-up on Incidents, Crashes and Diversions (the game; tests leave it off). */
+  readonly pauseOnEvents?: boolean;
   /** Boosts from meta-progression. */
   readonly feeFactor?: number;
   readonly fuelBonusMinutes?: number;
@@ -310,6 +323,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     noLights: setup.noLights ?? false,
     taxiSpeedFactor: setup.taxiSpeedFactor ?? 1,
     feeFactor: setup.feeFactor ?? 1,
+    pauseOnEvents: setup.pauseOnEvents ?? false,
     cooldownFactor: setup.cooldownFactor ?? 1,
     runwayBlockedUntil: setup.layout.runways.map(() => setup.runwayBlockedUntil ?? 0),
     events: [],
@@ -404,7 +418,12 @@ export function stepSimulation(prev: Simulation): Simulation {
   rollTaxiIncident(sim, flights, now, rng);
   const blocked = releaseBays(sim, flights, now);
   assignRunway(sim, flights, now, blocked, rng);
-  if (now + STEP_MINUTES >= HOURS.curfew) for (const f of flights) if (f.phase === 'holding' || f.phase === 'scheduled') divert(sim, f, now);
+  if (now + STEP_MINUTES >= HOURS.curfew) {
+    for (const f of flights) if (f.phase === 'holding' || f.phase === 'scheduled') divert(sim, f, now);
+  } else if (sim.pauseOnEvents && !sim.pendingAlert) {
+    const fresh = sim.events.slice(prev.events.length).filter((e) => PAUSING_EVENTS.has(e.kind));
+    if (fresh.length) sim.pendingAlert = { kind: 'event', flightId: fresh[0]!.flightId, minute: now, events: fresh };
+  }
   for (const f of flights) place(sim, f, now + STEP_MINUTES);
   sim.flights = flights;
   sim.clock = { ...prev.clock, minute: now + STEP_MINUTES };

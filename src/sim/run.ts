@@ -8,7 +8,7 @@ import { planDay, type DayPlan } from './schedule';
 import { simulationEffects, twistsFor, type Twist } from './twists';
 import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
 import { AIRCRAFT_TYPES } from './aircraft';
-import { carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
+import { acknowledgeAlert, carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
   readonly px: number;
@@ -101,7 +101,7 @@ export const UPKEEP = {
 
 export const STARTING_MONEY = 30_000;
 
-export const SCORE = { perDay: 1_000, perMovement: 50, milesPerScore: 1 / 100 } as const;
+export const SCORE = { perDay: 1_000, perMovement: 50, milesPerScore: 1 / 1_000 } as const;
 
 export function startRun(seed: number, meta: MetaState = emptyMeta()): RunState {
   const perks = new Set(meta.perks);
@@ -202,6 +202,7 @@ export function startLiveDay(run: RunState): Simulation {
     groundRadarLevel: run.towerModules.groundRadar,
     fireRescueLevel: run.fireRescueLevel,
     earlierCrashesThisWeek: run.crashesThisWeek,
+    pauseOnEvents: true,
     feeFactor: run.modifiers.feeFactor,
     fuelBonusMinutes: run.modifiers.fuelBonusMinutes,
     cooldownFactor: run.modifiers.cooldownFactor,
@@ -254,7 +255,7 @@ export function continueEndless(run: RunState): RunState {
 /** Plays the current Day to the end without any Player input (tests, autoplay). */
 export function playDay(run: RunState): RunState {
   let sim = startLiveDay(run);
-  while (sim.clock.minute < 24 * 60) sim = stepSimulation(sim);
+  while (sim.clock.minute < 24 * 60) sim = sim.pendingAlert ? acknowledgeAlert(sim) : stepSimulation(sim);
   return endDay(run, sim);
 }
 

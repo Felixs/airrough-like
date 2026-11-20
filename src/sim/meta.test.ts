@@ -5,7 +5,7 @@ import {
 } from './meta';
 import { upgradeOffers } from './plan';
 import { airMiles, startLiveDay, startRun, upkeep, type RunState } from './run';
-import { stepSimulation } from './simulation';
+import { acknowledgeAlert, stepSimulation } from './simulation';
 
 const rich = (meta: MetaState): MetaState => ({ ...meta, airMiles: 100_000 });
 const ended = (overrides: Partial<RunState['stats']>): RunState => {
@@ -80,8 +80,8 @@ describe('Boosts', () => {
     void a320;
     let s = startLiveDay(boosted);
     let p = startLiveDay(plain);
-    while (s.clock.minute < 24 * 60) s = stepSimulation(s);
-    while (p.clock.minute < 24 * 60) p = stepSimulation(p);
+    while (s.clock.minute < 24 * 60) s = s.pendingAlert ? acknowledgeAlert(s) : stepSimulation(s);
+    while (p.clock.minute < 24 * 60) p = p.pendingAlert ? acknowledgeAlert(p) : stepSimulation(p);
     expect(s.fees).toBeGreaterThan(p.fees);
     const firstFuel = (r: RunState) => startLiveDay(r).flights.find((f) => !f.overnight)!.fuelMinutes;
     expect(firstFuel(boosted)).toBe(firstFuel(plain) + 5);
