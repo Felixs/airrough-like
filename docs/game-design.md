@@ -34,8 +34,13 @@ Screen, which turns Score into Air Miles for the meta-progression.
 
 ## The map
 
-- A tile grid (`layout.ts → WORLD`): 96 × 56 tiles, cut into Land Plots of 16 × 14. The Run starts owning plots
-  0–2 × 0–1; more plots are bought in Build Mode.
+- A tile grid (`layout.ts → WORLD`): 96 × 64 tiles, cut into square Land Plots of 16 × 16. The Run starts owning
+  plots 0–2 × 0–1 (48 × 32 tiles); more plots are bought in Build Mode.
+- **Starting Airport** (`layout.ts → startingAirport`), centred in the starting land: a Medium Asphalt Runway (x 6–41,
+  rows 24–27) with a connector at each end, a parallel Taxiway (row 18–20), an apron lane (rows 11–13, x 15–37) joined
+  to it by a link near each end, the Terminal (x 16–25) with 2 Small + 1 Medium Contact Stands, the Cargo Hub
+  (x 28–34) with 1 Medium + 1 Small, a Small and a Medium Holding Bay right of the cargo Stands, and the ATC Tower left
+  of the Terminal.
 - Structures are axis-aligned tile rectangles: Runway, Taxiway, Terminal, Cargo Hub, Stand, Holding Bay, ATC Tower,
   Support Buildings (Ramp Agent Station, Admin Office, Airline Office, Fire & Rescue Station, Fuel Farm, De-icing Pad).
 - **Taxiways** are 3 tiles wide. Touching collinear Taxiway pieces merge into one; so do Terminal or Cargo Hub wings of
@@ -100,7 +105,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
 ## Flights and ATC
 
 - The Schedule (`schedule.ts → SCHEDULE_RULES`) makes the Day's arrivals from Demand (30 flights + 20 per Week, scaled
-  by weekday, ×2 on the Saturday Rush Day), split by Traffic Mix and Purpose and capped by fitting Stands and Runways.
+  by weekday, ×2 on the Saturday Rush Day), split by Traffic Mix and Purpose and capped by fitting Stands (8–10
+  arrivals per Stand by Size Class) and Runways. On the first three Days of a Run, a flight that finds its Stands full
+  comes as a Small aircraft instead if Small Stands have room, so an airport left as it is gets through its first Days
+  (balance target: unbuilt, it survives at least the first two Days and is lost within the first two Weeks).
 - Phases: scheduled → holding → landing → taxi in → (Holding Bay) → on Stand (Turnaround 25 / 40 / 60 min) → taxi out →
   hold short → takeoff → departed; or crashed / diverted.
 - The ATC Tower gives each Runway to one aircraft at a time with Runway Separation (landing 4 → 2 min, takeoff 3 →

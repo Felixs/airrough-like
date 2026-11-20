@@ -108,7 +108,11 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   let airfield = drawAirfield(session.layout);
   world.addChild(airfield, overlay, plotLabels, ghost, ghostLabel);
   app.stage.addChild(world);
-  const fit = () => fitToScreen(world, session.layout, app.screen.width, app.screen.height, worldBounds);
+  const fit = () => {
+    fitToScreen(world, session.layout, app.screen.width, app.screen.height, worldBounds);
+    // where tile (0, 0) is and how big a tile is on screen, for scripts that click on the map (README screenshots)
+    app.canvas.dataset.tiles = JSON.stringify({ x: world.position.x, y: world.position.y, size: world.scale.x * T });
+  };
   fit();
   app.renderer.on('resize', fit);
 

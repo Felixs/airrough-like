@@ -37,11 +37,15 @@ await page.waitForSelector('.build-map canvas');
 await settle(1200);
 await page.screenshot({ path: out('build-mode') });
 
-// Leaving Build Mode with an unconfirmed change asks whether to build it: draw a Taxiway between the two apron
-// connectors (tiles 15..28, row 12; screen positions from the 1600×900 Build view), then click Overview.
-await page.mouse.move(545, 460);
+// Leaving Build Mode with an unconfirmed change asks whether to build it: draw a Taxiway between the two links
+// (tiles 18..32, row 15), then click Overview. The canvas tells where tiles are on screen.
+const map = await page.$('.build-map canvas');
+const box = await map.boundingBox();
+const tiles = JSON.parse(await map.evaluate((c) => c.dataset.tiles));
+const at = (x, y) => [box.x + tiles.x + (x + 0.5) * tiles.size, box.y + tiles.y + (y + 0.5) * tiles.size];
+await page.mouse.move(...at(18, 15));
 await page.mouse.down();
-await page.mouse.move(700, 460, { steps: 8 });
+await page.mouse.move(...at(32, 15), { steps: 8 });
 await page.mouse.up();
 await settle();
 if (!(await page.$('.pending li:not(.empty)'))) throw new Error('The scripted Taxiway was not placed; adjust its screen position');

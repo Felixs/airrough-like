@@ -58,7 +58,8 @@ describe('Runway connectors', () => {
   it('a Taxiway may end against a Runway side', () => {
     let s = openBuild(rich());
     s = addPending(s, newRunway(s, { x: 44, y: 2 }, 'short', true));
-    expect(checkChange(s, { kind: 'add', structure: taxiwayFromDrag({ x: 42, y: 10 }, { x: 43, y: 10 }) }).ok).toBe(true);
+    // from the east end of the parallel Taxiway (x 41) to the new Runway's side (x 44)
+    expect(checkChange(s, { kind: 'add', structure: taxiwayFromDrag({ x: 42, y: 19 }, { x: 43, y: 19 }) }).ok).toBe(true);
   });
 });
 
@@ -73,7 +74,7 @@ describe('Buildings', () => {
   it('Terminal and Cargo Hub wings must be attached to their building', () => {
     const r = rich();
     const s = openBuild({ ...r, modifiers: { ...r.modifiers, unlocks: r.modifiers.unlocks.filter((u) => u !== 'secondTerminal') } });
-    const wing: Structure = { kind: 'terminal', x: 22, y: 2, w: 3, h: 4 };
+    const wing: Structure = { kind: 'terminal', x: 20, y: 0, w: 3, h: 4 }; // on top of the Terminal
     expect(checkChange(s, { kind: 'add', structure: wing })).toMatchObject({ ok: true, cost: 18_000 });
     expect(failing(checkChange(s, { kind: 'add', structure: { ...wing, x: 2, y: 14 } }))).toContain('Attached to the Terminal');
   });
@@ -84,7 +85,7 @@ describe('Move', () => {
     const s = openBuild(rich());
     const tower = find(s, (x) => x.kind === 'atcTower');
     expect(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 2, y: 10 } })).toMatchObject({ ok: true, cost: 0 });
-    expect(failing(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 8, y: 2 } }))).toContain('Clear of other structures');
+    expect(failing(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 17, y: 2 } }))).toContain('Clear of other structures');
     const moved = confirmBuild(applyChange(s, { kind: 'move', from: tower, to: { ...tower, x: 2, y: 10 } }));
     expect(moved.layout.structures.find((x) => x.kind === 'atcTower')).toMatchObject({ x: 2, y: 10 });
   });
@@ -93,8 +94,8 @@ describe('Move', () => {
     const s = openBuild(rich());
     const terminal = find(s, (x) => x.kind === 'terminal');
     // one tile left: the Stands still open onto the apron taxilane
-    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 6 } });
-    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([7, 10, 13, 16]);
+    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 15 } });
+    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([15, 17, 19]);
     const runway = s.layout.runways[0]!;
     expect(checkChange(s, { kind: 'move', from: runway, to: { ...runway, y: 30 } }).items.filter((i) => !i.ok).map((i) => i.label)).toEqual(['Inside owned land']);
     expect(failing(checkChange(s, { kind: 'move', from: terminal, to: { ...terminal, y: -10 } }))).toContain('Its Stands keep Taxiway access');
@@ -105,10 +106,10 @@ describe('Demolish', () => {
   it('refunds 100% (for now) and removes the Upkeep', () => {
     const run = rich();
     const s = openBuild(run);
-    const link = find(s, (x) => x.kind === 'taxiway' && x.x === 12 && x.y === 12);
+    const link = find(s, (x) => x.kind === 'taxiway' && x.x === 15 && x.y === 14);
     expect(checkChange(s, { kind: 'remove', structure: link })).toMatchObject({ ok: true, cost: -7_200, upkeep: -24 });
-    const stand4 = find(s, (x) => x.kind === 'stand' && x.id === '4');
-    const after = confirmBuild(applyChange(s, { kind: 'remove', structure: stand4 }));
+    const stand3 = find(s, (x) => x.kind === 'stand' && x.id === '3'); // the Medium one
+    const after = confirmBuild(applyChange(s, { kind: 'remove', structure: stand3 }));
     expect(after.money).toBe(run.money + 16_000);
     expect(upkeep(after)).toBe(upkeep(run) - 100);
   });
@@ -118,9 +119,9 @@ describe('Demolish', () => {
     expect(failing(checkChange(s, { kind: 'remove', structure: s.layout.runways[0]! }))).toContain('Not the last Runway');
     expect(failing(checkChange(s, { kind: 'remove', structure: find(s, (x) => x.kind === 'terminal') }))).toContain('No Contact Stands attached');
     expect(failing(checkChange(s, { kind: 'remove', structure: find(s, (x) => x.kind === 'atcTower') }))).toContain('Not the ATC Tower');
-    const parked: RunState = { ...rich(), overnight: ['a', 'b', 'c', 'd'].map((id) => ({ id, type: 'A320', arrivalMinute: 0, overnight: true })) };
+    const parked: RunState = { ...rich(), overnight: [{ id: 'a', type: 'A320', arrivalMinute: 0, overnight: true }] };
     const ps = openBuild(parked);
-    expect(failing(checkChange(ps, { kind: 'remove', structure: find(ps, (x) => x.kind === 'stand' && x.id === '4') }))).toContain('Not in use by an aircraft');
+    expect(failing(checkChange(ps, { kind: 'remove', structure: find(ps, (x) => x.kind === 'stand' && x.id === '3') }))).toContain('Not in use by an aircraft');
   });
 });
 
@@ -136,10 +137,10 @@ describe('Land Plots', () => {
 
   it('extend where the Player can build', () => {
     const s0 = openBuild(rich());
-    const far = taxiwayFromDrag({ x: 43, y: 17 }, { x: 55, y: 17 });
+    const far = taxiwayFromDrag({ x: 42, y: 19 }, { x: 55, y: 19 });
     expect(() => addPending(s0, far)).toThrow();
     const s = applyChange(s0, { kind: 'buyPlot', plot: { px: 3, py: 1 } });
-    const built = confirmBuild(addPending(s, newStand(s, { x: 20, y: 13 }, 'medium', 'remote', 'terminal')));
+    const built = confirmBuild(addPending(s, newStand(s, { x: 20, y: 15 }, 'medium', 'remote', 'terminal')));
     expect(built.ownedPlots).toContainEqual({ px: 3, py: 1 });
     expect(pendingTotal(s).cost).toBe(24_000);
   });

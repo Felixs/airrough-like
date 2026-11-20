@@ -24,6 +24,8 @@ export const SCHEDULE_RULES = {
   overnightShare: 0.12,
   /** Arrivals per fitting Stand per Day, by Size Class. */
   arrivalsPerStand: { small: 10, medium: 8, large: 6 },
+  /** On this many first Days of Week 1, flights finding their Stands full come as Small aircraft instead. */
+  smallSwapDays: 3,
   firstArrivalMinute: 6 * 60,
   lastArrivalMinute: 22 * 60,
 } as const;
@@ -130,6 +132,8 @@ export function planDay(setup: DayPlanSetup): DayPlan {
   const longestRunway = Math.max(0, ...layout.runways.map((r) => RUNWAY_FITS[r.length]));
   const fittingStands = (size: SizeClass, purpose: Purpose) =>
     layout.stands.filter((s) => s.serves === (purpose === 'passenger' ? 'terminal' : 'cargoHub') && sizeRank(s.size) >= sizeRank(size));
+  /** Arrivals a Day can take per Size Class and Purpose: so many per fitting Stand. */
+  const capacity = (size: SizeClass, purpose: Purpose) => fittingStands(size, purpose).length * SCHEDULE_RULES.arrivalsPerStand[size];
   const reasonAgainst = (size: SizeClass, purpose: Purpose): TurnAwayReason | null =>
     sizeRank(size) > longestRunway ? 'noFittingRunway' : fittingStands(size, purpose).length === 0 ? 'noFittingStand' : null;
 
@@ -154,9 +158,12 @@ export function planDay(setup: DayPlanSetup): DayPlan {
       turnedAway[reason]++;
       continue;
     }
+    const full = (sz: SizeClass) => (arrivals.get(`${sz}/${purpose}`) ?? 0) >= capacity(sz, purpose);
+    // The first Days of a Run: a flight that finds its Stands full comes as a Small aircraft instead, if Small ones
+    // have room, so an airport left as it is gets through its first Days
+    if (full(size) && week <= 1 && weekday < SCHEDULE_RULES.smallSwapDays && size !== 'small' && !full('small')) size = 'small';
     const capKey = `${size}/${purpose}`;
-    const cap = fittingStands(size, purpose).length * SCHEDULE_RULES.arrivalsPerStand[size];
-    if ((arrivals.get(capKey) ?? 0) >= cap) {
+    if (full(size)) {
       turnedAway.standCapacity++;
       continue;
     }

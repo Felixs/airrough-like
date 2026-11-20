@@ -13,26 +13,26 @@ describe('Drawing a Taxiway', () => {
   });
 
   it('costs 600 per tile with 2 Upkeep per tile', () => {
-    const t = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 });
+    const t = taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 17 });
     const checks = placementChecks(openBuild(run()), t);
     expect(checks.cost).toBe(12 * 600);
     expect(checks.upkeep).toBe(12 * BUILD_COSTS.taxiwayUpkeepPerTile);
   });
 
   it('may end in a dead end, as long as one end joins the network', () => {
-    const spur = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 13 });
+    const spur = taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 15 });
     expect(placementChecks(openBuild(run()), spur).ok).toBe(true);
   });
 
   it('merges with the Taxiway it extends instead of drawing a junction', () => {
-    let session = addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 13 }));
-    session = addPending(session, taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 15 }));
-    expect(session.layout.structures.filter((s) => s.kind === 'taxiway' && s.x === 20 && s.y === 12)).toEqual([{ kind: 'taxiway', x: 20, y: 12, w: 3, h: 4 }]);
+    let session = addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 15 }));
+    session = addPending(session, taxiwayFromDrag({ x: 21, y: 16 }, { x: 21, y: 17 }));
+    expect(session.layout.structures.filter((s) => s.kind === 'taxiway' && s.x === 20 && s.y === 14)).toEqual([{ kind: 'taxiway', x: 20, y: 14, w: 3, h: 4 }]);
   });
 
   it('is valid when it connects at both ends inside owned land without crossing a Runway', () => {
     // A link between the apron taxilane (y 9–11) and Taxiway A (y 16–18)
-    const link = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 });
+    const link = taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 17 });
     const checks = placementChecks(openBuild(run()), link);
     expect(checks.ok).toBe(true);
     expect(checks.items.every((c: { ok: boolean }) => c.ok)).toBe(true);
@@ -41,19 +41,19 @@ describe('Drawing a Taxiway', () => {
   it('explains why a placement is invalid', () => {
     const session = openBuild(run());
     const reasons = (s: ReturnType<typeof taxiwayFromDrag>) => placementChecks(session, s).items.filter((c: { ok: boolean }) => !c.ok).map((c: { label: string }) => c.label);
-    expect(reasons(taxiwayFromDrag({ x: 21, y: 13 }, { x: 21, y: 14 }))).toContain('Connects to a Taxiway or Runway');
-    expect(reasons(taxiwayFromDrag({ x: 21, y: 19 }, { x: 21, y: 27 }))).toContain('Crosses no Runway');
+    expect(reasons(taxiwayFromDrag({ x: 21, y: 15 }, { x: 21, y: 16 }))).toContain('Connects to a Taxiway or Runway');
+    expect(reasons(taxiwayFromDrag({ x: 21, y: 21 }, { x: 21, y: 29 }))).toContain('Crosses no Runway');
     expect(reasons(taxiwayFromDrag({ x: 44, y: 17 }, { x: 60, y: 17 }))).toContain('Inside owned land');
     expect(reasons(taxiwayFromDrag({ x: -10, y: 17 }, { x: 4, y: 17 }))).toContain('Inside owned land');
-    expect(reasons(taxiwayFromDrag({ x: 9, y: 4 }, { x: 9, y: 10 }))).toContain('Clear of buildings and Stands');
+    expect(reasons(taxiwayFromDrag({ x: 19, y: 4 }, { x: 19, y: 10 }))).toContain('Clear of buildings and Stands');
   });
 });
 
 describe('Pending changes', () => {
   it('list with a total, Undo, and Confirm that pays and rebuilds the layout', () => {
-    const link = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 });
+    const link = taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 17 });
     let session = addPending(openBuild(run()), link);
-    session = addPending(session, taxiwayFromDrag({ x: 33, y: 12 }, { x: 33, y: 15 }));
+    session = addPending(session, taxiwayFromDrag({ x: 27, y: 14 }, { x: 27, y: 17 }));
     expect(session.pending).toHaveLength(2);
     expect(pendingTotal(session).cost).toBe(24 * 600);
     session = undoPending(session);
@@ -66,8 +66,8 @@ describe('Pending changes', () => {
   });
 
   it('refuses invalid placements and Confirm while in Debt or short of Money', () => {
-    expect(() => addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 13 }, { x: 21, y: 14 }))).toThrow();
-    const link = taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 });
+    expect(() => addPending(openBuild(run()), taxiwayFromDrag({ x: 21, y: 15 }, { x: 21, y: 16 }))).toThrow();
+    const link = taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 17 });
     expect(() => confirmBuild(addPending(openBuild({ ...run(), money: 1_000 }), link))).toThrow();
     expect(() => addPending(openBuild({ ...run(), money: -5, inDebt: true }), link)).toThrow();
   });
@@ -76,15 +76,15 @@ describe('Pending changes', () => {
 describe('Taxi network after building', () => {
   it('routes through new junctions on the next Day', () => {
     const r = run();
-    const apron = { x: 21, y: 11 };
-    const taxiwayA = { x: 21, y: 16 };
+    const apron = { x: 21, y: 13 };
+    const taxiwayA = { x: 21, y: 18 };
     // Before: round via the nearest existing link; after: straight down the new link (T-junctions at both ends)
     expect(taxiRoute(buildTaxiNetwork(r.layout), apron, taxiwayA).length).toBeGreaterThan(6);
-    const built = confirmBuild(addPending(openBuild(r), taxiwayFromDrag({ x: 21, y: 12 }, { x: 21, y: 15 })));
+    const built = confirmBuild(addPending(openBuild(r), taxiwayFromDrag({ x: 21, y: 14 }, { x: 21, y: 17 })));
     expect(taxiRoute(buildTaxiNetwork(built.layout), apron, taxiwayA)).toHaveLength(6);
-    const stand4 = built.layout.stands.find((s) => s.id === '4')!;
+    const stand3 = built.layout.stands.find((s) => s.id === '3')!;
     const network = buildTaxiNetwork(built.layout);
-    expect(routeToStand(network, network.runwayExit, stand4).length).toBeGreaterThan(0);
+    expect(routeToStand(network, network.runwayExit, stand3).length).toBeGreaterThan(0);
   });
 });
 
@@ -92,14 +92,14 @@ describe('Markings', () => {
   it('put hold-short lines where Taxiways meet the Runway', () => {
     const lines = holdShortLines(startRun(1).layout);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatchObject({ x: 6, y: 21, w: 3, side: 'north', sign: '09-27' });
+    expect(lines[0]).toMatchObject({ x: 6, y: 23, w: 3, side: 'north', sign: '09-27' });
   });
 
   it('place blue edge lights along Taxiway edges but not across junction mouths', () => {
     const lights = taxiwayEdgeLights(startRun(1).layout);
     const key = (x: number, y: number) => lights.some((l) => Math.abs(l.x - x) < 1e-6 && Math.abs(l.y - y) < 1e-6);
-    // Taxiway A's north edge (y = 16) has a light at x 20.5 but not at x 13.5, where the link from the apron joins
-    expect(key(20.5, 16)).toBe(true);
-    expect(key(13.5, 16)).toBe(false);
+    // the parallel Taxiway's north edge (y = 18) has a light at x 20.5 but not at x 16.5, where the link from the apron joins
+    expect(key(20.5, 18)).toBe(true);
+    expect(key(16.5, 18)).toBe(false);
   });
 });

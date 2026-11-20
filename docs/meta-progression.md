@@ -24,7 +24,7 @@ Runways (all lengths), Taxiways, Contact Stands, Holding Bays, Land Plots, every
 | Second Terminal | 1,500 | Place a free-standing Terminal with its own Contact Stands |
 
 ## Boosts (levels, 500 Air Miles × next level)
-Higher fees (+5%/level), Lower Upkeep (−5%), Longer Fuel Reserve (+5 min), Shorter cooldowns (−10%), Faster Turnaround (−5%), Cheaper Taxiways (−10%), Cheaper Land (−10%), Lower Crash Fines (−10%), Faster fire crews (−10% blockage, needs Fire & Rescue Station), Starting Money (+15k), Starting Holding Bay (1 level), Larger starting land (1 level), Better starting Radar (2 levels).
+Higher fees (+5%/level), Lower Upkeep (−5%), Longer Fuel Reserve (+5 min), Shorter cooldowns (−10%), Faster Turnaround (−5%), Cheaper Taxiways (−10%), Cheaper Land (−10%), Lower Crash Fines (−10%), Faster fire crews (−10% blockage, needs Fire & Rescue Station), Starting Money (+15k), Starting Holding Bay (1 level: a third, Medium Holding Bay), Larger starting land (1 level), Better starting Radar (2 levels).
 
 A Boost for a locked building stays locked (🔒 "Needs: …").
 

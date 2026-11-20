@@ -132,7 +132,9 @@ export function startRun(seed: number, meta: MetaState = emptyMeta()): RunState 
   const run = baseRun(seed);
   const layout = lvl('startingHoldingBay')
     ? createLayout(run.layout.width, run.layout.height, [
-      ...run.layout.structures, { kind: 'holdingBay', id: 'B2', x: 34, y: 6, w: 3, h: 3, size: 'medium' },
+      ...run.layout.structures,
+      { kind: 'holdingBay', id: 'B3', x: 38, y: 8, w: 3, h: 3, size: 'medium' },
+      { kind: 'taxiway', x: 38, y: 11, w: 3, h: 3 },
     ])
     : run.layout;
   return {

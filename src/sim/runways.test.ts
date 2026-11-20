@@ -13,18 +13,18 @@ const runUntil = (sim: Simulation, minute: number) => {
 /** A second, parallel Runway south of the first, reached round its east end. */
 const twoRunways = createLayout(base.width, base.height, [
   ...base.structures,
-  { kind: 'taxiway', x: 42, y: 16, w: 3, h: 14 },
-  { kind: 'taxiway', x: 6, y: 28, w: 39, h: 3 },
-  { kind: 'taxiway', x: 6, y: 31, w: 3, h: 2 },
-  { kind: 'taxiway', x: 39, y: 31, w: 3, h: 2 },
-  { kind: 'runway', x: 6, y: 33, w: 36, h: 4, length: 'medium', surface: 'asphalt' },
+  { kind: 'taxiway', x: 42, y: 18, w: 3, h: 15 },
+  { kind: 'taxiway', x: 6, y: 30, w: 39, h: 3 },
+  { kind: 'taxiway', x: 6, y: 33, w: 3, h: 2 },
+  { kind: 'taxiway', x: 39, y: 33, w: 3, h: 2 },
+  { kind: 'runway', x: 6, y: 35, w: 36, h: 4, length: 'medium', surface: 'asphalt' },
 ] satisfies Structure[]);
 
 /** The Starting Airport turned round: one vertical Runway east of the apron. */
 const vertical = createLayout(base.width, base.height, [
-  ...base.structures.filter((s) => s.kind !== 'runway' && !(s.kind === 'taxiway' && s.y === 19)),
-  { kind: 'taxiway', x: 42, y: 9, w: 4, h: 3 },
-  { kind: 'taxiway', x: 42, y: 16, w: 4, h: 3 },
+  ...base.structures.filter((s) => s.kind !== 'runway' && !(s.kind === 'taxiway' && s.y === 21)),
+  { kind: 'taxiway', x: 38, y: 11, w: 8, h: 3 },
+  { kind: 'taxiway', x: 42, y: 18, w: 4, h: 3 },
   { kind: 'runway', x: 46, y: 6, w: 4, h: 30, length: 'medium', surface: 'asphalt' },
 ] satisfies Structure[]);
 
@@ -32,7 +32,7 @@ describe('Several Runways', () => {
   it('each get their own hold point and exit', () => {
     const network = buildTaxiNetwork(twoRunways);
     expect(network.runways.map((a) => a.index)).toEqual([0, 1]);
-    expect(network.runways[1]).toMatchObject({ holdPoint: { x: 7, y: 32 }, runwayExit: { x: 40, y: 32 } });
+    expect(network.runways[1]).toMatchObject({ holdPoint: { x: 7, y: 34 }, runwayExit: { x: 40, y: 34 } });
   });
 
   it('land aircraft in parallel, doubling Runway throughput', () => {
@@ -43,7 +43,8 @@ describe('Several Runways', () => {
   });
 
   it('send departures to a Runway and every aircraft completes its Day', () => {
-    const schedule = ['A', 'B', 'C', 'D'].map((id): ScheduledFlight => ({ id, type: 'A320', arrivalMinute: 400 }));
+    // two A320s (one Medium Stand and one Medium Holding Bay) and two Caravans (Small Stands)
+    const schedule = ['A320', 'A320', 'C208', 'C208'].map((type, i): ScheduledFlight => ({ id: `F${i}`, type: type as ScheduledFlight['type'], arrivalMinute: 400 }));
     const end = runUntil(createSimulation({ layout: twoRunways, schedule, seed: 1 }), 24 * 60);
     expect(end.flights.every((f) => f.phase === 'departed')).toBe(true);
     expect(end.movements).toBe(8);
@@ -58,7 +59,7 @@ describe('Several Runways', () => {
 describe('Vertical Runways', () => {
   it('connect on their long sides and handle a whole flight', () => {
     const network = buildTaxiNetwork(vertical);
-    expect(network.runways[0]).toMatchObject({ vertical: true, holdPoint: { x: 45, y: 10 }, runwayExit: { x: 45, y: 17 } });
+    expect(network.runways[0]).toMatchObject({ vertical: true, holdPoint: { x: 45, y: 12 }, runwayExit: { x: 45, y: 19 } });
     const end = runUntil(createSimulation({ layout: vertical, schedule: [{ id: 'A', type: 'A320', arrivalMinute: 400 }], seed: 1 }), 24 * 60);
     expect(end.flights[0]!.phase).toBe('departed');
     expect(end.movements).toBe(2);
@@ -77,8 +78,8 @@ describe('Cut-off Stands', () => {
     // a Remote Stand on its own little Taxiway that joins nothing
     const island = createLayout(base.width, base.height, [
       ...base.structures.filter((s) => s.kind !== 'stand' || s.serves !== 'terminal'),
-      { kind: 'taxiway', x: 20, y: 30, w: 6, h: 3 },
-      { kind: 'stand', id: 'R1', x: 21, y: 27, w: 3, h: 3, size: 'medium', serves: 'terminal', placement: 'remote' },
+      { kind: 'taxiway', x: 20, y: 33, w: 6, h: 3 },
+      { kind: 'stand', id: 'R1', x: 21, y: 30, w: 3, h: 3, size: 'medium', serves: 'terminal', placement: 'remote' },
     ] satisfies Structure[]);
     expect(buildTaxiNetwork(island).reachableSpots.has('R1')).toBe(false);
     const end = runUntil(createSimulation({ layout: island, schedule: [{ id: 'A', type: 'A320', arrivalMinute: 400, fuelMinutes: 30 }], seed: 1 }), 24 * 60);
@@ -110,16 +111,16 @@ describe('Wind and Active Direction', () => {
     // a westbound A320 vacates at the west connector (x 7), 35 tiles from the 27 threshold
     let t = s;
     while (t.flights[0]!.phase === 'landing') t = stepSimulation(t);
-    expect(t.flights[0]!.route[0]).toEqual({ x: 7, y: 21 });
+    expect(t.flights[0]!.route[0]).toEqual({ x: 7, y: 23 });
     const end = runUntil(t, 24 * 60);
     expect(end.flights[0]!.phase).toBe('departed');
   });
 
   it('lets small aircraft vacate at a middle exit that medium ones roll past', async () => {
     const { exitFor } = await import('./taxi');
-    const middle = createLayout(base.width, base.height, [...base.structures, { kind: 'taxiway', x: 22, y: 19, w: 3, h: 3 } satisfies Structure, { kind: 'taxiway', x: 22, y: 16, w: 3, h: 3 } satisfies Structure]);
+    const middle = createLayout(base.width, base.height, [...base.structures, { kind: 'taxiway', x: 22, y: 21, w: 3, h: 3 } satisfies Structure]);
     const a = buildTaxiNetwork(middle).runways[0]!;
-    expect(exitFor(a, false, 'small')).toEqual({ x: 23, y: 21 }); // 17.5 tiles in
-    expect(exitFor(a, false, 'medium')).toEqual({ x: 40, y: 21 }); // needs 30
+    expect(exitFor(a, false, 'small')).toEqual({ x: 23, y: 23 }); // 17.5 tiles in
+    expect(exitFor(a, false, 'medium')).toEqual({ x: 40, y: 23 }); // needs 30
   });
 });

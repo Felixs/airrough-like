@@ -56,10 +56,10 @@ describe('Stands panel', () => {
   it('shows each Stand and Holding Bay as free or busy with its aircraft', () => {
     const s = runUntil(sim([{ id: 'A', type: 'A320', arrivalMinute: 360 }]), 380);
     const stands = standsStatus(s);
-    expect(stands.map((x) => x.id)).toEqual(['1', '2', '3', '4', 'C1', 'C2', 'B1']);
+    expect(stands.map((x) => x.id)).toEqual(['1', '2', '3', 'C1', 'C2', 'B1', 'B2']);
     const busy = stands.filter((x) => x.flightId);
     expect(busy).toHaveLength(1);
-    expect(busy[0]).toMatchObject({ id: '1', flightId: 'A', aircraft: 'A320', state: 'busy' });
+    expect(busy[0]).toMatchObject({ id: '3', flightId: 'A', aircraft: 'A320', state: 'busy' });
     expect(stands.find((x) => x.id === 'B1')).toMatchObject({ kind: 'holdingBay', state: 'free' });
   });
 });
