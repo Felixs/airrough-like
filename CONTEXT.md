@@ -19,7 +19,7 @@ The night closure: no flights before 06:00, no new arrivals entering Holding aft
 _Avoid_: Night ban, no-fly time
 
 **Week**:
-Seven consecutive Days, Monday to Sunday, with traffic ramping up across the Week. Crash Fines reset when a Week ends.
+Seven consecutive Days, Monday to Sunday, with traffic ramping up across the Week.
 _Avoid_: Stage, chapter
 
 **Rush Day**:
@@ -281,19 +281,15 @@ _Avoid_: Sell, delete
 ### Safety
 
 **Crash**:
-A catastrophic event (fuel exhaustion while Holding, mid-air collision, crash on a Runway) that destroys an aircraft, blocks the Runway until cleared, and costs a Crash Fine.
+A catastrophic event (fuel exhaustion while Holding, mid-air collision, crash on a Runway) that destroys an aircraft and blocks the Runway until cleared (about an hour, longer for larger aircraft). It costs no money: the lost fees and the closed Runway are the penalty.
 _Avoid_: Accident, failure
-
-**Crash Fine**:
-The Money penalty for a Crash, based on the aircraft's Size Class and rising with each further Crash in the same Week, up to a cap.
-_Avoid_: Strike, penalty
 
 **Airport Closed**:
 The state when no Runway is usable for any reason (Crash, Twist, darkness). No Movements happen. The same protection applies per aircraft: a Holding aircraft that reaches minimum fuel while no Runway that fits it is usable is Diverted instead of Crashing.
 _Avoid_: Shutdown, lockdown
 
 **Incident**:
-A non-fatal mishap (e.g. ground collision on a Taxiway, runway overrun) that costs money and blocks tiles for a while. On a Taxiway it closes the Taxiway round the stopped aircraft: others detour round it or wait in line until it is cleared.
+A non-fatal mishap (e.g. ground collision on a Taxiway, runway overrun) that blocks tiles for a while, longer for larger aircraft; it costs no money. On a Taxiway it closes the Taxiway round the stopped aircraft: others detour round it or wait in line until it is cleared.
 _Avoid_: Minor crash, mishap
 
 **Holding**:

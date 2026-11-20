@@ -12,7 +12,7 @@ export type UnlockableId =
 
 export type BoostId =
   | 'higherFees' | 'lowerUpkeep' | 'longerFuel' | 'shorterCooldowns' | 'fasterTurnaround' | 'cheaperTaxiways' | 'cheaperLand'
-  | 'lowerCrashFines' | 'fasterFireCrews' | 'startingMoney' | 'startingHoldingBay' | 'largerStartingLand' | 'betterStartingRadar';
+  | 'fasterFireCrews' | 'startingMoney' | 'startingHoldingBay' | 'largerStartingLand' | 'betterStartingRadar';
 
 export interface MetaState {
   readonly airMiles: number;
@@ -50,7 +50,6 @@ export const BOOSTS: ReadonlyArray<{
   { id: 'fasterTurnaround', name: 'Faster Turnaround', perLevel: '−5% Turnaround', maxLevel: 3 },
   { id: 'cheaperTaxiways', name: 'Cheaper Taxiways', perLevel: '−10% Taxiway price', maxLevel: 3 },
   { id: 'cheaperLand', name: 'Cheaper Land', perLevel: '−10% Land Plot price', maxLevel: 3 },
-  { id: 'lowerCrashFines', name: 'Lower Crash Fines', perLevel: '−10% Crash Fines', maxLevel: 3 },
   { id: 'fasterFireCrews', name: 'Faster fire crews', perLevel: '−10% Runway blockage', maxLevel: 3, needs: 'fireRescueStation' },
   { id: 'startingMoney', name: 'Starting Money', perLevel: '+$15,000 at the start of a Run', maxLevel: 3 },
   { id: 'startingHoldingBay', name: 'Starting Holding Bay', perLevel: 'Start with a third, Medium Holding Bay', maxLevel: 1 },
@@ -72,7 +71,6 @@ export interface RunModifiers {
   readonly turnaroundFactor: number;
   readonly taxiwayCostFactor: number;
   readonly landCostFactor: number;
-  readonly crashFineFactor: number;
   readonly blockageFactor: number;
   readonly unlocks: readonly UnlockableId[];
 }
@@ -91,7 +89,6 @@ export function modifiersFrom(meta: MetaState): RunModifiers {
     turnaroundFactor: 1 - 0.05 * lvl('fasterTurnaround'),
     taxiwayCostFactor: 1 - 0.1 * lvl('cheaperTaxiways'),
     landCostFactor: 1 - 0.1 * lvl('cheaperLand'),
-    crashFineFactor: 1 - 0.1 * lvl('lowerCrashFines'),
     blockageFactor: 1 - 0.1 * lvl('fasterFireCrews'),
     unlocks: meta.unlocks,
   };

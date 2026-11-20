@@ -93,7 +93,9 @@ export function callsignOf(sim: Simulation, flightId: string): string {
 
 /** One line describing an event, e.g. "CRASH: LH 347 (−$10,000)". */
 export function describeEvent(sim: Simulation, e: SimEvent): string {
-  return ALERT_TEXT[e.kind][1](callsignOf(sim, e.flightId)) + (e.story ? `: ${e.story}` : '') + (e.cost ? ` (−$${e.cost.toLocaleString('en-US')})` : '');
+  const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+  const closed = e.blockedUntil === undefined ? '' : ` · ${e.kind === 'taxiIncident' ? 'Taxiway' : 'Runway'} closed until ${hhmm(e.blockedUntil)}`;
+  return ALERT_TEXT[e.kind][1](callsignOf(sim, e.flightId)) + (e.story ? `: ${e.story}` : '') + closed;
 }
 
 export function alerts(sim: Simulation): Alert[] {
