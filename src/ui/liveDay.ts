@@ -145,11 +145,12 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       // Runway and wind chips
       const statuses = runwayStatuses(sim);
       const rw = statuses[0]!;
-      const label = (r: typeof rw) => ({ open: 'OPEN', blocked: `BLOCKED until ${r.until !== null ? hhmm(r.until) : ''}`, dark: 'CLOSED (dark)', curfew: 'CURFEW', unconnected: 'NOT CONNECTED', ilsOnly: 'NO LANDINGS (ILS only)' })[r.state];
+      const label = (r: typeof rw) => ({ open: 'OPEN', blocked: `BLOCKED until ${r.until !== null ? hhmm(r.until) : ''}`, dark: 'CLOSED (dark)', curfew: 'CURFEW', unconnected: 'NOT CONNECTED', ilsOnly: 'NO LANDINGS (ILS only)', changeover: 'CHANGING DIRECTION' })[r.state];
       const tip = (r: typeof rw) => r.state === 'dark' ? 'Only Lit or ILS Runways work after 20:00'
         : r.state === 'blocked' ? 'Cleared faster with a Fire & Rescue Station'
         : r.state === 'unconnected' ? 'Needs Taxiway connectors at both ends'
-        : r.state === 'ilsOnly' ? 'Bad weather: only ILS Runways can take landings' : '';
+        : r.state === 'ilsOnly' ? 'Bad weather: only ILS Runways can take landings'
+        : r.state === 'changeover' ? 'The wind changed: the Runway is being turned round (a few minutes)' : 'Landing and taking off into the wind';
       $('#runway-chip').outerHTML = `<span id="runway-chip" class="chip-group">${statuses.map((r) =>
         `<span class="chip ${r.state}" title="${esc(tip(r))}">RWY ${esc(r.name)} ${label(r)}</span>`).join('')}</span>`;
       $('#wind-chip').textContent = `Wind ${String(rw.wind.direction).padStart(3, '0')}° ${rw.wind.knots} kt`;

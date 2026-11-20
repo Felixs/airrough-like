@@ -4,8 +4,8 @@
  */
 import { AIRCRAFT_TYPES, type AircraftTypeId, type Purpose } from './aircraft';
 import type { SizeClass } from './layout';
-import { mixSeed, createRandom } from './random';
-import { ATC, HOURS, TIMINGS, isDark, type FlightPhase, type ScheduledFlight, type SimEvent, type Simulation } from './simulation';
+import { activeDesignator } from './wind';
+import { ATC, HOURS, TIMINGS, isDark, windAt, type FlightPhase, type ScheduledFlight, type SimEvent, type Simulation } from './simulation';
 
 interface StripBase {
   readonly id: string;
@@ -80,6 +80,7 @@ const ALERT_TEXT: Record<SimEvent['kind'], [Alert['severity'], (id: string) => s
   taxiIncident: ['warn', (id) => `Taxiway Incident: ${id}`],
   crash: ['danger', (id) => `CRASH: ${id}`],
   diversion: ['warn', (id) => `${id} diverted`],
+  runwayChange: ['info', (id) => `Wind change: ${id} now in use`],
 };
 
 /** Newest first. */
@@ -121,7 +122,7 @@ export function standsStatus(sim: Simulation): SpotStatus[] {
 
 export interface RunwayStatus {
   readonly name: string;
-  readonly state: 'open' | 'blocked' | 'dark' | 'curfew' | 'unconnected' | 'ilsOnly';
+  readonly state: 'open' | 'blocked' | 'dark' | 'curfew' | 'unconnected' | 'ilsOnly' | 'changeover';
   readonly until: number | null;
   readonly wind: { readonly direction: number; readonly knots: number };
 }
@@ -129,10 +130,9 @@ export interface RunwayStatus {
 /** One status per Runway, in layout order. */
 export function runwayStatuses(sim: Simulation): RunwayStatus[] {
   const now = sim.clock.minute;
-  const rng = createRandom(mixSeed(sim.seed, 0x3171d));
-  const wind = { direction: 240 + Math.round(rng.next() * 6) * 10, knots: 4 + rng.int(12) };
+  const wind = windAt(sim, now);
   return sim.layout.runways.map((r, i): RunwayStatus => {
-    const name = (r.w >= r.h ? '09-27' : '18-36') + (sim.layout.runways.length > 1 ? ` (R${i + 1})` : '');
+    const name = activeDesignator(r.h > r.w, sim.runwayReverse[i] ?? false) + (sim.layout.runways.length > 1 ? ` (R${i + 1})` : '');
     const lit = !sim.noLights && (r.surface === 'lit' || r.surface === 'ils');
     const active = sim.windows.filter((w) => (w.runway === undefined || w.runway === i) && now >= w.from && now < w.to);
     const closedTo = Math.max(0, ...active.filter((w) => w.kind === 'closed').map((w) => w.to));
@@ -141,6 +141,7 @@ export function runwayStatuses(sim: Simulation): RunwayStatus[] {
     if (!sim.network.runways.some((a) => a.index === i)) return { name, state: 'unconnected', until: null, wind };
     if (now < HOURS.operationsStart || now >= HOURS.curfew) return { name, state: 'curfew', until: HOURS.operationsStart, wind };
     if (now < blockedUntil) return { name, state: 'blocked', until: blockedUntil, wind };
+    if (now < (sim.changeoverUntil[i] ?? 0)) return { name, state: 'changeover', until: sim.changeoverUntil[i]!, wind };
     if (isDark(now) && !lit) return { name, state: 'dark', until: null, wind };
     if (ilsOnly) return { name, state: 'ilsOnly', until: null, wind };
     return { name, state: 'open', until: null, wind };

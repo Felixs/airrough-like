@@ -235,6 +235,7 @@ export function startLiveDay(run: RunState): Simulation {
   const today = plan.schedule.map((f) => ({ ...f, id: `D${run.dayIndex + 1}-${f.id}` }));
   const effects = simulationEffects(dayTwists(run), mixSeed(run.seed, run.dayIndex), run.towerModules.weatherStation, hasBuilding(run, 'deIcingPad'));
   return createSimulation({
+    wind: { seed: mixSeed(run.seed, run.dayIndex, 0x3171d), shifts: effects.windShifts },
     riskMultiplier: effects.riskMultiplier,
     windows: effects.windows,
     noLights: effects.noLights,

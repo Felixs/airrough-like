@@ -74,6 +74,7 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 .chip.open { color: var(--green); border-color: #2c5a3c; }
 .chip.blocked, .chip.dark, .chip.ilsOnly { color: var(--red); border-color: #5a2c2c; }
 .chip.curfew, .chip.unconnected { color: var(--mute); }
+.chip.changeover { color: var(--amber); border-color: #5a4a2c; }
 .chip-group { display: flex; gap: 6px; }
 
 .panel { width: 260px; flex: none; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; font-family: var(--mono); }

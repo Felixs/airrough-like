@@ -75,12 +75,16 @@ The intensity level (1–4) of a Boss Twist, matching the Week it can appear in.
 _Avoid_: Difficulty, tier
 
 **Wind Shift**:
-A change in wind during a Day that forces every Runway to switch its Active Direction, which the ATC Tower must handle without Crashes.
+A Twist moment when the wind turns round, so every Runway has to change its Active Direction.
 _Avoid_: Runway change, wind change
 
 **Active Direction**:
-Which end of a Runway aircraft currently take off from and land toward, set by the wind.
+Which way a Runway is used: aircraft land and take off into the wind (e.g. 09 or 27). The ATC Tower turns a Runway round only when the tailwind gets too strong, with a short changeover in which the Runway takes no new Movements.
 _Avoid_: Runway heading, orientation
+
+**Runway Exit**:
+A Taxiway connector where landing aircraft leave the Runway. Each aircraft takes the first Exit its Size Class can reach after its landing roll; smaller aircraft can use Exits part-way along.
+_Avoid_: Turn-off, high-speed exit
 
 **Endless Mode**:
 Optional continuation of a Run after it has been won by surviving four Weeks; played for score until the Run is lost. Traffic keeps rising and Boss Days stack multiple Severity-4 Boss Twists.
