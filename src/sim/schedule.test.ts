@@ -119,3 +119,24 @@ describe('Schedule without overnight aircraft', () => {
     expect(day.schedule.length).toBe(planDay({ layout: airport, week: 1, weekday: 1, seed: 4 }).schedule.length);
   });
 });
+
+describe('Callsigns and the Forecast by Purpose', () => {
+  it('gives every flight a unique airline callsign, e.g. "LH 347"', () => {
+    const day = planDay({ layout: bigAirport(), week: 3, weekday: 5, seed: 4 });
+    const calls = day.schedule.map((f) => f.callsign!);
+    expect(new Set(calls).size).toBe(calls.length);
+    for (const f of day.schedule) {
+      if (f.type === 'C208') expect(f.callsign).toMatch(/^D-E[A-Z]{3}$/);
+      else expect(f.callsign).toMatch(/^[A-Z0-9]{2} \d{3,4}$/);
+      expect(f.spoken!.length).toBeGreaterThan(f.callsign!.length);
+    }
+  });
+
+  it('splits arrivals into passenger and cargo per Size Class', () => {
+    const day = planDay({ layout: bigAirport(), week: 2, weekday: 1, seed: 3 });
+    const p = day.forecast.arrivalsByPurpose;
+    const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
+    expect(sum(p.passenger) + sum(p.cargo)).toBe(day.schedule.length);
+    expect(p.cargo.small + p.cargo.medium + p.cargo.large).toBe(day.schedule.filter((f) => AIRCRAFT_TYPES[f.type].purpose === 'cargo').length);
+  });
+});

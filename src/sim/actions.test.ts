@@ -115,3 +115,15 @@ describe('Emergency Alert', () => {
     expect([...outcomes].sort()).toEqual(['crash', 'saved']);
   });
 });
+
+describe('Event pauses', () => {
+  it('pause the Day on a Diversion (and Incidents and Crashes) when enabled, until acknowledged', () => {
+    const schedule: ScheduledFlight[] = [{ id: 'A', type: 'A320', arrivalMinute: 360 }];
+    const paused = runUntil(createSimulation({ layout: base, schedule, seed: 1, runwayBlockedUntil: 600, pauseOnEvents: true }), 500);
+    expect(paused.pendingAlert).toMatchObject({ kind: 'event', flightId: 'A' });
+    expect(paused.pendingAlert!.events!.map((e) => e.kind)).toEqual(['diversion']);
+    expect(stepSimulation(paused)).toBe(paused);
+    expect(acknowledgeAlert(paused).pendingAlert).toBe(null);
+    expect(runUntil(createSimulation({ layout: base, schedule, seed: 1, runwayBlockedUntil: 600 }), 500).pendingAlert).toBe(null);
+  });
+});

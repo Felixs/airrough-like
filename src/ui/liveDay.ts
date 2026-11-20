@@ -1,5 +1,5 @@
 import { formatClock } from '../sim/clock';
-import { alerts, flightStrips, movementsPerHour, quotaProgress, runwayStatuses, standsStatus } from '../sim/liveView';
+import { alerts, callsignOf, describeEvent, flightStrips, movementsPerHour, quotaProgress, runwayStatuses, standsStatus } from '../sim/liveView';
 import {
   ACTION_IDS, actionAvailability, mostUrgentHolding, secondRollChance, type ActionId, type Simulation,
 } from '../sim/simulation';
@@ -49,7 +49,15 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
     if (button && !button.disabled) handlers.onAction(button.dataset.action as ActionId, selected);
   });
   $('#alert-banner').addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).closest('button[data-ack]')) handlers.onAcknowledgeAlert();
+    const target = e.target as HTMLElement;
+    const action = target.closest<HTMLButtonElement>('button[data-alert-action]');
+    if (action && !action.disabled && current?.pendingAlert) {
+      // act on the aircraft the alert is about, then carry on
+      handlers.onAction(action.dataset.alertAction as ActionId, current.pendingAlert.flightId);
+      handlers.onAcknowledgeAlert();
+    } else if (target.closest('button[data-ack]')) {
+      handlers.onAcknowledgeAlert();
+    }
   });
   const rail = $('#rail');
   const toggle = $<HTMLButtonElement>('#rail-toggle');
@@ -101,11 +109,11 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
         section.querySelector('ol')!.innerHTML = items.join('');
       };
       fill('inbound', strips.inbound.slice(0, 8).map((f) =>
-        `<li class="strip" title="${esc(`${f.type} · ${f.purpose} · arrives ${hhmm(f.eta)}`)}"><b>${esc(f.id)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${hhmm(f.eta)}</span></li>`), strips.inbound.length);
+        `<li class="strip" title="${esc(`${f.spoken} · ${f.type} · ${f.purpose} · arrives ${hhmm(f.eta)}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${hhmm(f.eta)}</span></li>`), strips.inbound.length);
       fill('holding', strips.holding.map((f) =>
-        `<li data-id="${esc(f.id)}" tabindex="0" class="strip${f.lowFuel ? ' low' : ''}${f.id === selected ? ' selected' : ''}" title="${esc(`${f.type} · Holding since ${hhmm(f.since)} · Fuel Reserve ${Math.ceil(f.fuelMinutes)} min`)}"><b>${esc(f.id)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t fuel">⛽ ${Math.ceil(f.fuelMinutes)}′</span></li>`), strips.holding.length);
+        `<li data-id="${esc(f.id)}" tabindex="0" class="strip${f.lowFuel ? ' low' : ''}${f.id === selected ? ' selected' : ''}" title="${esc(`${f.spoken} · ${f.type} · Holding since ${hhmm(f.since)} · Fuel Reserve ${Math.ceil(f.fuelMinutes)} min`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t fuel">⛽ ${Math.ceil(f.fuelMinutes)}′</span></li>`), strips.holding.length);
       fill('ground', strips.ground.map((f) =>
-        `<li class="strip" title="${esc(`${f.type} · ${PHASE[f.phase] ?? f.phase}${f.spot ? ` · ${f.spot}` : ''}`)}"><b>${esc(f.id)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${PHASE[f.phase] ?? f.phase}</span></li>`), strips.ground.length);
+        `<li class="strip" title="${esc(`${f.spoken} · ${f.type} · ${PHASE[f.phase] ?? f.phase}${f.spot ? ` · ${f.spot}` : ''}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${PHASE[f.phase] ?? f.phase}</span></li>`), strips.ground.length);
 
       // Emergency Actions
       const availability = actionAvailability(sim);
@@ -114,7 +122,7 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
         const a = availability[id];
         const [name, what] = ACTION_LABEL[id];
         const state = a.missing ? `Needs ${BUILDING[a.missing]}` : a.cooldownLeft > 0 ? `Ready in ${Math.ceil(a.cooldownLeft)} min` : 'Ready';
-        const aim = (id === 'manualDivert' || id === 'priorityLanding') && target ? ` → ${target}` : '';
+        const aim = (id === 'manualDivert' || id === 'priorityLanding') && target ? ` → ${callsignOf(sim, target)}` : '';
         return `<button type="button" class="action${a.ready ? ' ready' : ''}" data-action="${id}" ${a.ready ? '' : 'disabled'} title="${esc(what)}">
           <b>${name}${esc(aim)}</b><span>${state}</span></button>`;
       }).join('');
@@ -169,12 +177,33 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       return;
     }
     const f = sim.flights.find((x) => x.id === alert.flightId);
+    const who = `${esc(callsignOf(sim, alert.flightId))} (${f?.type ?? ''})`;
+    const available = actionAvailability(sim);
+    const actionButton = (id: ActionId) => {
+      const a = available[id];
+      const why = a.missing ? `Needs ${BUILDING[a.missing]}` : a.cooldownLeft > 0 ? `Ready in ${Math.ceil(a.cooldownLeft)} min` : '';
+      return `<button type="button" data-alert-action="${id}" ${a.ready ? '' : 'disabled'} title="${esc(why || ACTION_LABEL[id][1])}">${ACTION_LABEL[id][0]}${why ? `<small>${esc(why)}</small>` : ''}</button>`;
+    };
     banner.hidden = false;
     banner.className = `alert-banner ${alert.kind}`;
-    banner.innerHTML = alert.kind === 'fuel'
-      ? `<b>FUEL ALERT</b><span>${esc(alert.flightId)} (${f?.type ?? ''}) is low on fuel: ${Math.ceil(f?.fuelMinutes ?? 0)} min left. Use Emergency Actions now.</span><button type="button" data-ack>Continue</button>`
-      : `<b>EMERGENCY ALERT</b><span>${esc(alert.flightId)} (${f?.type ?? ''}) is about to crash. Intervene for a second roll (${Math.round(secondRollChance(sim.controllerTrainingLevel) * 100)}% to save it).</span><button type="button" data-ack>Intervene</button>`;
-    banner.querySelector<HTMLButtonElement>('button')!.focus();
+    if (alert.kind === 'fuel') {
+      banner.innerHTML = `<b>FUEL ALERT</b><span>${who} is low on fuel: ${Math.ceil(f?.fuelMinutes ?? 0)} min left.</span>
+        <div class="alert-actions">${actionButton('priorityLanding')}${actionButton('manualDivert')}<button type="button" data-ack>Continue</button></div>`;
+    } else if (alert.kind === 'emergency') {
+      banner.innerHTML = `<b>EMERGENCY ALERT</b><span>${who} is about to crash. Intervene for a second roll (${Math.round(secondRollChance(sim.controllerTrainingLevel) * 100)}% to save it).</span>
+        <div class="alert-actions"><button type="button" data-ack>Intervene</button></div>`;
+    } else {
+      const events = alert.events ?? [];
+      const worst = events.some((e) => e.kind === 'crash') ? 'CRASH' : events.some((e) => e.kind === 'incident' || e.kind === 'taxiIncident') ? 'INCIDENT' : 'DIVERSION';
+      const blocked = runwayStatuses(sim).filter((r) => r.state === 'blocked');
+      const cost = events.reduce((n, e) => n + e.cost, 0);
+      const advice = worst === 'DIVERSION'
+        ? 'Diverted aircraft bring no fees or Movements.'
+        : blocked.length ? `${blocked.map((r) => `RWY ${r.name} blocked until ${r.until !== null ? hhmm(r.until) : ''}`).join(', ')}. A Fire & Rescue Station clears it faster.` : '';
+      banner.innerHTML = `<b>${worst}</b><span>${events.map((e) => esc(describeEvent(sim, e))).join('<br>')}${cost ? `<br>Cost: −$${cost.toLocaleString('en-US')}` : ''}${advice ? `<br><small>${esc(advice)}</small>` : ''}</span>
+        <div class="alert-actions">${events.some((e) => e.kind === 'taxiIncident') ? actionButton('groundStop') : ''}<button type="button" data-ack>Continue</button></div>`;
+    }
+    banner.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
   }
 
   return view;
