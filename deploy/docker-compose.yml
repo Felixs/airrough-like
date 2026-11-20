@@ -1,9 +1,9 @@
 # Runs the game on a Raspberry Pi (or any Docker host) on your home network.
-# Set GITLAB_IMAGE in a .env file next to this file, e.g.
-#   GITLAB_IMAGE=registry.gitlab.com/<your-namespace>/<your-project>
+# Uses the public release image by default; set IMAGE in a .env file to use another one, e.g.
+#   IMAGE=registry.gitlab.com/<your-namespace>/<your-project>:latest   (the private image built from every main push)
 services:
   game:
-    image: ${GITLAB_IMAGE:?set GITLAB_IMAGE in .env}:latest
+    image: ${IMAGE:-ghcr.io/felixs/airrough-like:latest}
     container_name: airport-auto-battler
     ports:
       - "8080:80"
