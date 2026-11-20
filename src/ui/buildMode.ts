@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
 import { drawAirfield, fitToScreen, worldBounds } from '../render/airfield';
 import {
-  applyChange, BUILD_COSTS, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
+  applyChange, BUILD_COSTS, MAIN_BUILDING, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
   priceOf, ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
 import { runwayEndZones, spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
@@ -31,8 +31,6 @@ const HINT: Record<Tool, string> = {
 
 type Building = SupportRole | 'terminal' | 'cargoHub' | 'terminalWing' | 'cargoWing';
 const TERMINAL_WING = { w: 3, h: 4 } as const;
-/** A whole Terminal or Cargo Hub, the size of the Starting Airport's. */
-const MAIN_BUILDING = { terminal: { w: 10, h: 4 }, cargoHub: { w: 7, h: 4 } } as const;
 const SIZE_NAME: Record<SizeClass, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
 const LENGTH_NAME: Record<RunwayLength, string> = { short: 'Short', medium: 'Medium', long: 'Long' };
 const SUPPORT_ROLES = ['rampAgentStation', 'adminOffice', 'airlineOffice', 'fireRescueStation', 'fuelFarm', 'deIcingPad'] as const;

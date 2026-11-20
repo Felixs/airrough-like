@@ -60,10 +60,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
   tiles that are locked or cost more than the money left after pending changes are greyed out and can't be picked.
   After something is placed the cursor is free (nothing follows it) until the next tool or tile is picked; Demolish
   stays on so several things can be cleared in a row.
-- **Main buildings:** a whole Terminal (10 × 4 tiles) or Cargo Hub (7 × 4) can always be built, standing alone and
-  with no Unlockable, when the airport has none of that kind (e.g. after demolishing the starting ones). With one
-  standing, more of it is a wing (3 × 4, an Unlockable) that must touch it; a second free-standing Terminal needs the
-  Second Terminal Unlockable. Price 1,500 per tile.
+- **Main buildings:** a whole Terminal (10 × 4 tiles) or Cargo Hub (7 × 4) can always be built, anywhere and as
+  many as wanted, standing alone and with no Unlockable (`build.ts → MAIN_BUILDING`). A wing (3 × 4, smaller) needs
+  its Unlockable and must touch a building of its kind. Price 1,500 per tile. (The Second Terminal Unlockable was
+  retired; owners get its 1,500 Air Miles back.)
 - **Runway end zones:** nothing (Taxiways included) may be built in the 4 tiles past each end of a Runway, across
   its full width (`layout.ts → RUNWAY_END_CLEAR_TILES`); a new or lengthened Runway also needs its own end zones
   clear. The zones may reach into land not bought yet. Build Mode shows them as red hatching.

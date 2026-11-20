@@ -8,7 +8,7 @@ import { airMiles } from './run';
 
 export type UnlockableId =
   | 'remoteStands' | 'adminOffice' | 'grassStrip' | 'terminalWing' | 'cargoWing' | 'rampAgentStation' | 'cargoApronLighting'
-  | 'airlineOffice' | 'fuelFarm' | 'fireRescueStation' | 'deIcingPad' | 'bonusTwists' | 'towerLevel45' | 'secondTerminal';
+  | 'airlineOffice' | 'fuelFarm' | 'fireRescueStation' | 'deIcingPad' | 'bonusTwists' | 'towerLevel45';
 
 export type BoostId =
   | 'higherFees' | 'lowerUpkeep' | 'longerFuel' | 'shorterCooldowns' | 'fasterTurnaround' | 'cheaperTaxiways' | 'cheaperLand'
@@ -37,7 +37,6 @@ export const UNLOCKABLES: ReadonlyArray<{ readonly id: UnlockableId; readonly na
   { id: 'deIcingPad', name: 'De-icing pad', effect: 'Building: Weather Twists raise error chances 30% less', cost: 800 },
   { id: 'bonusTwists', name: 'Bonus Twists', effect: 'In Plan Mode, add a Twist to a weekday for extra Score', cost: 1_000 },
   { id: 'towerLevel45', name: 'Tower Modules 4–5', effect: 'Tower Modules can go to level 4 and 5', cost: 1_200 },
-  { id: 'secondTerminal', name: 'Second Terminal', effect: 'Place a free-standing Terminal with its own Contact Stands', cost: 1_500 },
 ];
 
 export const BOOSTS: ReadonlyArray<{

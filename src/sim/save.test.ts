@@ -95,3 +95,15 @@ describe('Reduce motion', () => {
     expect(reduceMotion(DEFAULT_OPTIONS)).toBe(false); // no matchMedia outside a browser
   });
 });
+
+describe('Retired Unlockables', () => {
+  it('refund the Second Terminal (a whole Terminal is always buildable now)', async () => {
+    const { emptyMeta } = await import('./meta');
+    const { saveMeta, loadMeta } = await import('./save');
+    const store = memoryStore();
+    saveMeta(store, { ...emptyMeta(), airMiles: 10, unlocks: ['secondTerminal', 'remoteStands'] as never });
+    const meta = loadMeta(store);
+    expect(meta.airMiles).toBe(1_510);
+    expect(meta.unlocks).toEqual(['remoteStands']);
+  });
+});
