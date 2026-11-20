@@ -22,6 +22,30 @@ export interface RunwayAccess {
   readonly runwayExit: Tile;
   /** Taxiway tile next to the Runway where departures hold short (near end). */
   readonly holdPoint: Tile;
+  /** Every connector's tile next to the Runway, in order from its start (west or north) end. */
+  readonly connectors: readonly Tile[];
+}
+
+/** Landing roll in tiles before an aircraft can vacate, by Size Class *(first guess)*. */
+export const ROLL_TILES = { small: 12, medium: 30, large: 44 } as const;
+
+const alongForward = (a: RunwayAccess, t: Tile) => (a.vertical ? t.y + 0.5 - a.runway.y : t.x + 0.5 - a.runway.x);
+const runwayLength = (a: RunwayAccess) => (a.vertical ? a.runway.h : a.runway.w);
+
+/** Distance in tiles from the landing threshold to a tile, for the given direction. */
+export function fromThreshold(a: RunwayAccess, reverse: boolean, t: Tile): number {
+  return reverse ? runwayLength(a) - alongForward(a, t) : alongForward(a, t);
+}
+
+/** Where departures hold short: at the end the takeoff roll starts from (into the wind, like landings). */
+export function holdPointFor(a: RunwayAccess, reverse: boolean): Tile {
+  return reverse ? a.connectors[a.connectors.length - 1]! : a.connectors[0]!;
+}
+
+/** The first exit a landing aircraft of this Size Class can reach after its landing roll (or the last one). */
+export function exitFor(a: RunwayAccess, reverse: boolean, size: keyof typeof ROLL_TILES): Tile {
+  const ordered = [...a.connectors].sort((p, q) => fromThreshold(a, reverse, p) - fromThreshold(a, reverse, q));
+  return ordered.find((t) => fromThreshold(a, reverse, t) >= ROLL_TILES[size]) ?? ordered[ordered.length - 1]!;
 }
 
 export interface TaxiNetwork {
@@ -68,7 +92,7 @@ function runwayAccess(layout: AirportLayout, runway: Runway, index: number): Run
   const first = meets[0];
   const last = meets[meets.length - 1];
   if (!first || !last || meets.length < 2 || (vertical ? first.y === last.y : first.x === last.x)) return null;
-  return { index, runway, vertical, holdPoint: first, runwayExit: last };
+  return { index, runway, vertical, holdPoint: first, runwayExit: last, connectors: meets };
 }
 
 export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {

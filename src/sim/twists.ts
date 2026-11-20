@@ -118,17 +118,20 @@ function oneTraffic(t: TwistRef): TrafficEffects {
 }
 
 export interface SimulationEffects {
+  /** Minutes when a Wind Shift turns the wind round (Runways change direction). */
+  readonly windShifts: readonly number[];
   readonly riskMultiplier: number;
   readonly windows: readonly RunwayWindow[];
   readonly taxiSpeedFactor: number;
   readonly noLights: boolean;
 }
 
-const NO_SIM_EFFECT: SimulationEffects = { riskMultiplier: 1, windows: [], taxiSpeedFactor: 1, noLights: false };
+const NO_SIM_EFFECT: SimulationEffects = { windShifts: [], riskMultiplier: 1, windows: [], taxiSpeedFactor: 1, noLights: false };
 
 /** Simulation inputs for one or several Twists (combined). The Weather Station (level 1–5) softens Weather. */
 export function simulationEffects(input: TwistInput, seed: number, weatherStationLevel: number, deIcing = false): SimulationEffects {
   return asList(input).map((t) => oneSimulation(t, seed, weatherStationLevel, deIcing)).reduce((a, b) => ({
+    windShifts: [...a.windShifts, ...b.windShifts],
     riskMultiplier: a.riskMultiplier * b.riskMultiplier,
     windows: [...a.windows, ...b.windows],
     taxiSpeedFactor: Math.min(a.taxiSpeedFactor, b.taxiSpeedFactor),
@@ -159,10 +162,8 @@ function oneSimulation(t: TwistRef, seed: number, weatherStationLevel: number, d
   const shorten = Math.max(0.5, 1 - 0.1 * (weatherStationLevel - 1));
   const risk = [0.3, 0.6, 0.8, 1.0][t.severity - 1] ?? 1;
   const windows: RunwayWindow[] = [];
-  if (t.severity === 2 || t.severity === 4) {
-    const shift = at(9, 18);
-    windows.push({ kind: 'closed', from: shift, to: shift + 15 });
-  }
+  const windShifts: number[] = [];
+  if (t.severity === 2 || t.severity === 4) windShifts.push(at(9, 18));
   if (t.severity >= 3) {
     const from = at(8, 15);
     const length = Math.round(180 * shorten);
@@ -172,5 +173,5 @@ function oneSimulation(t: TwistRef, seed: number, weatherStationLevel: number, d
       windows.push({ kind: 'closed', from: closeFrom, to: closeFrom + Math.round(60 * shorten) });
     }
   }
-  return { ...NO_SIM_EFFECT, riskMultiplier: 1 + risk * soften, windows };
+  return { ...NO_SIM_EFFECT, riskMultiplier: 1 + risk * soften, windows, windShifts };
 }

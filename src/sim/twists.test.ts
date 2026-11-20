@@ -92,11 +92,11 @@ describe('Weather', () => {
     expect(simulationEffects({ family: 'weather', severity: 1 }, 1, 5).riskMultiplier).toBeLessThan(windy.riskMultiplier);
   });
 
-  it('a Wind Shift closes every Runway for 15 minutes', () => {
+  it('a Wind Shift turns the wind round during the Day', () => {
     const e = simulationEffects({ family: 'weather', severity: 2 }, 3, 1);
-    const shift = e.windows.find((w) => w.kind === 'closed')!;
-    expect(shift.to - shift.from).toBe(15);
-    expect(shift.runway).toBeUndefined();
+    expect(e.windShifts).toHaveLength(1);
+    expect(e.windShifts[0]).toBeGreaterThanOrEqual(9 * 60);
+    expect(e.windows.filter((w) => w.kind === 'closed')).toHaveLength(0);
   });
 
   it('a Storm allows landings only on ILS Runways for hours', () => {
@@ -111,7 +111,7 @@ describe('Weather', () => {
 
   it('a Thunderstorm closes the airport for an hour; a better Weather Station shortens it', () => {
     const closure = (level: number) => {
-      const w = simulationEffects({ family: 'weather', severity: 4 }, 3, level).windows.find((x) => x.kind === 'closed' && x.to - x.from > 15)!;
+      const w = simulationEffects({ family: 'weather', severity: 4 }, 3, level).windows.find((x) => x.kind === 'closed')!;
       return w.to - w.from;
     };
     expect(closure(1)).toBe(60);

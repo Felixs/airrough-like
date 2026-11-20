@@ -85,3 +85,41 @@ describe('Cut-off Stands', () => {
     expect(end.flights[0]!.phase).not.toBe('onStand');
   });
 });
+
+describe('Wind and Active Direction', () => {
+  const westerly = (layout: typeof base) => {
+    // find a seed whose wind blows from the west at 06:00, so 27 is in use
+    for (let seed = 1; seed < 500; seed++) {
+      const s = createSimulation({ layout, schedule: [], seed: 1, wind: { seed } });
+      const w = s.wind[12]!;
+      const tail = w.knots * Math.cos(((w.direction - 90) * Math.PI) / 180);
+      if (tail < -8) return seed;
+    }
+    throw new Error('no westerly seed');
+  };
+
+  it('turns the Runway round into the wind: land westbound, exit and hold at the other ends', () => {
+    const seed = westerly(base);
+    const s0 = createSimulation({ layout: base, schedule: [{ id: 'A', type: 'A320', arrivalMinute: 400 }], seed: 1, wind: { seed } });
+    const s = runUntil(s0, 403);
+    expect(s.runwayReverse[0]).toBe(true);
+    expect(s.events.some((e) => e.kind === 'runwayChange')).toBe(true);
+    const landing = s.flights[0]!;
+    expect(landing.phase).toBe('landing');
+    expect(landing.heading).toBe(270);
+    // a westbound A320 vacates at the west connector (x 7), 35 tiles from the 27 threshold
+    let t = s;
+    while (t.flights[0]!.phase === 'landing') t = stepSimulation(t);
+    expect(t.flights[0]!.route[0]).toEqual({ x: 7, y: 21 });
+    const end = runUntil(t, 24 * 60);
+    expect(end.flights[0]!.phase).toBe('departed');
+  });
+
+  it('lets small aircraft vacate at a middle exit that medium ones roll past', async () => {
+    const { exitFor } = await import('./taxi');
+    const middle = createLayout(base.width, base.height, [...base.structures, { kind: 'taxiway', x: 22, y: 19, w: 3, h: 3 } satisfies Structure, { kind: 'taxiway', x: 22, y: 16, w: 3, h: 3 } satisfies Structure]);
+    const a = buildTaxiNetwork(middle).runways[0]!;
+    expect(exitFor(a, false, 'small')).toEqual({ x: 23, y: 21 }); // 17.5 tiles in
+    expect(exitFor(a, false, 'medium')).toEqual({ x: 40, y: 21 }); // needs 30
+  });
+});

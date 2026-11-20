@@ -6,7 +6,8 @@ import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
 import { TILE_SIZE, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
-import { buildTaxiNetwork, routeBetween, routeFromStand, routeToStand, type RunwayAccess, type TaxiNetwork, type Tile } from './taxi';
+import { buildTaxiNetwork, exitFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type TaxiNetwork, type Tile } from './taxi';
+import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type WindSetup } from './wind';
 
 /** Timings *(first guess, from the prototypes)*. */
 export const TIMINGS = {
@@ -182,6 +183,8 @@ export interface Flight extends ScheduledFlight {
   readonly fuelMinutes: number;
   /** Index (into layout.runways) of the Runway it is using or taxiing to; -1 when none. */
   readonly runway: number;
+  /** Direction of its current landing or takeoff (true = 27 / 36). */
+  readonly reverse: boolean;
   /** Error result rolled when the current landing or takeoff started. */
   readonly pendingOutcome: LandingOutcome | TakeoffOutcome | null;
   /** Stopped on the Taxiway by an Incident until this minute. */
@@ -243,6 +246,12 @@ export interface Simulation {
   readonly controllerTrainingLevel: number;
   /** Per Runway: occupied by a Movement until this minute (Runway Separation). */
   readonly runwayBusyUntil: readonly number[];
+  /** Per Runway: landing in its reverse direction (27 / 36) because of the wind. */
+  readonly runwayReverse: readonly boolean[];
+  /** Per Runway: changing direction until this minute (no new Movements). */
+  readonly changeoverUntil: readonly number[];
+  /** Wind every 30 minutes; empty means calm (Runways keep 09 / 18). */
+  readonly wind: readonly Wind[];
   /** Stand id → flight id currently using (or reserved for) it. */
   readonly standOccupant: Readonly<Record<string, string>>;
   /** Holding Bay id → flight id using (or reserved for) it. */
@@ -261,7 +270,7 @@ export interface RunwayWindow {
 
 export interface SimEvent {
   readonly minute: number;
-  readonly kind: 'lowFuel' | 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion';
+  readonly kind: 'lowFuel' | 'goAround' | 'rejectedTakeoff' | 'incident' | 'taxiIncident' | 'crash' | 'diversion' | 'runwayChange';
   readonly flightId: string;
   /** Money paid (Crash Fine, Incident cost). */
   readonly cost: number;
@@ -272,6 +281,8 @@ export interface SimEvent {
 export type DiversionReason = 'curfew' | 'dark' | 'noRunway' | 'manual';
 
 export interface SimulationSetup {
+  /** Seeded wind for the Day; leave out for calm air. */
+  readonly wind?: WindSetup;
   readonly layout: AirportLayout;
   readonly schedule: readonly ScheduledFlight[];
   readonly seed: number;
@@ -308,8 +319,10 @@ export interface SimulationSetup {
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
-type MutableSim = Omit<Mutable<Simulation>, 'standOccupant' | 'bayOccupant' | 'events' | 'runwayBusyUntil' | 'runwayBlockedUntil'> & {
+type MutableSim = Omit<Mutable<Simulation>, 'standOccupant' | 'bayOccupant' | 'events' | 'runwayBusyUntil' | 'runwayBlockedUntil' | 'runwayReverse' | 'changeoverUntil'> & {
   runwayBusyUntil: number[];
+  runwayReverse: boolean[];
+  changeoverUntil: number[];
   runwayBlockedUntil: number[];
   standOccupant: Record<string, string>;
   bayOccupant: Record<string, string>;
@@ -351,6 +364,9 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     radarLevel: setup.radarLevel ?? 1,
     controllerTrainingLevel: setup.controllerTrainingLevel ?? 1,
     runwayBusyUntil: setup.layout.runways.map(() => 0),
+    runwayReverse: setup.layout.runways.map(() => false),
+    changeoverUntil: setup.layout.runways.map(() => 0),
+    wind: setup.wind ? windTimeline(setup.wind) : [],
     standOccupant: {},
     bayOccupant: {},
     flights: [],
@@ -361,6 +377,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
       fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size] + (setup.fuelBonusMinutes ?? 0),
       pendingOutcome: null,
       runway: -1,
+      reverse: false,
       stoppedUntil: 0,
       pendingCause: null,
       priority: false,
@@ -431,11 +448,13 @@ export function stepSimulation(prev: Simulation): Simulation {
   const sim: MutableSim = {
     ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, events: [...prev.events], flights: prev.flights,
     runwayBusyUntil: [...prev.runwayBusyUntil], runwayBlockedUntil: [...prev.runwayBlockedUntil],
+    runwayReverse: [...prev.runwayReverse], changeoverUntil: [...prev.changeoverUntil],
   };
   const now = prev.clock.minute;
   const rng = createRandom(mixSeed(prev.seed, Math.round(now / STEP_MINUTES)));
   const flights = prev.flights.map((f) => stepFlight(sim, { ...f }, now));
   rollTaxiIncident(sim, flights, now, rng);
+  updateDirections(sim, flights, now);
   const blocked = releaseBays(sim, flights, now);
   assignRunway(sim, flights, now, blocked, rng);
   if (now + STEP_MINUTES >= HOURS.curfew) {
@@ -505,7 +524,7 @@ const inWindow = (sim: Simulation, a: RunwayAccess, now: number, kind: RunwayWin
   sim.windows.some((w) => w.kind === kind && (w.runway === undefined || w.runway === a.index) && now >= w.from && now < w.to);
 /** Whether a Runway can take a Movement right now (open, operating hours, light). */
 const usable = (sim: Simulation, a: RunwayAccess, now: number) =>
-  now >= (sim.runwayBlockedUntil[a.index] ?? 0) && now >= HOURS.operationsStart && (!isDark(now) || lit(sim, a)) && !inWindow(sim, a, now, 'closed');
+  now >= (sim.changeoverUntil[a.index] ?? 0) && now >= (sim.runwayBlockedUntil[a.index] ?? 0) && now >= HOURS.operationsStart && (!isDark(now) || lit(sim, a)) && !inWindow(sim, a, now, 'closed');
 /** Whether a Runway can take a landing right now (usable, and ILS when the weather demands it). */
 const landingUsable = (sim: Simulation, a: RunwayAccess, now: number) =>
   usable(sim, a, now) && (!inWindow(sim, a, now, 'ilsOnly') || hasIls(sim, a));
@@ -521,12 +540,49 @@ const runwayUsableFor = (sim: Simulation, f: Flight, now: number) => fittingRunw
 const nightRunwayFor = (sim: Simulation, f: Flight) => fittingRunways(sim, f).some((a) => lit(sim, a));
 
 /** The Runway a departure taxis to: a fitting one, the one with the shortest queue first. */
+/** The wind now (calm when the Day has no wind). */
+export function windAt(sim: Simulation, minute: number): Wind {
+  return sim.wind[Math.min(sim.wind.length - 1, Math.floor(minute / WIND_RULES.sampleMinutes))] ?? { direction: 0, knots: 0 };
+}
+
+/** Where departures hold short for a Runway in its current direction. */
+export const holdOf = (sim: Simulation, a: RunwayAccess): Tile => holdPointFor(a, sim.runwayReverse[a.index] ?? false);
+
+/**
+ * The ATC Tower turns a Runway round when the tailwind gets too strong: a short changeover with no new
+ * Movements; departures already heading for the old hold point taxi on to the new one.
+ */
+function updateDirections(sim: MutableSim, flights: Mutable<Flight>[], now: number): void {
+  if (!sim.wind.length) return;
+  const wind = windAt(sim, now);
+  for (const a of sim.network.runways) {
+    const current = sim.runwayReverse[a.index] ?? false;
+    if (wantsReverse(wind, a.vertical, current) === current) continue;
+    sim.runwayReverse[a.index] = !current;
+    sim.changeoverUntil[a.index] = Math.max(now, sim.runwayBusyUntil[a.index] ?? 0) + WIND_RULES.changeoverMinutes;
+    sim.events.push({ minute: now, kind: 'runwayChange', flightId: `RWY ${activeName(a, !current)}`, cost: 0 });
+    const hold = holdOf(sim, a);
+    for (const f of flights) {
+      if (f.runway !== a.index || f.phase !== 'holdShort') continue;
+      f.route = taxiRoute(sim.network, f.route[f.route.length - 1] ?? holdPointFor(a, current), hold);
+      f.routeProgress = 0;
+      f.phase = 'taxiOut';
+      f.phaseStart = now;
+    }
+  }
+}
+
+const activeName = (a: RunwayAccess, reverse: boolean) => (a.vertical ? (reverse ? '36' : '18') : reverse ? '27' : '09');
+
 function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight): RunwayAccess | undefined {
   const queue = (a: RunwayAccess) => flights.filter((o) => o.runway === a.index && (o.phase === 'taxiOut' || o.phase === 'holdShort')).length;
   // only Runways whose hold point is reachable from the aircraft's Stand
   const stand = standById(sim, f.standId);
   const here = stand ? sim.network.component.get(`${stand.x + Math.floor(stand.w / 2)},${stand.y + stand.h}`) : undefined;
-  const reachable = (a: RunwayAccess) => here === undefined || sim.network.component.get(`${a.holdPoint.x},${a.holdPoint.y}`) === here;
+  const reachable = (a: RunwayAccess) => {
+    const hold = holdOf(sim, a);
+    return here === undefined || sim.network.component.get(`${hold.x},${hold.y}`) === here;
+  };
   return [...fittingRunways(sim, f)].filter(reachable).sort((a, b) => queue(a) - queue(b) || a.index - b.index)[0]
     ?? sim.network.runways.find(reachable);
 }
@@ -625,6 +681,7 @@ function startMovement(sim: MutableSim, next: Mutable<Flight>, access: RunwayAcc
   const error = rollError(sim, rng, access.index);
   next.pendingCause = error?.cause ?? null;
   next.runway = access.index;
+  next.reverse = sim.runwayReverse[access.index] ?? false;
   if (next.phase === 'holding') {
     next.pendingOutcome = error === null ? null : landingOutcome(error.roll);
     const stand = freeFittingStand(sim, next, blocked);
@@ -713,7 +770,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       }
       if (outcome === 'incident') block(sim, f.runway, incident(sim, f, now, 'incident'));
       countMovement(sim, now);
-      f.route = routeToStand(sim.network, accessOf(sim, f)!.runwayExit, stand ?? bayById(sim, f.bayId)!);
+      f.route = routeToStand(sim.network, exitFor(accessOf(sim, f)!, f.reverse, AIRCRAFT_TYPES[f.type].size), stand ?? bayById(sim, f.bayId)!);
       f.routeProgress = 0;
       enter('taxiIn');
       break;
@@ -723,7 +780,18 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       if (now < f.stoppedUntil || now < sim.groundStopUntil) break;
       f.routeProgress = Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * sim.taxiSpeedFactor * STEP_MINUTES);
       if (f.routeProgress < f.route.length - 1) break;
-      if (f.phase === 'taxiOut') enter('holdShort');
+      if (f.phase === 'taxiOut') {
+        // the Runway may have turned round while it was taxiing: carry on to the new hold point
+        const access = accessOf(sim, f);
+        const hold = access ? holdOf(sim, access) : undefined;
+        const at = f.route[f.route.length - 1]!;
+        if (hold && (hold.x !== at.x || hold.y !== at.y)) {
+          f.route = taxiRoute(sim.network, at, hold);
+          f.routeProgress = 0;
+          break;
+        }
+        enter('holdShort');
+      }
       else enter(f.standId ? 'onStand' : 'inBay');
       break;
     }
@@ -738,7 +806,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       const out = departureRunway(sim, sim.flights, f);
       if (!out) break; // no usable Runway at all
       f.runway = out.index;
-      f.route = routeFromStand(sim.network, stand!, out.holdPoint);
+      f.route = routeFromStand(sim.network, stand!, holdOf(sim, out));
       f.routeProgress = 0;
       delete sim.standOccupant[stand!.id];
       f.standId = null;
@@ -780,17 +848,24 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
   const share = (minutes: number) => Math.min(1, (t - f.phaseStart) / minutes);
   const access = accessOf(sim, f);
   /** Point along the Runway centre line: `along` in world units from its landing threshold. */
-  const onRunway = (a: RunwayAccess, along: number): Point => {
+  /** Point on the centre line, `d` world units from the threshold of the direction in use. */
+  const onRunway = (a: RunwayAccess, reverse: boolean, d: number): Point => {
     const r = a.runway;
+    const len = (a.vertical ? r.h : r.w) * T;
+    const along = reverse ? len - d : d;
     return a.vertical ? { x: (r.x + r.w / 2) * T, y: r.y * T + along } : { x: r.x * T + along, y: (r.y + r.h / 2) * T };
   };
-  const alongOf = (a: RunwayAccess, tile: Tile) => (a.vertical ? (tile.y + 0.5 - a.runway.y) * T : (tile.x + 0.5 - a.runway.x) * T);
-  const runwayHeading = (a: RunwayAccess) => (a.vertical ? 180 : 90);
+  const fromStart = (a: RunwayAccess, reverse: boolean, tile: Tile) => {
+    const r = a.runway;
+    const along = a.vertical ? (tile.y + 0.5 - r.y) * T : (tile.x + 0.5 - r.x) * T;
+    return reverse ? (a.vertical ? r.h : r.w) * T - along : along;
+  };
   switch (f.phase) {
     case 'landing': {
       if (!access) break;
-      f.position = onRunway(access, alongOf(access, access.runwayExit) * share(separationOf(sim).landing));
-      f.heading = runwayHeading(access);
+      const exit = exitFor(access, f.reverse, AIRCRAFT_TYPES[f.type].size);
+      f.position = onRunway(access, f.reverse, fromStart(access, f.reverse, exit) * share(separationOf(sim).landing));
+      f.heading = landingHeading(access.vertical, f.reverse);
       break;
     }
     case 'taxiIn':
@@ -808,15 +883,15 @@ function place(sim: Simulation, f: Mutable<Flight>, t: number): void {
       break;
     }
     case 'holdShort':
-      f.position = tileCentre(access?.holdPoint ?? sim.network.holdPoint);
+      f.position = tileCentre(access ? holdOf(sim, access) : sim.network.holdPoint);
       f.heading = access?.vertical ? 90 : 180;
       break;
     case 'takeoff': {
       if (!access) break;
-      const from = alongOf(access, access.holdPoint);
+      const from = fromStart(access, f.reverse, holdPointFor(access, f.reverse));
       const to = (access.vertical ? access.runway.h : access.runway.w) * T + 40;
-      f.position = onRunway(access, from + (to - from) * share(separationOf(sim).takeoff));
-      f.heading = runwayHeading(access);
+      f.position = onRunway(access, f.reverse, from + (to - from) * share(separationOf(sim).takeoff));
+      f.heading = landingHeading(access.vertical, f.reverse);
       break;
     }
     default:
@@ -877,6 +952,7 @@ export function useAction(prev: Simulation, id: ActionId, targetId?: string): Si
     ...prev, standOccupant: { ...prev.standOccupant }, bayOccupant: { ...prev.bayOccupant }, events: [...prev.events],
     flights: prev.flights.map((f) => ({ ...f })), cooldownUntil: { ...prev.cooldownUntil, [id]: now + ACTIONS[id].cooldownMinutes * prev.cooldownFactor },
     runwayBusyUntil: [...prev.runwayBusyUntil], runwayBlockedUntil: [...prev.runwayBlockedUntil],
+    runwayReverse: [...prev.runwayReverse], changeoverUntil: [...prev.changeoverUntil],
   };
   const flights = sim.flights as Mutable<Flight>[];
   const holdingTarget = () => {
