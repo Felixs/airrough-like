@@ -196,9 +196,10 @@ export function newRunway(session: BuildSession, at: Tile, length: RunwayLength,
   return { kind: 'runway', x: at.x, y: at.y, w: vertical ? wide : long, h: vertical ? long : wide, length: size, surface: grass ? 'grass' : paved === 'grass' ? 'asphalt' : paved };
 }
 
-/** The Unlockable a new structure needs, if any. */
-export function unlockNeeded(s: Structure): UnlockableId | null {
+/** The Unlockable a new structure needs, if any. A Terminal or Cargo Hub where the airport has none is always free. */
+export function unlockNeeded(s: Structure, layout?: AirportLayout): UnlockableId | null {
   if (s.kind === 'stand' && s.placement === 'remote') return 'remoteStands';
+  if ((s.kind === 'terminal' || s.kind === 'cargoHub') && layout && !layout.structures.some((b) => b.kind === s.kind)) return null;
   if (s.kind === 'terminal') return 'terminalWing';
   if (s.kind === 'cargoHub') return 'cargoWing';
   if (s.kind === 'supportBuilding') return s.role;
@@ -246,7 +247,7 @@ function describe(s: Structure): string {
     case 'taxiway': return `Taxiway, ${s.w * s.h} tiles`;
     case 'stand': return `${SIZE_NAME[s.size]} ${s.placement === 'remote' ? 'Remote' : 'Contact'} Stand ${s.id} (${s.serves === 'terminal' ? 'Terminal' : 'Cargo Hub'})`;
     case 'holdingBay': return `${SIZE_NAME[s.size]} Holding Bay ${s.id}`;
-    case 'runway': return `${LENGTH_NAME[s.length]} Runway (${s.w >= s.h ? '09-27' : '18-36'})`;
+    case 'runway': return `${s.surface === 'grass' ? 'Grass strip' : `${LENGTH_NAME[s.length]} Runway`} (${s.w >= s.h ? '09-27' : '18-36'})`;
     case 'supportBuilding': return ROLE_NAME[s.role];
     case 'terminal': return `Terminal wing, ${s.w * s.h} tiles`;
     case 'cargoHub': return `Cargo Hub wing, ${s.w * s.h} tiles`;
@@ -318,7 +319,9 @@ function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure, 
       const touches = (b: TileRect) =>
         (b.x + b.w === s.x || s.x + s.w === b.x) && s.y < b.y + b.h && b.y < s.y + s.h ||
         (b.y + b.h === s.y || s.y + s.h === b.y) && s.x < b.x + b.w && b.x < s.x + s.w;
-      const freeStanding = s.kind === 'terminal' && session.base.modifiers.unlocks.includes('secondTerminal');
+      // the first of its kind stands on its own; another Terminal may too with the Second Terminal Unlockable
+      const freeStanding = !layout.structures.some((b) => b.kind === s.kind && b !== s)
+        || (s.kind === 'terminal' && session.base.modifiers.unlocks.includes('secondTerminal'));
       if (isNew && !freeStanding) items.push({ label: s.kind === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: layout.structures.some((b) => b.kind === s.kind && touches(b)) });
       break;
     }
@@ -360,11 +363,12 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
     case 'add': {
       const s = change.structure;
       items = siteChecks(session, layout, s);
-      const needs = unlockNeeded(s);
+      const needs = unlockNeeded(s, layout);
       if (needs && !run.modifiers.unlocks.includes(needs)) items.unshift({ label: `🔒 Needs Unlockable: ${unlockableName(needs)}`, ok: false });
       cost = Math.round(priceOf(layout, s) * (s.kind === 'taxiway' ? run.modifiers.taxiwayCostFactor : 1));
       upkeepCost = structureUpkeep(s);
-      label = describe(s);
+      label = (s.kind === 'terminal' || s.kind === 'cargoHub') && !layout.structures.some((b) => b.kind === s.kind)
+        ? `${s.kind === 'terminal' ? 'Terminal' : 'Cargo Hub'}, ${s.w * s.h} tiles` : describe(s);
       break;
     }
     case 'move': {

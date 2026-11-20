@@ -147,3 +147,19 @@ describe('Land Plots', () => {
     expect(pendingTotal(s).cost).toBe(24_000);
   });
 });
+
+describe('Main buildings', () => {
+  it('a Terminal or Cargo Hub can be built standing alone, with no Unlockable, when the airport has none', () => {
+    const run = { ...startRun(1), money: 1_000_000 };
+    let s = openBuild(run);
+    for (const st of s.layout.stands.filter((x) => x.serves === 'cargoHub' && x.placement === 'contact')) s = applyChange(s, { kind: 'remove', structure: st });
+    s = applyChange(s, { kind: 'remove', structure: find(s, (x) => x.kind === 'cargoHub') });
+    const hub: Structure = { kind: 'cargoHub', x: 2, y: 2, w: 7, h: 4 };
+    const fails = failing(checkChange(s, { kind: 'add', structure: hub }));
+    expect(fails.some((f) => f.includes('Unlockable') || f.includes('Attached'))).toBe(false);
+    expect(checkChange(s, { kind: 'add', structure: hub }).label).toBe('Cargo Hub, 28 tiles');
+    // with a Cargo Hub standing, another piece is a wing: locked and attached only
+    const wing = checkChange(openBuild(run), { kind: 'add', structure: { kind: 'cargoHub', x: 2, y: 2, w: 3, h: 4 } });
+    expect(failing(wing).some((f) => f.includes('Unlockable'))).toBe(true);
+  });
+});

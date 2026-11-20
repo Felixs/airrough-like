@@ -78,9 +78,13 @@ function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Cont
   const y = s.y * T;
   const w = s.w * T;
   const h = s.h * T;
+  const vertical = h > w;
+  if (s.surface === 'grass') {
+    drawGrassStrip(g, x, y, w, h, vertical, labels, name);
+    return;
+  }
   g.rect(x - 0.5, y - 0.5, w + 1, h + 1).fill(COLOURS.asphaltEdge);
   g.rect(x, y, w, h).fill(COLOURS.asphalt);
-  const vertical = h > w;
   const len = vertical ? h : w;
   const wid = vertical ? w : h;
   // Rectangles and points given along/across offsets from the Runway's start corner.
@@ -126,6 +130,31 @@ function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Cont
     dot(-3 - k * 3, wid / 2, 0.5, COLOURS.edgeWhite);
     dot(len + 3 + k * 3, wid / 2, 0.5, COLOURS.edgeWhite);
   }
+}
+
+/**
+ * A Grass strip: mown grass, not paving — lighter green with mowing bands across it, white boundary markers along
+ * both edges, a row of markers at each threshold, no centre line, no lights. The designators are painted small.
+ */
+function drawGrassStrip(g: Graphics, x: number, y: number, w: number, h: number, vertical: boolean, labels: Container, name: RunwayName): void {
+  const len = vertical ? h : w;
+  const wid = vertical ? w : h;
+  const r = (along: number, across: number, l: number, a: number, color: number, alpha = 1) =>
+    (vertical ? g.rect(x + across, y + along, a, l) : g.rect(x + along, y + across, l, a)).fill({ color, alpha });
+  r(0, 0, len, wid, 0x2f5a2c);
+  for (let d = 0; d < len; d += 12) r(d, 0, 6, wid, 0x3a6a35, 0.9); // mowing bands
+  for (let d = 4; d < len - 2; d += 16) {
+    r(d, 0.3, 2.4, 1, 0xf2f2ea);
+    r(d, wid - 1.3, 2.4, 1, 0xf2f2ea);
+  }
+  for (let c = 2; c < wid - 1; c += 6) {
+    r(2, c, 1.2, 2, 0xf2f2ea);
+    r(len - 3.2, c, 1.2, 2, 0xf2f2ea);
+  }
+  const rot = vertical ? 0 : Math.PI / 2;
+  const at = (along: number) => (vertical ? [x + wid / 2, y + along] : [x + along, y + wid / 2]) as [number, number];
+  text(labels, name.forward, ...at(12), 4, 0xf2f2ea, vertical ? Math.PI : rot);
+  text(labels, name.reverse, ...at(len - 12), 4, 0xf2f2ea, vertical ? 0 : -rot);
 }
 
 /**
