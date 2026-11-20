@@ -578,7 +578,7 @@ function updateDirections(sim: MutableSim, flights: Mutable<Flight>[], now: numb
 
 const activeName = (a: RunwayAccess, reverse: boolean) => (a.vertical ? (reverse ? '36' : '18') : reverse ? '27' : '09');
 
-function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight): RunwayAccess | undefined {
+function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight, now: number): RunwayAccess | undefined {
   const queue = (a: RunwayAccess) => flights.filter((o) => o.runway === a.index && (o.phase === 'taxiOut' || o.phase === 'holdShort')).length;
   // only Runways whose hold point is reachable from the aircraft's Stand
   const stand = standById(sim, f.standId);
@@ -588,8 +588,47 @@ function departureRunway(sim: Simulation, flights: readonly Flight[], f: Flight)
     const hold = holdOf(sim, a);
     return here === undefined || sim.network.component.get(`${hold.x},${hold.y}`) === here;
   };
-  return [...fittingRunways(sim, f)].filter(reachable).sort((a, b) => queue(a) - queue(b) || a.index - b.index)[0]
-    ?? sim.network.runways.find(reachable);
+  // after dark only a Lit or ILS Runway will do
+  const candidates = fittingRunways(sim, f).filter((a) => reachable(a) && (!isDark(now) || lit(sim, a)));
+  return candidates.sort((a, b) => queue(a) - queue(b) || a.index - b.index)[0]
+    ?? (isDark(now) ? undefined : sim.network.runways.find(reachable));
+}
+
+/**
+ * At dusk a departure taxiing to, or holding short of, a Runway that can't be used at night goes to a fitting Lit or
+ * ILS Runway it can reach; if there is none it turns round to a free Stand (Contact or Remote; else a Holding Bay) and
+ * stays there for the night. With nowhere free it stays where it is.
+ */
+function nightTurnBack(sim: MutableSim, f: Mutable<Flight>, now: number): void {
+  const access = accessOf(sim, f);
+  const at = f.phase === 'holdShort' && access ? holdOf(sim, access) : f.route[Math.min(Math.floor(f.routeProgress), f.route.length - 1)];
+  if (!at || !sim.network.tiles.has(`${at.x},${at.y}`)) return; // still leaving its Stand: decide once on the Taxiway
+  const here = sim.network.component.get(`${at.x},${at.y}`);
+  const litOut = fittingRunways(sim, f).find((a) => {
+    const hold = holdOf(sim, a);
+    return lit(sim, a) && sim.network.component.get(`${hold.x},${hold.y}`) === here;
+  });
+  if (litOut) {
+    f.runway = litOut.index;
+    f.route = taxiRoute(sim.network, at, holdOf(sim, litOut));
+  } else {
+    const stand = freeFittingStand(sim, f);
+    const spot = stand ?? freeFittingBay(sim, f);
+    if (!spot) return;
+    if (stand) {
+      sim.standOccupant[stand.id] = f.id;
+      f.standId = stand.id;
+    } else {
+      sim.bayOccupant[spot.id] = f.id;
+      f.bayId = spot.id;
+    }
+    f.runway = -1;
+    f.route = routeToStand(sim.network, at, spot);
+    f.phase = 'taxiIn';
+  }
+  f.routeProgress = 0;
+  f.waitingSince = undefined;
+  f.phaseStart = now;
 }
 
 function divert(sim: MutableSim, f: Mutable<Flight>, now: number, reason: DiversionReason): void {
@@ -933,6 +972,10 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
     f.phase = phase;
     f.phaseStart = now;
   };
+  if ((f.phase === 'taxiOut' || f.phase === 'holdShort') && isDark(now)) {
+    const access = accessOf(sim, f);
+    if (!access || !lit(sim, access)) nightTurnBack(sim, f, now);
+  }
   switch (f.phase) {
     case 'scheduled':
       if (now < f.arrivalMinute) break;
@@ -1009,7 +1052,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Cl
       }
       if (now < f.phaseStart + turnaround) break;
       if (isDark(now) && !nightRunwayFor(sim, f)) break; // stays overnight
-      const out = departureRunway(sim, sim.flights, f);
+      const out = departureRunway(sim, sim.flights, f, now);
       if (!out) break; // no usable Runway at all
       f.runway = out.index;
       f.route = routeFromStand(sim.network, stand!, holdOf(sim, out));

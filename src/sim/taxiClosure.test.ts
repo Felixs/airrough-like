@@ -143,3 +143,29 @@ describe('A blocked Runway exit', () => {
     expect(sim.flights.find((f) => f.id === 'H')!.phase).not.toBe('holding'); // lands once the exit is clear again
   });
 });
+
+describe('Departures at dusk', () => {
+  it('turn round from an unlit Runway to a free Stand and stay there for the night', async () => {
+    const { carryOver } = await import('./simulation');
+    const hold = network.holdPoint;
+    let sim: Simulation = createSimulation({ layout, seed: 4, schedule: ['D', 'E'].map((id) => ({ id, type: 'A320' as const, arrivalMinute: 1300 })) });
+    sim = { ...sim, clock: { minute: 20 * 60, pendingRealMs: 0 } };
+    const lane = taxiRoute(network, { x: 30, y: 17 }, hold);
+    const crafted: Partial<Record<string, Partial<Flight>>> = {
+      D: { phase: 'holdShort', phaseStart: sim.clock.minute, runway: 0, route: [hold], routeProgress: 0, position: { x: 0, y: 0 }, unloaded: true },
+      E: { phase: 'taxiOut', phaseStart: sim.clock.minute, runway: 0, route: lane, routeProgress: 2, position: { x: 0, y: 0 }, unloaded: true },
+    };
+    sim = { ...sim, flights: sim.flights.map((f) => ({ ...f, ...crafted[f.id] }) as Flight) };
+    while (sim.clock.minute < 20 * 60 + 30) {
+      sim = stepSimulation(sim);
+      if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+    }
+    for (const id of ['D', 'E']) {
+      const f = sim.flights.find((x) => x.id === id)!;
+      expect(f.phase).toBe('onStand');
+      expect(f.standId).not.toBeNull();
+    }
+    expect(sim.events.some((e) => e.kind === 'crash' || e.kind === 'diversion')).toBe(false);
+    expect(carryOver(sim).map((f) => f.id).sort()).toEqual(['D', 'E']); // they leave next morning
+  });
+});
