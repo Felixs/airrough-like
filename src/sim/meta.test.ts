@@ -35,15 +35,14 @@ describe('Milestones', () => {
     expect(large.milestones).toContain('land100Large');
   });
 
-  it('gate Long Runways, ILS and Tower level 5 until reached', () => {
+  it('gate ILS, Fire & Rescue 4–5 and Tower level 5 until reached, but never Long Runways', () => {
     const locked = startRun(1, emptyMeta());
     const s = openBuild({ ...locked, money: 1_000_000 });
     expect(checkChange(s, { kind: 'add', structure: newRunway(s, { x: 6, y: 30 }, 'long', false) }).items.filter((i) => !i.ok).map((i) => i.label))
-      .toContain('Unlocked (Milestone: Survive Week 1)');
-    const withLit = { ...locked, money: 1_000_000, layout: { ...locked.layout } };
-    const litRun: RunState = { ...withLit, layout: { ...withLit.layout, structures: withLit.layout.structures } };
-    const ils = upgradeOffers({ ...litRun, layout: upgradeLayoutToLit(litRun) }).find((o) => o.id === 'surface')!;
+      .not.toContain('Unlocked (Milestone: Survive Week 1)');
+    const ils = upgradeOffers({ ...locked, money: 1e6, layout: upgradeLayoutToLit(locked) }).find((o) => o.id === 'surface')!;
     expect(ils.reason).toBe('Unlock: Survive Week 2');
+    expect(upgradeOffers({ ...locked, money: 1e6, fireRescueLevel: 3 }).find((o) => o.id === 'fireRescue')!.reason).toBe('Unlock: Survive Week 1');
     expect(upgradeOffers({ ...locked, money: 1e6, towerModules: { ...locked.towerModules, radar: 4 } }).find((o) => o.id === 'radar')!.reason)
       .toBe('Unlock: Land 100 Large aircraft');
     const open = startRun(1, { ...emptyMeta(), milestones: ['surviveWeek1', 'surviveWeek2', 'land100Large'] });

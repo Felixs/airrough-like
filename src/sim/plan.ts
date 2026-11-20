@@ -62,6 +62,7 @@ function lockFor(run: RunState, id: UpgradeId, nextLevel: number, nextSurface?: 
   const has = (m: MilestoneId) => run.modifiers.unlocks.includes(m);
   if (id === 'surface' && nextSurface === 'ils' && !has('surviveWeek2')) return `Unlock: ${milestoneName('surviveWeek2')}`;
   if (id !== 'surface' && id !== 'fireRescue' && nextLevel >= 5 && !has('land100Large')) return `Unlock: ${milestoneName('land100Large')}`;
+  if (id === 'fireRescue' && nextLevel >= 4 && !has('surviveWeek1')) return `Unlock: ${milestoneName('surviveWeek1')}`;
   return null;
 }
 

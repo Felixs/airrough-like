@@ -74,22 +74,27 @@ describe('Move', () => {
     expect(moved.layout.structures.find((x) => x.kind === 'atcTower')).toMatchObject({ x: 2, y: 10 });
   });
 
-  it('is not possible for the Terminal or Runways in v1', () => {
+  it('works for anything; a Terminal takes its Contact Stands along', () => {
     const s = openBuild(rich());
     const terminal = find(s, (x) => x.kind === 'terminal');
-    expect(failing(checkChange(s, { kind: 'move', from: terminal, to: { ...terminal, y: 3 } }))).toContain('Can be moved');
+    // one tile left: the Stands still open onto the apron taxilane
+    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 6 } });
+    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([7, 10, 13, 16]);
+    const runway = s.layout.runways[0]!;
+    expect(checkChange(s, { kind: 'move', from: runway, to: { ...runway, y: 30 } }).items.filter((i) => !i.ok).map((i) => i.label)).toEqual(['Inside owned land']);
+    expect(failing(checkChange(s, { kind: 'move', from: terminal, to: { ...terminal, y: -10 } }))).toContain('Its Stands keep Taxiway access');
   });
 });
 
 describe('Demolish', () => {
-  it('refunds 50% and removes the Upkeep', () => {
+  it('refunds 100% (for now) and removes the Upkeep', () => {
     const run = rich();
     const s = openBuild(run);
     const link = find(s, (x) => x.kind === 'taxiway' && x.x === 12 && x.y === 12);
-    expect(checkChange(s, { kind: 'remove', structure: link })).toMatchObject({ ok: true, cost: -3_600, upkeep: -24 });
+    expect(checkChange(s, { kind: 'remove', structure: link })).toMatchObject({ ok: true, cost: -7_200, upkeep: -24 });
     const stand4 = find(s, (x) => x.kind === 'stand' && x.id === '4');
     const after = confirmBuild(applyChange(s, { kind: 'remove', structure: stand4 }));
-    expect(after.money).toBe(run.money + 8_000);
+    expect(after.money).toBe(run.money + 16_000);
     expect(upkeep(after)).toBe(upkeep(run) - 100);
   });
 

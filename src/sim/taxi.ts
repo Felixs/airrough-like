@@ -34,6 +34,10 @@ export interface TaxiNetwork {
   readonly runway: Runway;
   readonly runwayExit: Tile;
   readonly holdPoint: Tile;
+  /** Connected part of the Taxiway network each tile belongs to ("x,y" → id). */
+  readonly component: ReadonlyMap<string, number>;
+  /** Stands and Holding Bays an aircraft can actually taxi to from a Runway exit and back to a hold point. */
+  readonly reachableSpots: ReadonlySet<string>;
 }
 
 const key = (t: Tile) => `${t.x},${t.y}`;
@@ -74,8 +78,33 @@ export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {
   const runways = layout.runways.flatMap((r, i) => runwayAccess(layout, r, i) ?? []);
   const main = runways[0];
   const nowhere = { x: -1, y: -1 };
+  // Connected parts of the network, so Stands cut off from every Runway are never used.
+  const component = new Map<string, number>();
+  let next = 0;
+  for (const start of tiles) {
+    if (component.has(start)) continue;
+    const id = next++;
+    const queue = [start];
+    component.set(start, id);
+    while (queue.length) {
+      const [x, y] = queue.pop()!.split(',').map(Number) as [number, number];
+      for (const n of [`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`]) {
+        if (tiles.has(n) && !component.has(n)) {
+          component.set(n, id);
+          queue.push(n);
+        }
+      }
+    }
+  }
+  const withExit = new Set(runways.map((a) => component.get(key(a.runwayExit))));
+  const withHold = new Set(runways.map((a) => component.get(key(a.holdPoint))));
+  const reachableSpots = new Set<string>();
+  for (const s of [...layout.stands, ...layout.holdingBays]) {
+    const c = component.get(key({ x: centreTile(s).x, y: s.y + s.h }));
+    if (c !== undefined && withExit.has(c) && withHold.has(c)) reachableSpots.add(s.id);
+  }
   return {
-    layout, tiles, runways,
+    layout, tiles, runways, component, reachableSpots,
     runway: main?.runway ?? layout.runways[0], runwayExit: main?.runwayExit ?? nowhere, holdPoint: main?.holdPoint ?? nowhere,
   };
 }

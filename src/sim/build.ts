@@ -25,8 +25,8 @@ export const BUILD_COSTS = {
   supportBuildingSize: { w: 3, h: 2 },
   /** Terminal and Cargo Hub wings, per tile. */
   wingPerTile: 1_500,
-  /** Demolish refunds this share of the base price. */
-  refundShare: 0.5,
+  /** Demolish refunds this share of the base price (100% while testing how layouts play). */
+  refundShare: 1,
   /** Land Plot n (counting from the first bought) costs this × n. */
   plotBase: 24_000,
   startingPlots: 6,
@@ -93,7 +93,7 @@ const tilesOf = (r: TileRect): Tile[] => {
 };
 
 export function ownsTile(owner: { readonly ownedPlots: readonly LandPlot[] }, t: Tile): boolean {
-  if (t.x < 0 || t.y < 0 || t.x >= WORLD.width || t.y >= WORLD.height) return false;
+  if (t.x < WORLD.x0 || t.y < WORLD.y0 || t.x >= WORLD.x0 + WORLD.width || t.y >= WORLD.y0 + WORLD.height) return false;
   const px = Math.floor(t.x / WORLD.plotW);
   const py = Math.floor(t.y / WORLD.plotH);
   return owner.ownedPlots.some((p) => p.px === px && p.py === py);
@@ -103,8 +103,8 @@ function isTaxiwayAt(layout: AirportLayout, t: Tile): boolean {
   return layout.structures.some((s) => s.kind === 'taxiway' && t.x >= s.x && t.x < s.x + s.w && t.y >= s.y && t.y < s.y + s.h);
 }
 
-/** Both end caps of a Taxiway strip touch (or overlap) an existing Taxiway, or meet a Runway's side. */
-function connectsAtBothEnds(layout: AirportLayout, t: TileRect): boolean {
+/** At least one end cap of a Taxiway strip touches (or overlaps) a Taxiway, or meets a Runway's side; dead ends are fine. */
+function connectsAtAnEnd(layout: AirportLayout, t: TileRect): boolean {
   const width = BUILD_COSTS.taxiwayWidth;
   // The strip runs along whichever side is not the Taxiway width (both are tried for a square or odd strip).
   const orientations = t.w === width && t.h !== width ? [true] : t.h === width && t.w !== width ? [false] : [true, false];
@@ -119,7 +119,12 @@ function connectsAtBothEnds(layout: AirportLayout, t: TileRect): boolean {
           [tilesOf({ x: t.x - 1, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x, y: t.y, w: 1, h: t.h })],
           [tilesOf({ x: t.x + t.w, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x + t.w - 1, y: t.y, w: 1, h: t.h })],
         ];
-    return ends.every(([outside, inside]) => [...outside, ...inside].some((tile) => isTaxiwayAt(layout, tile)) || outside.every(runwayAt));
+    const sides = vertical
+      ? [tilesOf({ x: t.x - 1, y: t.y, w: 1, h: t.h }), tilesOf({ x: t.x + t.w, y: t.y, w: 1, h: t.h })]
+      : [tilesOf({ x: t.x, y: t.y - 1, w: t.w, h: 1 }), tilesOf({ x: t.x, y: t.y + t.h, w: t.w, h: 1 })];
+    // an end cap, or a long side, that meets the existing network
+    return ends.some(([outside, inside]) => [...outside, ...inside].some((tile) => isTaxiwayAt(layout, tile)) || outside.every(runwayAt)) ||
+      sides.some((side) => side.some((tile) => isTaxiwayAt(layout, tile)));
   });
 }
 
@@ -212,16 +217,43 @@ function priceOf(layout: AirportLayout, s: Structure): number {
   return basePrice(s);
 }
 
-const without = (layout: AirportLayout, s: Structure) => createLayout(layout.width, layout.height, layout.structures.filter((o) => o !== s));
-const MOVABLE = new Set<Structure['kind']>(['atcTower', 'supportBuilding', 'holdingBay']);
+/** Structures are matched by value, so they survive merges and rebuilt layouts. */
+export const sameStructure = (a: Structure, b: Structure) => JSON.stringify(a) === JSON.stringify(b);
+const without = (layout: AirportLayout, ...gone: Structure[]) =>
+  createLayout(layout.width, layout.height, layout.structures.filter((o) => !gone.some((g) => sameStructure(o, g))));
+
+/** Contact Stands attached to a Terminal or Cargo Hub building (they move with it). */
+export function attachedStands(layout: AirportLayout, b: Structure): Stand[] {
+  if (b.kind !== 'terminal' && b.kind !== 'cargoHub') return [];
+  return layout.stands.filter((st) => st.placement === 'contact' && st.serves === b.kind && b.y + b.h === st.y && st.x >= b.x && st.x + st.w <= b.x + b.w);
+}
+
+/** Collinear, touching Taxiways (or same-height building wings) become one structure. */
+function mergeInto(structures: Structure[], s: Structure): Structure[] {
+  if (s.kind !== 'taxiway' && s.kind !== 'terminal' && s.kind !== 'cargoHub') return [...structures, s];
+  let merged: Structure = s;
+  let rest = structures;
+  for (;;) {
+    const m = merged;
+    const partner = rest.find((o) => o.kind === m.kind && (
+      (o.y === m.y && o.h === m.h && o.x <= m.x + m.w && m.x <= o.x + o.w) ||
+      (m.kind === 'taxiway' && o.x === m.x && o.w === m.w && o.y <= m.y + m.h && m.y <= o.y + o.h)));
+    if (!partner) break;
+    const x = Math.min(m.x, partner.x);
+    const y = Math.min(m.y, partner.y);
+    merged = { ...m, x, y, w: Math.max(m.x + m.w, partner.x + partner.w) - x, h: Math.max(m.y + m.h, partner.y + partner.h) - y } as Structure;
+    rest = rest.filter((o) => o !== partner);
+  }
+  return [...rest, merged];
+}
 
 /** Where a structure may stand on `layout` (shared by new placements, Moves and lengthening). */
-function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure): Check[] {
+function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure, isNew = true): Check[] {
   const items: Check[] = [];
   const clearOfAll = !layout.structures.some((o) => overlaps(o, s));
   switch (s.kind) {
     case 'taxiway':
-      items.push({ label: 'Connects at both ends', ok: connectsAtBothEnds(layout, s) });
+      items.push({ label: 'Connects to a Taxiway or Runway', ok: connectsAtAnEnd(layout, s) });
       items.push({ label: 'Crosses no Runway', ok: !layout.runways.some((r) => overlaps(r, s)) });
       items.push({ label: 'Clear of buildings and Stands', ok: !layout.structures.some((o) => o.kind !== 'taxiway' && o.kind !== 'runway' && overlaps(o, s)) });
       break;
@@ -242,7 +274,7 @@ function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure):
       const touches = (b: TileRect) =>
         (b.x + b.w === s.x || s.x + s.w === b.x) && s.y < b.y + b.h && b.y < s.y + s.h ||
         (b.y + b.h === s.y || s.y + s.h === b.y) && s.x < b.x + b.w && b.x < s.x + s.w;
-      items.push({ label: s.kind === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: layout.structures.some((b) => b.kind === s.kind && touches(b)) });
+      if (isNew) items.push({ label: s.kind === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: layout.structures.some((b) => b.kind === s.kind && touches(b)) });
       break;
     }
     default:
@@ -289,9 +321,18 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       break;
     }
     case 'move': {
-      label = `Move ${describe(change.from)}`;
-      items = [{ label: 'Can be moved', ok: MOVABLE.has(change.from.kind) || (change.from.kind === 'stand' && change.from.placement === 'remote') }];
-      items.push(...siteChecks(session, without(layout, change.from), change.to));
+      label = `Move ${describe(change.from).replace(/ wing, \d+ tiles/, '')}`;
+      const stands = attachedStands(layout, change.from);
+      const dx = change.to.x - change.from.x;
+      const dy = change.to.y - change.from.y;
+      const rest = without(layout, change.from, ...stands);
+      items = siteChecks(session, rest, change.to, false);
+      const movedStands = stands.map((st) => ({ ...st, x: st.x + dx, y: st.y + dy }));
+      const withBuilding = createLayout(rest.width, rest.height, [...rest.structures, change.to, ...movedStands]);
+      if (movedStands.length) {
+        items.push({ label: 'Its Stands stay clear', ok: movedStands.every((st) => !rest.structures.some((o) => overlaps(o, st))) });
+        items.push({ label: 'Its Stands keep Taxiway access', ok: movedStands.every((st) => isTaxiwayAt(withBuilding, { x: st.x + Math.floor(st.w / 2), y: st.y + st.h })) });
+      }
       break;
     }
     case 'replace': {
@@ -324,15 +365,13 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       label = `Land Plot ${plot.px + 1}-${plot.py + 1}`;
       const bought = session.ownedPlots.length - session.base.startingPlots;
       cost = BUILD_COSTS.plotBase * (bought + 1);
-      const inWorld = plot.px >= 0 && plot.py >= 0 && plot.px < WORLD.width / WORLD.plotW && plot.py < WORLD.height / WORLD.plotH;
+      const inWorld = plot.px * WORLD.plotW >= WORLD.x0 && plot.py * WORLD.plotH >= WORLD.y0 &&
+        (plot.px + 1) * WORLD.plotW <= WORLD.x0 + WORLD.width && (plot.py + 1) * WORLD.plotH <= WORLD.y0 + WORLD.height;
       items.push({ label: 'Not owned yet', ok: !session.ownedPlots.some((o) => o.px === plot.px && o.py === plot.py) });
       items.push({ label: 'Borders owned land', ok: inWorld && adjacentPlot(session.ownedPlots, plot) });
       break;
     }
   }
-  const longRunway = (change.kind === 'add' || change.kind === 'replace') && (change.kind === 'add' ? change.structure : change.to).kind === 'runway' &&
-    ((change.kind === 'add' ? change.structure : change.to) as Runway).length === 'long';
-  if (longRunway && !run.modifiers.unlocks.includes('surviveWeek1')) items.push({ label: 'Unlocked (Milestone: Survive Week 1)', ok: false });
   if (run.inDebt && cost > 0) items.push({ label: 'Not in Debt', ok: false });
   items.push({ label: 'Affordable', ok: run.money >= pendingTotal(session).cost + cost });
   return { ok: items.every((c) => c.ok), items, cost, upkeep: upkeepCost, label };
@@ -364,10 +403,18 @@ function withPending(session: BuildSession, pending: readonly PendingChange[]): 
   let plots: LandPlot[] = [...session.base.ownedPlots];
   for (const p of pending) {
     switch (p.kind) {
-      case 'add': structures.push(p.structure); break;
-      case 'remove': structures = structures.filter((s) => s !== p.structure); break;
-      case 'move':
-      case 'replace': structures = structures.map((s) => (s === p.from ? p.to : s)); break;
+      case 'add': structures = mergeInto(structures, p.structure); break;
+      case 'remove': structures = structures.filter((s) => !sameStructure(s, p.structure)); break;
+      case 'move': {
+        const layout = createLayout(base.width, base.height, structures);
+        const stands = attachedStands(layout, p.from);
+        const dx = p.to.x - p.from.x;
+        const dy = p.to.y - p.from.y;
+        structures = structures.map((s) =>
+          sameStructure(s, p.from) ? p.to : stands.some((st) => sameStructure(st, s)) ? ({ ...s, x: s.x + dx, y: s.y + dy } as Structure) : s);
+        break;
+      }
+      case 'replace': structures = structures.map((s) => (sameStructure(s, p.from) ? p.to : s)); break;
       case 'buyPlot': plots = [...plots, p.plot]; break;
     }
   }

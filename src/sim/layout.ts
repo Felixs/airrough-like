@@ -5,8 +5,11 @@
 
 export const TILE_SIZE = 8;
 
-/** The whole map in tiles, split into Land Plots; the Run starts owning the north-west 3 × 2 plots. */
-export const WORLD = { width: 80, height: 42, plotW: 16, plotH: 14 } as const;
+/**
+ * The whole map in tiles, split into 16 × 14 Land Plots. It starts at (x0, y0), which is negative so there is
+ * land on every side: the Run starts owning plots (0…2, 0…1) in the middle.
+ */
+export const WORLD = { x0: -16, y0: -14, width: 96, height: 56, plotW: 16, plotH: 14 } as const;
 
 export interface TileRect {
   readonly x: number;

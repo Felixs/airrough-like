@@ -71,3 +71,17 @@ describe('Unconnected Runways', () => {
     expect(buildTaxiNetwork(extra).runways.map((a) => a.index)).toEqual([0]);
   });
 });
+
+describe('Cut-off Stands', () => {
+  it('are never used, so a broken layout never strands an aircraft', () => {
+    // a Remote Stand on its own little Taxiway that joins nothing
+    const island = createLayout(base.width, base.height, [
+      ...base.structures.filter((s) => s.kind !== 'stand' || s.serves !== 'terminal'),
+      { kind: 'taxiway', x: 20, y: 30, w: 6, h: 3 },
+      { kind: 'stand', id: 'R1', x: 21, y: 27, w: 3, h: 3, size: 'medium', serves: 'terminal', placement: 'remote' },
+    ] satisfies Structure[]);
+    expect(buildTaxiNetwork(island).reachableSpots.has('R1')).toBe(false);
+    const end = runUntil(createSimulation({ layout: island, schedule: [{ id: 'A', type: 'A320', arrivalMinute: 400, fuelMinutes: 30 }], seed: 1 }), 24 * 60);
+    expect(end.flights[0]!.phase).not.toBe('onStand');
+  });
+});
