@@ -381,7 +381,8 @@ export function createSimulation(setup: SimulationSetup): Simulation {
   sim.flights = setup.schedule.map((f) => {
     const flight: Mutable<Flight> = {
       ...f, phase: 'scheduled', phaseStart: 0, standId: null, bayId: null, landedSeq: 0, route: [], routeProgress: 0, unloaded: false, position: null, heading: 90,
-      fuelMinutes: f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size] + (setup.fuelBonusMinutes ?? 0),
+      // the Fuel Farm Boost/building adds to whatever the flight brings
+      fuelMinutes: (f.fuelMinutes ?? ATC.fuelReserveMinutes[AIRCRAFT_TYPES[f.type].size]) + (setup.fuelBonusMinutes ?? 0),
       pendingOutcome: null,
       runway: -1,
       reverse: false,

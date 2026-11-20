@@ -24,6 +24,11 @@ export const SCHEDULE_RULES = {
   overnightShare: 0.12,
   /** Arrivals per fitting Stand per Day, by Size Class. */
   arrivalsPerStand: { small: 10, medium: 8, large: 6 },
+  /**
+   * Minutes an arrival can wait in Holding, rolled per flight within this range: its contingency fuel (at least 5% of
+   * the trip, so more on long flights) plus extra the airline loaded. Averages 40 / 45 / 60.
+   */
+  holdingFuelMinutes: { small: [30, 50], medium: [35, 55], large: [45, 75] },
   /** On this many first Days of Week 1, flights finding their Stands full come as Small aircraft instead. */
   smallSwapDays: 3,
   firstArrivalMinute: 6 * 60,
@@ -190,7 +195,14 @@ export function planDay(setup: DayPlanSetup): DayPlan {
   flights.sort((a, b) => a.arrivalMinute - b.arrivalMinute);
   const names = createRandom(mixSeed(setup.seed, week, weekday, 0xca11));
   const taken = new Set<string>();
-  const schedule = flights.map((f, i) => ({ ...f, id: `${f.type}-${i + 1}`, ...makeCallsign(f.type, names, taken) }));
+  // each arrival's holding fuel: contingency plus whatever extra its airline loaded (a separate stream, so the rest
+  // of the Schedule stays the same)
+  const fuel = createRandom(mixSeed(setup.seed, week, weekday, 0xf0e1));
+  const schedule = flights.map((f, i) => {
+    const [lo, hi] = SCHEDULE_RULES.holdingFuelMinutes[AIRCRAFT_TYPES[f.type].size];
+    const fuelMinutes = Math.round(lo + (hi - lo) * fuel.next());
+    return { ...f, id: `${f.type}-${i + 1}`, ...makeCallsign(f.type, names, taken), ...(f.overnight ? {} : { fuelMinutes }) };
+  });
   const arrivalsBySize = { small: 0, medium: 0, large: 0 };
   const arrivalsByPurpose = { passenger: { small: 0, medium: 0, large: 0 }, cargo: { small: 0, medium: 0, large: 0 } };
   const perHour = new Array<number>(24).fill(0);
