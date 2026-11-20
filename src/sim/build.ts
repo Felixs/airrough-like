@@ -377,6 +377,8 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       const { from, to } = change;
       label = from.kind === 'runway' && to.kind === 'runway' ? `Lengthen Runway to ${LENGTH_NAME[to.length]}` : `Change ${describe(from)}`;
       items = siteChecks(session, without(layout, from), to);
+      // a Grass strip stays Short (Small aircraft only): for more length, build a paved Runway
+      if (from.kind === 'runway' && from.surface === 'grass') items.unshift({ label: 'Grass strips can’t be lengthened: build a paved Runway', ok: false });
       cost = Math.max(0, basePrice(to) - basePrice(from));
       upkeepCost = structureUpkeep(to) - structureUpkeep(from);
       break;
