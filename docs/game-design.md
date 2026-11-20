@@ -55,7 +55,7 @@ Screen, which turns Score into Air Miles for the meta-progression.
   side. Remote Stands stand free (an Unlockable) and turn round 1.5× slower.
 - Build Mode tools: Taxiway, Stands, Holding Bay, Runways, Buildings, Land, Move, Demolish. Tools with variants show
   them as small tiles under the tools, grouped (Stands: Terminal / Cargo × Contact / Remote, each Small / Medium /
-  Large; Holding Bays by size; Runways: new 09-27 or 18-36 by length, Grass strips, Lengthen; Buildings: main
+  Large; Holding Bays by size; Runways: new 09-27 or 18-36, Medium or Long, Grass strips, Lengthen; Buildings: main
   Terminal / Cargo Hub, wings and Support Buildings). Each tile has a top-down picture, its name and its price;
   tiles that are locked or cost more than the money left after pending changes are greyed out and can't be picked.
   After something is placed the cursor is free (nothing follows it) until the next tool or tile is picked; Demolish
@@ -108,11 +108,15 @@ Screen, which turns Score into Air Miles for the meta-progression.
   swaps at the other end (09L is 27R). The names are painted on the Runway ends (number upright for the landing pilot,
   letter under it), shown on the hold-short signs ("09L-27R") and in the Runway chip.
 - Lengths Short / Medium / Long are 24 / 36 / 48 tiles (`BUILD_COSTS.runwayTiles`); a Runway fits aircraft up to
-  Small / Medium / Large. A Runway can be lengthened one class at a time for the price difference, on either end:
-  clicking its west (north) half grows it that way, its east (south) half the other way; the far end stays put. Surfaces: Grass (Small only, daylight), Asphalt, Lit (night operations), ILS (bad-weather
-  landings, fewer Pilot Errors). The Runway Surface is an airport-wide upgrade: buying the next level (Asphalt → Lit → ILS)
-  upgrades every Runway, and a new Runway is built with the airport's surface. Grass strips (an Unlockable) stay Grass,
-  and stay Short: they can't be lengthened (a longer Runway has to be built paved).
+  Small / Medium / Large. **Paved Runways are Medium (80k) or Long (160k); Short is only the Grass strip** (12k, no
+  Unlockable): Small aircraft only, daylight only, Pilot Errors ×1.3, never lit, and it can't be lengthened (a longer
+  Runway has to be built paved). A paved Runway can be lengthened to Long for the price difference, on either end:
+  clicking its west (north) half grows it that way, its east (south) half the other way; the far end stays put.
+  Surfaces: Grass, Asphalt, Lit (night operations), ILS (bad-weather landings, fewer Pilot Errors). The Runway Surface
+  is an airport-wide upgrade: buying the next level (Asphalt → Lit → ILS) upgrades every paved Runway, and a new paved
+  Runway is built with the airport's surface; Grass strips stay Grass. (Paved Short Runways were dropped: they did
+  what a Grass strip does. Ones already built keep working and can be lengthened. The Grass strip Unlockable was
+  retired; owners get its 300 Air Miles back.)
 - **Wind** (`wind.ts`) is random per Day, sampled every 30 minutes and drifting slowly; the Wind Shift Twist turns it
   round. Each Runway lands and takes off into the wind: once the tailwind for its current direction exceeds 5 kt it
   changes direction, and no Movements use it for a 5-minute changeover.

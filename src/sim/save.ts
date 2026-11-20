@@ -117,7 +117,7 @@ export function loadMeta(store: KeyValueStore): MetaState {
 const RETIRED_BOOSTS = ['lowerCrashFines'];
 
 /** Unlockables the game no longer has (a second Terminal is now always buildable), with what they cost. */
-const RETIRED_UNLOCKS: Record<string, number> = { secondTerminal: 1_500 };
+const RETIRED_UNLOCKS: Record<string, number> = { secondTerminal: 1_500, grassStrip: 300 };
 
 function refundRetiredBoosts(meta: MetaState): MetaState {
   const boosts: Record<string, number> = { ...meta.boosts };

@@ -217,7 +217,7 @@ The name of a Runway end as seen on approach: 09/27 for horizontal and 18/36 for
 _Avoid_: Runway number, R1/R2
 
 **Runway Length**:
-Short, Medium or Long; a Runway serves its matching Size Class and every smaller one.
+Short, Medium or Long; a Runway serves its matching Size Class and every smaller one. Only Grass strips are Short; paved Runways are Medium or Long.
 _Avoid_: Runway size, runway class
 
 **Runway Surface**:

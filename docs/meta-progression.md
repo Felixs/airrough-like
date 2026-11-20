@@ -3,14 +3,13 @@
 Decided 2026-11-20 after playtest 1. Milestones are gone; Air Miles buy everything.
 
 ## Always available
-Runways (all lengths), Taxiways, Contact Stands, Holding Bays, Land Plots, every Runway Surface (Grass, Asphalt, Lit, ILS), Tower Modules levels 1–3.
+Runways (paved Medium and Long, and Short Grass strips), Taxiways, Contact Stands, Holding Bays, whole Terminals and Cargo Hubs, Land Plots, every Runway Surface (Grass, Asphalt, Lit, ILS), Tower Modules levels 1–3.
 
 ## Unlockables (bought once) *(prices are first guesses)*
 | Unlockable | Air Miles | Effect |
 |---|---|---|
 | Remote Stands | 300 | Place Remote Stands |
 | Admin Office | 300 | Building; enables Manual Divert |
-| Grass strip | 300 | Cheap Short Grass Runways (12k) |
 | Terminal wing | 400 | Extend the Terminal |
 | Cargo Hub wing | 400 | Extend the Cargo Hub |
 | Ramp Agent Station | 500 | Building; enables Rush Turnaround |
