@@ -1,11 +1,13 @@
 name: Release
 
-# Pushing a version tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`) publishes multi-arch Docker images
+# Releases the version in package.json: run it from Actions → Release → "Run workflow" on main (it creates the
+# tag), or push a version tag yourself (`git tag v0.2.0 && git push origin v0.2.0`). It publishes multi-arch Docker images
 # (linux/amd64 for Intel/AMD PCs and servers, linux/arm64 for Raspberry Pi and ARM machines) to the
 # GitHub Container Registry (and the GitLab registry when GITLAB_IMAGE is set) and creates a GitHub Release.
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,7 +21,10 @@ jobs:
       - name: Image names and version
         id: meta
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; else version="$(node -p "require('./package.json').version")"; fi
+          if [ "$GITHUB_REF_TYPE" != tag ] && git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+            echo "::error::v$version is already released. Bump the version in package.json first."; exit 1
+          fi
           image="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           minor="${version%.*}"
           tags="$image:$version,$image:$minor,$image:latest"
@@ -71,4 +76,4 @@ jobs:
           Then open http://localhost:8080. Tags: \`$version\`, \`${version%.*}\`, \`latest\`.
           NOTES
           sed -i 's/^          //' notes.md
-          gh release create "$GITHUB_REF_NAME" --title "Airport Auto Battler $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --verify-tag
+          gh release create "v$version" --target "$GITHUB_SHA" --title "Airport Auto Battler v$version" --notes-file notes.md --generate-notes

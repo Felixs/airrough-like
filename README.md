@@ -49,4 +49,4 @@ npm run build      # production build into dist/
 ## Deploy and release
 
 - Every push to `main` runs CI (typecheck, tests, build), publishes the game to GitHub Pages and, when configured, pushes a `latest` image to the GitLab registry for the Raspberry Pi ([`docs/deploy-raspberry-pi.md`](docs/deploy-raspberry-pi.md)).
-- **Releases:** bump `version` in `package.json`, merge, then tag: `git tag v0.2.0 && git push origin v0.2.0`. The [Release workflow](.github/workflows/release.yml) builds `linux/amd64` + `linux/arm64` images, pushes them to `ghcr.io/felixs/airrough-like` (`0.2.0`, `0.2`, `latest`) and creates a GitHub Release linking them and the browser version.
+- **Releases:** bump `version` in `package.json`, merge, then run **Actions → Release → Run workflow** on `main` (or push a tag `v0.2.0`). The [Release workflow](.github/workflows/release.yml) builds `linux/amd64` + `linux/arm64` images, pushes them to `ghcr.io/felixs/airrough-like` (`0.2.0`, `0.2`, `latest`) and creates a GitHub Release linking them and the browser version.
