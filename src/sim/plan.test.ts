@@ -83,3 +83,21 @@ describe('Suggestions', () => {
     expect(texts).toMatch(/Radar 3/);
   });
 });
+
+describe('Runway Surface', () => {
+  it('is airport-wide: buying Lit lights every Runway, and new Runways are built Lit', async () => {
+    const { confirmBuild, newRunway, openBuild, addPending } = await import('./build');
+    let run = { ...startRun(1), money: 1_000_000 };
+    let s = openBuild(run);
+    s = addPending(s, newRunway(s, { x: 43, y: 2 }, 'short', true));
+    run = confirmBuild(s);
+    expect(run.layout.runways.map((r) => r.surface)).toEqual(['asphalt', 'asphalt']);
+    run = buyUpgrade(run, 'surface');
+    expect(run.layout.runways.map((r) => r.surface)).toEqual(['lit', 'lit']);
+    s = openBuild(run);
+    expect(newRunway(s, { x: 2, y: 30 }, 'short', false).surface).toBe('lit');
+    expect(newRunway(s, { x: 2, y: 30 }, 'short', false, true).surface).toBe('grass'); // a Grass strip stays Grass
+    run = buyUpgrade(run, 'surface');
+    expect(newRunway(openBuild(run), { x: 2, y: 30 }, 'short', false).surface).toBe('ils');
+  });
+});

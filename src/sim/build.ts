@@ -2,7 +2,7 @@
  * Build Mode: a session of pending placements on top of the Run's layout, validated with a checks list,
  * paid for and applied on Confirm. The simulation routes on the new layout from the next Day.
  */
-import { createLayout, sharesEdge, spotEntry, WORLD, type Facing, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
+import { airportSurface, createLayout, sharesEdge, spotEntry, WORLD, type Facing, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
 import { UPKEEP, type LandPlot, type RunState } from './run';
 import { AIRCRAFT_TYPES, sizeRank } from './aircraft';
 import { unlockableName, type UnlockableId } from './meta';
@@ -187,11 +187,13 @@ function spotPrice(layout: AirportLayout, s: Stand | HoldingBay): number {
 }
 
 
-export function newRunway(_session: BuildSession, at: Tile, length: RunwayLength, vertical: boolean, grass = false): Runway {
+/** A new Runway: Grass strips are Short; paved ones get the airport's Runway Surface (Lit and ILS carry over). */
+export function newRunway(session: BuildSession, at: Tile, length: RunwayLength, vertical: boolean, grass = false): Runway {
   const size = grass ? 'short' : length;
   const long = BUILD_COSTS.runwayTiles[size];
   const wide = BUILD_COSTS.runwayWidth;
-  return { kind: 'runway', x: at.x, y: at.y, w: vertical ? wide : long, h: vertical ? long : wide, length: size, surface: grass ? 'grass' : 'asphalt' };
+  const paved = airportSurface(session.layout);
+  return { kind: 'runway', x: at.x, y: at.y, w: vertical ? wide : long, h: vertical ? long : wide, length: size, surface: grass ? 'grass' : paved === 'grass' ? 'asphalt' : paved };
 }
 
 /** The Unlockable a new structure needs, if any. */

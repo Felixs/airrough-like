@@ -157,3 +157,13 @@ export function sharesEdge(a: TileRect, b: TileRect): boolean {
   const yOverlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
   return ((a.x + a.w === b.x || b.x + b.w === a.x) && yOverlap >= 1) || ((a.y + a.h === b.y || b.y + b.h === a.y) && xOverlap >= 1);
 }
+
+const SURFACE_RANK: Record<RunwaySurface, number> = { grass: 0, asphalt: 1, lit: 2, ils: 3 };
+
+/**
+ * The airport's Runway Surface: the best surface bought (it is an airport-wide upgrade). New paved Runways are built
+ * with it; Grass strips stay Grass.
+ */
+export function airportSurface(layout: AirportLayout): RunwaySurface {
+  return layout.runways.reduce<RunwaySurface>((best, r) => (SURFACE_RANK[r.surface] > SURFACE_RANK[best] ? r.surface : best), 'grass');
+}

@@ -3,7 +3,7 @@
  * (Tower Modules, Runway Surface, Fire & Rescue levels).
  */
 import type { RunwaySurface, Structure } from './layout';
-import { createLayout } from './layout';
+import { airportSurface, createLayout } from './layout';
 import { dayPlan, hasBuilding, upkeep, type DayReport, type RunState, type TowerModules } from './run';
 import { BOSS_DAY, RUSH_DAY, planDay } from './schedule';
 import { twistsFor, type Twist } from './twists';
@@ -48,9 +48,11 @@ export interface UpgradeOffer {
 
 function applyUpgrade(run: RunState, id: UpgradeId): RunState {
   if (id === 'surface') {
-    const runway = run.layout.runways[0]!;
-    const next = SURFACE_ORDER[SURFACE_ORDER.indexOf(runway.surface) + 1]!;
-    const structures = run.layout.structures.map((s): Structure => (s === runway ? { ...runway, surface: next } : s));
+    // airport-wide: every Runway gets the next surface (Grass strips stay Grass once the airport is paved)
+    const current = airportSurface(run.layout);
+    const next = SURFACE_ORDER[SURFACE_ORDER.indexOf(current) + 1]!;
+    const structures = run.layout.structures.map((s): Structure =>
+      (s.kind === 'runway' && (s.surface !== 'grass' || current === 'grass') ? { ...s, surface: next } : s));
     return { ...run, layout: createLayout(run.layout.width, run.layout.height, structures) };
   }
   if (id === 'fireRescue') return { ...run, fireRescueLevel: run.fireRescueLevel + 1 };
@@ -79,7 +81,7 @@ export function upgradeOffers(run: RunState): UpgradeOffer[] {
     const level = run.towerModules[id];
     return make(id, `${MODULE_NAME[id]} ${Math.min(level + 1, PRICES.maxLevel)}`, MODULE_EFFECT[id], level, level >= PRICES.maxLevel, PRICES.towerModulePerLevel * level);
   });
-  const surface = run.layout.runways[0]!.surface;
+  const surface = airportSurface(run.layout);
   const next = SURFACE_ORDER[SURFACE_ORDER.indexOf(surface) + 1];
   const surfaceOffer = make(
     'surface', next ? `Runway Surface: ${SURFACE_NAME[next]}` : `Runway Surface: ${SURFACE_NAME[surface]}`,
@@ -150,11 +152,11 @@ export interface Suggestion {
 export function suggestions(run: RunState): Suggestion[] {
   const forecast = dayPlan(run).forecast;
   const out: Suggestion[] = [];
-  const runway = run.layout.runways[0]!;
+  const surface = airportSurface(run.layout);
   if (forecast.turnedAway.noFittingRunway > 0) out.push({ text: `${forecast.turnedAway.noFittingRunway} flights need a longer Runway`, upgrade: null });
   if (forecast.turnedAway.noFittingStand > 0) out.push({ text: `${forecast.turnedAway.noFittingStand} flights have no Stand of their size`, upgrade: null });
   if (forecast.turnedAway.standCapacity > 0) out.push({ text: `${forecast.turnedAway.standCapacity} flights turned away: not enough Stands`, upgrade: null });
-  if (runway.surface === 'grass' || runway.surface === 'asphalt') out.push({ text: 'A Lit Runway stops evening flights diverting at 20:00', upgrade: 'surface' });
+  if (surface === 'grass' || surface === 'asphalt') out.push({ text: 'A Lit Runway stops evening flights diverting at 20:00', upgrade: 'surface' });
   if (run.towerModules.radar < 3) out.push({ text: 'Radar 3 unlocks Fuel Alerts and Emergency Alerts', upgrade: 'radar' });
   if (run.fireRescueLevel === 0) out.push({ text: 'A Fire & Rescue Station clears Crashes faster', upgrade: 'fireRescue' });
   return out.slice(0, 4);

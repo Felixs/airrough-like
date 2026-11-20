@@ -4,7 +4,7 @@ import {
   applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
   ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
-import { spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
+import { airportSurface, spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { UnlockableId } from '../sim/meta';
 import type { Tile } from '../sim/taxi';
@@ -45,6 +45,9 @@ export interface BuildModeView {
   destroy(): void;
 }
 
+/** The paved surface new Runways get, named after the airport's Runway Surface upgrade. */
+const PAVED_NAME: Partial<Record<string, string>> = { asphalt: 'Asphalt', lit: 'Lit (bought)', ils: 'ILS (bought)' };
+
 /** Plan Mode · Build: the airfield on its tile grid with a tool palette, placement ghost, checks and pending list. */
 export async function mountBuildMode(root: HTMLElement, run: RunState, handlers: BuildModeHandlers): Promise<BuildModeView> {
   let session: BuildSession = openBuild(run);
@@ -72,7 +75,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
           ${select('Action', [['new', 'New Runway'], ['lengthen', 'Lengthen']], 'new', ['runway'])}
           ${select('Length', [['short', 'Short (24)'], ['medium', 'Medium (36)'], ['long', 'Long (48)']], 'medium', ['runway'])}
           ${select('Orientation', [['horizontal', '09-27 (horizontal)'], ['vertical', '18-36 (vertical)']], 'horizontal', ['runway'])}
-          ${select('Surface', [['asphalt', 'Asphalt'], ['grass', lock('grassStrip', 'Grass strip (Short)')]], 'asphalt', ['runway'])}
+          ${select('Surface', [['asphalt', PAVED_NAME[airportSurface(run.layout)] ?? 'Asphalt'], ['grass', lock('grassStrip', 'Grass strip (Short)')]], 'asphalt', ['runway'])}
           ${select('Building', [
             ['terminalWing', lock('terminalWing', 'Terminal wing')], ['cargoWing', lock('cargoWing', 'Cargo Hub wing')],
             ...(['rampAgentStation', 'adminOffice', 'airlineOffice', 'fireRescueStation', 'fuelFarm', 'deIcingPad'] as const).map((r): [string, string] => [r, lock(r, ROLE_NAME[r])]),
