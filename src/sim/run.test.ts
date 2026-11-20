@@ -122,3 +122,29 @@ describe('Seed and bug-report info', () => {
     expect(parseSeed('0')).toBe(null);
   });
 });
+
+describe('Day estimate', () => {
+  it('adds up the fees of the flights that come, takes off Upkeep and gives the money after the Day', async () => {
+    const { estimateDay } = await import('./run');
+    const { AIRCRAFT_TYPES } = await import('./aircraft');
+    const run = startRun(7);
+    const est = estimateDay(run);
+    const plan = dayPlan(run);
+    const today = plan.schedule.filter((f) => !f.overnight);
+    const arrivals = today.reduce((n, f) => n + AIRCRAFT_TYPES[f.type].fee, 0);
+    expect(est.arrivalFees).toBe(arrivals); // overnight aircraft paid their Arrival Fee yesterday
+    expect(est.departureFees).toBeGreaterThan(0);
+    expect(est.departureFees).toBeLessThanOrEqual(plan.schedule.reduce((n, f) => n + AIRCRAFT_TYPES[f.type].fee, 0));
+    expect(est.upkeep).toBe(upkeep(run));
+    expect(est.net).toBe(est.fees - est.upkeep);
+    expect(est.moneyAfter).toBe(run.money + est.net);
+  });
+
+  it('is close to what an unbuilt airport actually earns on its first Day', async () => {
+    const { estimateDay } = await import('./run');
+    const run = startRun(7);
+    const after = playDay(run);
+    const fees = after.history[after.history.length - 1]!.fees;
+    expect(Math.abs(estimateDay(run).fees - fees) / fees).toBeLessThan(0.25);
+  });
+});

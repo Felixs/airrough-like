@@ -212,6 +212,9 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .tool-options select { height: 30px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--text); font: 12px var(--mono); }
 
 .card dd.twist { color: var(--amber); cursor: help; }
+.card dd.expect { cursor: help; }
+.card dd.expect.pos { color: var(--green); }
+.card dd.expect.neg { color: var(--red); }
 .boss-card .boss-twist { margin-top: 8px; color: var(--text); }
 
 .score-buttons { display: grid; gap: 8px; }
