@@ -4,17 +4,17 @@ import { drawAirfield, fitToScreen } from './render/airfield';
 import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
-import { continueEndless, dayPlan, dayTwists, endDay, startLiveDay, startRun, type RunState } from './sim/run';
+import { continueEndless, dayPlan, dayTwists, endDay, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, daySettled, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
-import { browserStore, clearRun, loadMeta, loadRun, saveMeta, saveRun } from './sim/save';
+import { browserStore, clearRun, loadMeta, loadOptions, loadRun, resetProgress, saveMeta, saveOptions, saveRun } from './sim/save';
 import { awardRun } from './sim/meta';
-import { showMetaShop } from './ui/metaShop';
+import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
-import { showNotice, showResume } from './ui/resume';
+import { showNotice } from './ui/resume';
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 31);
 
@@ -27,6 +27,7 @@ async function start(): Promise<void> {
 
   const store = browserStore();
   let meta = loadMeta(store);
+  let options = loadOptions(store);
   let run: RunState = startRun(newSeed(), meta);
   let sim: Simulation = startLiveDay(run);
   let quota = dayPlan(run).quota;
@@ -52,6 +53,11 @@ async function start(): Promise<void> {
   const topBar = mountTopBar(document.querySelector<HTMLElement>('#top-bar')!, speed, (s) => (speed = s));
   const dayLabel = document.querySelector<HTMLElement>('#day-name')!;
   const autoSlow = document.querySelector<HTMLInputElement>('#auto-slow')!;
+  autoSlow.checked = options.autoSlow;
+  autoSlow.addEventListener('change', () => {
+    options = { ...options, autoSlow: autoSlow.checked };
+    saveOptions(store, options);
+  });
   const liveDay = mountLiveDay(appEl, {
     onAction(id, targetId) {
       try {
@@ -67,7 +73,8 @@ async function start(): Promise<void> {
   });
 
   const beginDay = () => {
-    sim = startLiveDay(run);
+    sim = { ...startLiveDay(run), pauseOnEvents: options.eventPopups };
+    topBar.setSpeed(options.defaultSpeed);
     quota = dayPlan(run).quota;
     ended = false;
     const twists = dayTwists(run);
@@ -90,6 +97,11 @@ async function start(): Promise<void> {
         saveRun(store, run);
         mountAirfield();
       },
+      onBonusTwist(on) {
+        run = setBonusTwist(run, on);
+        saveRun(store, run);
+        return run;
+      },
       onStartDay: beginDay,
     });
   };
@@ -97,19 +109,9 @@ async function start(): Promise<void> {
     meta = awardRun(meta, run);
     saveMeta(store, meta);
     showScoreScreen(appEl, run, {
-      onNewRun() {
+      onFinish() {
         clearRun(store);
-        showMetaShop(appEl, meta, {
-          onChange(next) {
-            meta = next;
-            saveMeta(store, meta);
-          },
-          onStartRun(next) {
-            meta = next;
-            run = startRun(newSeed(), meta);
-            openPlan();
-          },
-        });
+        openMenu();
       },
       onEndless() {
         run = continueEndless(run);
@@ -118,21 +120,39 @@ async function start(): Promise<void> {
     });
   };
 
-  const saved = loadRun(store);
-  if (saved.kind === 'discarded') showNotice(appEl, saved.reason);
-  if (saved.kind === 'run') {
-    showResume(appEl, saved.run, () => {
-      run = saved.run;
-      if (run.status === 'won') showScore();
-      else openPlan();
-    }, () => {
-      clearRun(store);
-      run = startRun(newSeed(), meta);
-      openPlan();
+  const openMenu = () => {
+    ended = true;
+    const saved = loadRun(store);
+    if (saved.kind === 'discarded') showNotice(appEl, saved.reason);
+    showMainMenu(appEl, { meta, saved: saved.kind === 'run' ? saved.run : null, options }, {
+      onContinue() {
+        if (saved.kind !== 'run') return;
+        run = saved.run;
+        if (run.status === 'won') showScore();
+        else openPlan();
+      },
+      onNewRun() {
+        clearRun(store);
+        run = startRun(newSeed(), meta);
+        openPlan();
+      },
+      onMeta(next) {
+        meta = next;
+        saveMeta(store, meta);
+      },
+      onOptions(next) {
+        options = next;
+        saveOptions(store, options);
+        autoSlow.checked = options.autoSlow;
+      },
+      onResetProgress() {
+        resetProgress(store);
+        meta = loadMeta(store);
+        openMenu();
+      },
     });
-  } else {
-    openPlan();
-  }
+  };
+  openMenu();
 
   app.ticker.add((ticker) => {
     // Auto-slow: watch landings and takeoffs at 1×, rush through the quiet minutes.
@@ -151,7 +171,7 @@ async function start(): Promise<void> {
       if (run.status === 'lost') clearRun(store);
       if (run.status === 'won') saveRun(store, run);
       // Every Day ends with its report; a lost or won Run goes on to the Score Screen.
-      showDayReport(appEl, run, meta, () => {
+      showDayReport(appEl, run, () => {
         if (run.status === 'lost' || run.status === 'won') showScore();
         else openPlan();
       });

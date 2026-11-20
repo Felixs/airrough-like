@@ -127,8 +127,8 @@ export interface SimulationEffects {
 const NO_SIM_EFFECT: SimulationEffects = { riskMultiplier: 1, windows: [], taxiSpeedFactor: 1, noLights: false };
 
 /** Simulation inputs for one or several Twists (combined). The Weather Station (level 1–5) softens Weather. */
-export function simulationEffects(input: TwistInput, seed: number, weatherStationLevel: number): SimulationEffects {
-  return asList(input).map((t) => oneSimulation(t, seed, weatherStationLevel)).reduce((a, b) => ({
+export function simulationEffects(input: TwistInput, seed: number, weatherStationLevel: number, deIcing = false): SimulationEffects {
+  return asList(input).map((t) => oneSimulation(t, seed, weatherStationLevel, deIcing)).reduce((a, b) => ({
     riskMultiplier: a.riskMultiplier * b.riskMultiplier,
     windows: [...a.windows, ...b.windows],
     taxiSpeedFactor: Math.min(a.taxiSpeedFactor, b.taxiSpeedFactor),
@@ -136,7 +136,7 @@ export function simulationEffects(input: TwistInput, seed: number, weatherStatio
   }), NO_SIM_EFFECT);
 }
 
-function oneSimulation(t: TwistRef, seed: number, weatherStationLevel: number): SimulationEffects {
+function oneSimulation(t: TwistRef, seed: number, weatherStationLevel: number, deIcing: boolean): SimulationEffects {
   if (t.family === 'surge') return NO_SIM_EFFECT;
   const rng = createRandom(mixSeed(seed, t.severity, FAMILIES.indexOf(t.family), 0xef));
   const at = (fromHour: number, toHour: number) => Math.round((fromHour + rng.next() * (toHour - fromHour)) * 60);
@@ -154,7 +154,8 @@ function oneSimulation(t: TwistRef, seed: number, weatherStationLevel: number): 
       default: return { ...NO_SIM_EFFECT, noLights: true };
     }
   }
-  const soften = Math.max(0.4, 1 - 0.15 * (weatherStationLevel - 1));
+  // the Weather Station softens weather risk; a De-icing pad takes off another 30%
+  const soften = Math.max(0.4, 1 - 0.15 * (weatherStationLevel - 1)) * (deIcing ? 0.7 : 1);
   const shorten = Math.max(0.5, 1 - 0.1 * (weatherStationLevel - 1));
   const risk = [0.3, 0.6, 0.8, 1.0][t.severity - 1] ?? 1;
   const windows: RunwayWindow[] = [];

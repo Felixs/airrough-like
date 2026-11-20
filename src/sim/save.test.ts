@@ -55,8 +55,24 @@ describe('Saving meta-progression', () => {
     const { saveMeta, loadMeta } = await import('./save');
     const store = memoryStore();
     expect(loadMeta(store)).toEqual(emptyMeta());
-    const meta = { ...emptyMeta(), airMiles: 1234, perks: ['extraCash' as const] };
+    const meta = { ...emptyMeta(), airMiles: 1234, unlocks: ['remoteStands' as const] };
     saveMeta(store, meta);
     expect(loadMeta(store)).toEqual(meta);
+  });
+});
+
+describe('Options', () => {
+  it('round-trip with defaults, and Reset progress wipes meta and the Run but not options', async () => {
+    const { DEFAULT_OPTIONS, loadOptions, saveOptions, resetProgress, saveMeta, loadMeta } = await import('./save');
+    const { emptyMeta } = await import('./meta');
+    const store = memoryStore();
+    expect(loadOptions(store)).toEqual(DEFAULT_OPTIONS);
+    saveOptions(store, { ...DEFAULT_OPTIONS, autoSlow: false });
+    saveMeta(store, { ...emptyMeta(), airMiles: 50 });
+    saveRun(store, startRun(1));
+    resetProgress(store);
+    expect(loadOptions(store).autoSlow).toBe(false);
+    expect(loadMeta(store)).toEqual(emptyMeta());
+    expect(loadRun(store).kind).toBe('none');
   });
 });

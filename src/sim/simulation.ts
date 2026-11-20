@@ -224,6 +224,10 @@ export interface Simulation {
   readonly taxiSpeedFactor: number;
   readonly feeFactor: number;
   readonly cooldownFactor: number;
+  readonly turnaroundFactor: number;
+  readonly cargoNightTurnaroundFactor: number;
+  readonly crashFineFactor: number;
+  readonly blockageFactor: number;
   readonly pauseOnEvents: boolean;
   /** Per Runway (layout order): can't be used before this minute (Crash, Incident, Twist). */
   readonly runwayBlockedUntil: readonly number[];
@@ -295,6 +299,12 @@ export interface SimulationSetup {
   readonly feeFactor?: number;
   readonly fuelBonusMinutes?: number;
   readonly cooldownFactor?: number;
+  readonly turnaroundFactor?: number;
+  /** Cargo Turnarounds after dusk (Cargo apron lighting). */
+  readonly cargoNightTurnaroundFactor?: number;
+  readonly crashFineFactor?: number;
+  /** Multiplies how long Crashes and Incidents block a Runway. */
+  readonly blockageFactor?: number;
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -327,6 +337,10 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     noLights: setup.noLights ?? false,
     taxiSpeedFactor: setup.taxiSpeedFactor ?? 1,
     feeFactor: setup.feeFactor ?? 1,
+    turnaroundFactor: setup.turnaroundFactor ?? 1,
+    cargoNightTurnaroundFactor: setup.cargoNightTurnaroundFactor ?? 1,
+    crashFineFactor: setup.crashFineFactor ?? 1,
+    blockageFactor: setup.blockageFactor ?? 1,
     pauseOnEvents: setup.pauseOnEvents ?? false,
     cooldownFactor: setup.cooldownFactor ?? 1,
     runwayBlockedUntil: setup.layout.runways.map(() => setup.runwayBlockedUntil ?? 0),
@@ -382,9 +396,11 @@ function alongRoute(route: readonly Tile[], progress: number, fallbackHeading: n
 
 const accessOf = (sim: Simulation, f: Flight): RunwayAccess | undefined => sim.network.runways.find((a) => a.index === f.runway);
 
-function turnaroundMinutes(flight: Flight, stand: Stand): number {
-  const base = TIMINGS.turnaroundMinutes[AIRCRAFT_TYPES[flight.type].size];
-  const placed = stand.placement === 'remote' ? base * TIMINGS.remoteStandFactor : base;
+function turnaroundMinutes(flight: Flight, stand: Stand, sim?: Simulation): number {
+  const base = TIMINGS.turnaroundMinutes[AIRCRAFT_TYPES[flight.type].size] * (sim?.turnaroundFactor ?? 1);
+  // Cargo apron lighting: cargo Turnarounds that start after dusk are quicker
+  const night = sim && AIRCRAFT_TYPES[flight.type].purpose === 'cargo' && isDark(flight.phaseStart) ? sim.cargoNightTurnaroundFactor : 1;
+  const placed = (stand.placement === 'remote' ? base * TIMINGS.remoteStandFactor : base) * night;
   return flight.rushed ? placed * ACTION_EFFECTS.rushTurnaroundFactor : placed;
 }
 
@@ -479,7 +495,7 @@ export function riskMeter(sim: Simulation, runwayIndex?: number): { atc: number;
   return { atc, pilot, total: 1 - (1 - atc) * (1 - pilot) };
 }
 
-const blockMinutes = (sim: Simulation, base: number) => base * (SAFETY.fireRescueFactor[sim.fireRescueLevel] ?? 1);
+const blockMinutes = (sim: Simulation, base: number) => base * (SAFETY.fireRescueFactor[sim.fireRescueLevel] ?? 1) * sim.blockageFactor;
 export const isDark = (now: number) => now >= HOURS.dusk;
 const lit = (sim: Simulation, a: RunwayAccess) => !sim.noLights && (a.runway.surface === 'lit' || a.runway.surface === 'ils');
 const hasIls = (sim: Simulation, a: RunwayAccess) => !sim.noLights && a.runway.surface === 'ils';
@@ -550,7 +566,7 @@ function releaseSpots(sim: MutableSim, f: Mutable<Flight>): void {
 }
 
 function crash(sim: MutableSim, f: Mutable<Flight>, now: number, blocksRunway: boolean): void {
-  const fine = crashFine(AIRCRAFT_TYPES[f.type].size, sim.earlierCrashesThisWeek + sim.crashes);
+  const fine = Math.round(crashFine(AIRCRAFT_TYPES[f.type].size, sim.earlierCrashesThisWeek + sim.crashes) * sim.crashFineFactor);
   sim.crashes += 1;
   logEvent(sim, now, 'crash', f, fine);
   releaseSpots(sim, f);
@@ -712,7 +728,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
       break;
     }
     case 'onStand': {
-      const turnaround = turnaroundMinutes(f, stand!);
+      const turnaround = turnaroundMinutes(f, stand!, sim);
       if (!f.unloaded && now >= f.phaseStart + turnaround * TIMINGS.unloadShare) {
         f.unloaded = true;
         earnFee(sim, f);
@@ -881,7 +897,7 @@ export function useAction(prev: Simulation, id: ActionId, targetId?: string): Si
     case 'rushTurnaround': {
       // The Stand the most urgent Holding aircraft waits for: of the Stands that fit it, the one that frees first.
       const waiting = holdingTarget();
-      const remaining = (f: Flight) => f.phaseStart + turnaroundMinutes(f, standById(sim, f.standId)!) - now;
+      const remaining = (f: Flight) => f.phaseStart + turnaroundMinutes(f, standById(sim, f.standId)!, sim) - now;
       const occupant = flights
         .filter((f) => f.phase === 'onStand' && !f.rushed && f.standId)
         .filter((f) => {

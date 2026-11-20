@@ -1,3 +1,4 @@
+import { createLayout, type Structure } from './layout';
 import { describe, expect, it } from 'vitest';
 import { buyUpgrade, runCalendar, suggestions, upgradeOffers } from './plan';
 import { playDay, startRun, upkeep, type RunState } from './run';
@@ -42,9 +43,15 @@ describe('Buying upgrades', () => {
     expect(offer(after, 'surface')).toMatchObject({ cost: 80_000, label: 'Runway Surface: ILS' });
   });
 
-  it('adds Fire & Rescue levels', () => {
-    const after = buyUpgrade({ ...startRun(1), money: 40_000 }, 'fireRescue');
-    expect(after.fireRescueLevel).toBe(1);
+  it('adds Fire & Rescue levels once the Station is unlocked and placed', () => {
+    const base = { ...startRun(1), money: 40_000 };
+    expect(offer(base, 'fireRescue').reason).toBe('🔒 Needs Unlockable: Fire & Rescue Station');
+    const unlocked = { ...base, modifiers: { ...base.modifiers, unlocks: ['fireRescueStation' as const] } };
+    expect(offer(unlocked, 'fireRescue').reason).toBe('Place a Fire & Rescue Station in Build Mode first');
+    const placed = { ...unlocked, layout: createLayout(unlocked.layout.width, unlocked.layout.height, [
+      ...unlocked.layout.structures, { kind: 'supportBuilding', role: 'fireRescueStation', x: 2, y: 14, w: 3, h: 2 } satisfies Structure,
+    ]) };
+    expect(buyUpgrade(placed, 'fireRescue').fireRescueLevel).toBe(1);
   });
 
   it('refuses when the offer is not available', () => {

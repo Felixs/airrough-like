@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { addPending, confirmBuild, newHoldingBay, newStand, openBuild, placementChecks } from './build';
 import { startRun } from './run';
+import { emptyMeta } from './meta';
 import { planDay } from './schedule';
 import { buildTaxiNetwork, routeToStand } from './taxi';
 
-const run = () => ({ ...startRun(1), money: 500_000 });
+const run = () => ({ ...startRun(1, { ...emptyMeta(), unlocks: ['remoteStands'] }), money: 500_000 });
 const failing = (session: ReturnType<typeof openBuild>, s: Parameters<typeof placementChecks>[1]) =>
   placementChecks(session, s).items.filter((c: { ok: boolean }) => !c.ok).map((c: { label: string }) => c.label);
 

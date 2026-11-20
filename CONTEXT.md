@@ -115,7 +115,7 @@ Emergency Action that moves one Holding aircraft to the front of the landing que
 _Avoid_: Fast-track, skip queue
 
 **Fire & Rescue Station**:
-An upgradeable building (levels 1–5) that shortens how long Crashes and Incidents block Runways and Taxiways.
+An Unlockable building, placed in Build Mode and upgraded in Plan Mode (levels 1–5), that shortens how long Crashes and Incidents block Runways and Taxiways.
 _Avoid_: Fire station, crash crew, first responders
 
 **Support Building**:
@@ -153,20 +153,20 @@ _Avoid_: Land, area, zone, expansion
 ### Meta-progression
 
 **Air Miles**:
-The meta-currency awarded on the Score Screen. Spent between Runs on Boosts, Starting Perks, unlocks and cosmetics.
+The meta-currency awarded at the end of a Run. Spent in the Main Menu on Unlockables and Boosts.
 _Avoid_: Meta-currency, points, gems
 
+**Unlockable**:
+A building or feature bought once with Air Miles that is available in every later Run (e.g. Remote Stands, Terminal wings, Support Buildings, Fire & Rescue Station, Tower Modules level 4–5). What the airport needs to run at all (Runways, Taxiways, Contact Stands, Holding Bays, every Runway Surface) is never locked. Boosts for a locked building stay locked until it is unlocked.
+_Avoid_: Milestone, unlock, achievement
+
 **Boost**:
-A permanent stat improvement bought with Air Miles (e.g. higher fees, lower Upkeep, longer Fuel Reserve).
-_Avoid_: Upgrade, perk, buff
+A permanent bonus bought with Air Miles in levels, applied from the next Run: stat Boosts (e.g. higher fees, lower Upkeep, faster Turnaround) and starting Boosts (e.g. Starting Money, a starting Holding Bay, better starting Radar).
+_Avoid_: Upgrade (that is a Plan Mode purchase), perk, buff, Starting Perk
 
-**Starting Perk**:
-A permanent bonus applied at the start of every Run (e.g. extra cash, larger Land Plot, upgraded ATC Tower).
-_Avoid_: Head start, bonus
-
-**Milestone**:
-An achievement (e.g. survive Week 1, land 100 Large aircraft) that permanently unlocks new structures or upgrades for all future Runs.
-_Avoid_: Achievement, goal, quest
+**Main Menu**:
+The screen the game opens on and returns to after a Run: Continue (when a Run is saved), New Run, Unlockables & Boosts, Options, About (with How to play).
+_Avoid_: Title screen, home
 
 **Money**:
 The in-Run currency earned from fees and spent in Plan Mode; it does not survive the Run.
@@ -237,7 +237,7 @@ A Stand directly attached to a Terminal or Cargo Hub; fastest Turnaround.
 _Avoid_: Gate, jet bridge
 
 **Remote Stand**:
-A Stand placed away from the building, served by bus or vehicle; slower Turnaround.
+A Stand placed away from the building, served by bus or vehicle; slower Turnaround. An Unlockable.
 _Avoid_: Apron spot, overflow parking
 
 **Turnaround**:
@@ -323,7 +323,7 @@ The person playing; designs and manages the airport.
 _Avoid_: User
 
 **Score Screen**:
-The summary shown when a Run ends, showing the Score and awarding Air Miles.
+The end-of-Run view: like the Day report for the last Day, marked won or lost, plus the Run's totals, Score and Air Miles awarded. "Finish Run" leads to the Main Menu; a won Run can continue into Endless Mode instead.
 _Avoid_: Game over screen, results page
 
 **Score**:

@@ -5,6 +5,7 @@
 import { createLayout, WORLD, type AirportLayout, type HoldingBay, type Runway, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportBuilding, type SupportRole, type TileRect } from './layout';
 import { UPKEEP, type LandPlot, type RunState } from './run';
 import { AIRCRAFT_TYPES, sizeRank } from './aircraft';
+import { unlockableName, type UnlockableId } from './meta';
 import type { Tile } from './taxi';
 
 /** Prices *(first guess)*. */
@@ -21,7 +22,9 @@ export const BUILD_COSTS = {
   runway: { short: 30_000, medium: 80_000, long: 160_000 },
   runwayTiles: { short: 24, medium: 36, long: 48 },
   runwayWidth: 4,
-  supportBuilding: { rampAgentStation: 12_000, adminOffice: 15_000, airlineOffice: 20_000 },
+  supportBuilding: { rampAgentStation: 12_000, adminOffice: 15_000, airlineOffice: 20_000, fireRescueStation: 25_000, fuelFarm: 18_000, deIcingPad: 22_000 },
+  /** A Short Grass Runway (Grass strip Unlockable). */
+  grassStrip: 12_000,
   supportBuildingSize: { w: 3, h: 2 },
   /** Terminal and Cargo Hub wings, per tile. */
   wingPerTile: 1_500,
@@ -159,17 +162,31 @@ function spotPrice(layout: AirportLayout, s: Stand | HoldingBay): number {
 }
 
 
-export function newRunway(_session: BuildSession, at: Tile, length: RunwayLength, vertical: boolean): Runway {
-  const long = BUILD_COSTS.runwayTiles[length];
+export function newRunway(_session: BuildSession, at: Tile, length: RunwayLength, vertical: boolean, grass = false): Runway {
+  const size = grass ? 'short' : length;
+  const long = BUILD_COSTS.runwayTiles[size];
   const wide = BUILD_COSTS.runwayWidth;
-  return { kind: 'runway', x: at.x, y: at.y, w: vertical ? wide : long, h: vertical ? long : wide, length, surface: 'asphalt' };
+  return { kind: 'runway', x: at.x, y: at.y, w: vertical ? wide : long, h: vertical ? long : wide, length: size, surface: grass ? 'grass' : 'asphalt' };
+}
+
+/** The Unlockable a new structure needs, if any. */
+export function unlockNeeded(s: Structure): UnlockableId | null {
+  if (s.kind === 'stand' && s.placement === 'remote') return 'remoteStands';
+  if (s.kind === 'terminal') return 'terminalWing';
+  if (s.kind === 'cargoHub') return 'cargoWing';
+  if (s.kind === 'supportBuilding') return s.role;
+  if (s.kind === 'runway' && s.surface === 'grass') return 'grassStrip';
+  return null;
 }
 
 export function newBuilding(_session: BuildSession, at: Tile, role: SupportRole): SupportBuilding {
   return { kind: 'supportBuilding', role, x: at.x, y: at.y, ...BUILD_COSTS.supportBuildingSize };
 }
 
-const ROLE_NAME: Record<SupportRole, string> = { rampAgentStation: 'Ramp Agent Station', adminOffice: 'Admin Office', airlineOffice: 'Airline Office' };
+export const ROLE_NAME: Record<SupportRole, string> = {
+  rampAgentStation: 'Ramp Agent Station', adminOffice: 'Admin Office', airlineOffice: 'Airline Office',
+  fireRescueStation: 'Fire & Rescue Station', fuelFarm: 'Fuel farm', deIcingPad: 'De-icing pad',
+};
 const LENGTH_NAME: Record<RunwayLength, string> = { short: 'Short', medium: 'Medium', long: 'Long' };
 
 /** Base price (no copy surcharge) used for refunds. */
@@ -178,7 +195,7 @@ function basePrice(s: Structure): number {
     case 'taxiway': return s.w * s.h * BUILD_COSTS.taxiwayPerTile;
     case 'stand': return BUILD_COSTS.stand[s.size] * (s.placement === 'remote' ? BUILD_COSTS.remoteStandFactor : 1);
     case 'holdingBay': return BUILD_COSTS.holdingBay[s.size];
-    case 'runway': return BUILD_COSTS.runway[s.length];
+    case 'runway': return s.surface === 'grass' ? BUILD_COSTS.grassStrip : BUILD_COSTS.runway[s.length];
     case 'supportBuilding': return BUILD_COSTS.supportBuilding[s.role];
     case 'terminal':
     case 'cargoHub': return s.w * s.h * BUILD_COSTS.wingPerTile;
@@ -213,7 +230,7 @@ function describe(s: Structure): string {
 /** Price of a new structure, with the copy surcharge for Stands, Holding Bays and Runways. */
 function priceOf(layout: AirportLayout, s: Structure): number {
   if (s.kind === 'stand' || s.kind === 'holdingBay') return spotPrice(layout, s);
-  if (s.kind === 'runway') return Math.round(BUILD_COSTS.runway[s.length] * (1 + BUILD_COSTS.perCopy * layout.runways.length));
+  if (s.kind === 'runway') return Math.round(basePrice(s) * (1 + BUILD_COSTS.perCopy * layout.runways.length));
   return basePrice(s);
 }
 
@@ -274,7 +291,8 @@ function siteChecks(session: BuildSession, layout: AirportLayout, s: Structure, 
       const touches = (b: TileRect) =>
         (b.x + b.w === s.x || s.x + s.w === b.x) && s.y < b.y + b.h && b.y < s.y + s.h ||
         (b.y + b.h === s.y || s.y + s.h === b.y) && s.x < b.x + b.w && b.x < s.x + s.w;
-      if (isNew) items.push({ label: s.kind === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: layout.structures.some((b) => b.kind === s.kind && touches(b)) });
+      const freeStanding = s.kind === 'terminal' && session.base.modifiers.unlocks.includes('secondTerminal');
+      if (isNew && !freeStanding) items.push({ label: s.kind === 'terminal' ? 'Attached to the Terminal' : 'Attached to the Cargo Hub', ok: layout.structures.some((b) => b.kind === s.kind && touches(b)) });
       break;
     }
     default:
@@ -315,7 +333,9 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
     case 'add': {
       const s = change.structure;
       items = siteChecks(session, layout, s);
-      cost = priceOf(layout, s);
+      const needs = unlockNeeded(s);
+      if (needs && !run.modifiers.unlocks.includes(needs)) items.unshift({ label: `🔒 Needs Unlockable: ${unlockableName(needs)}`, ok: false });
+      cost = Math.round(priceOf(layout, s) * (s.kind === 'taxiway' ? run.modifiers.taxiwayCostFactor : 1));
       upkeepCost = structureUpkeep(s);
       label = describe(s);
       break;
@@ -364,7 +384,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       const { plot } = change;
       label = `Land Plot ${plot.px + 1}-${plot.py + 1}`;
       const bought = session.ownedPlots.length - session.base.startingPlots;
-      cost = BUILD_COSTS.plotBase * (bought + 1);
+      cost = Math.round(BUILD_COSTS.plotBase * (bought + 1) * run.modifiers.landCostFactor);
       const inWorld = plot.px * WORLD.plotW >= WORLD.x0 && plot.py * WORLD.plotH >= WORLD.y0 &&
         (plot.px + 1) * WORLD.plotW <= WORLD.x0 + WORLD.width && (plot.py + 1) * WORLD.plotH <= WORLD.y0 + WORLD.height;
       items.push({ label: 'Not owned yet', ok: !session.ownedPlots.some((o) => o.px === plot.px && o.py === plot.py) });
@@ -458,5 +478,5 @@ export function lengthened(r: Runway): Runway | null {
 
 /** Plot price for the next purchase in this session. */
 export function nextPlotPrice(session: BuildSession): number {
-  return BUILD_COSTS.plotBase * (session.ownedPlots.length - session.base.startingPlots + 1);
+  return Math.round(BUILD_COSTS.plotBase * (session.ownedPlots.length - session.base.startingPlots + 1) * session.base.modifiers.landCostFactor);
 }

@@ -1,5 +1,5 @@
 import { upgradeOffers, runCalendar, suggestions, type UpgradeId } from '../sim/plan';
-import { dayPlan, dayTwists, upkeep, type RunState } from '../sim/run';
+import { BONUS_TWIST_SCORE_PER_WEEK, canTakeBonusTwist, dayPlan, dayTwists, upkeep, type RunState } from '../sim/run';
 import { FAMILY_NAME, type Twist } from '../sim/twists';
 import { WEEKDAY_NAMES } from '../sim/schedule';
 import { mountBuildMode, type BuildModeView } from './buildMode';
@@ -15,6 +15,8 @@ export interface PlanModeHandlers {
   onBuy(id: UpgradeId): RunState;
   /** Build Mode confirmed changes. */
   onBuilt(run: RunState): void;
+  /** Turns the next Day's Bonus Twist on or off; returns the updated Run. */
+  onBonusTwist(on: boolean): RunState;
   onStartDay(): void;
 }
 
@@ -82,6 +84,8 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
               return `<span class="${cls}" title="${esc(tip)}"><small>${WEEKDAY_NAMES[d.weekday]}${d.twist ? ` ${ICON[d.twist.family]}` : ''}</small>${w.locked ? '🔒' : d.quota}</span>`;
             }).join('')}</div>`).join('')}
           </div>
+          ${canTakeBonusTwist(run) ? `<div class="card bonus-card"><h3>Bonus Twist</h3>
+            <label class="check"><input type="checkbox" data-bonus ${run.bonusTwist ? 'checked' : ''}> Add a Twist to ${dayName(run.week, run.weekday)} for +${(BONUS_TWIST_SCORE_PER_WEEK * run.week).toLocaleString('en-US')} Score if the Quota is met</label></div>` : ''}
           ${boss ? `<div class="card boss-card"><h3>Boss Day · Sunday W${run.week}</h3><p>Quota <b>${boss.quota}</b> (90% of Demand ${boss.demand} × 2).</p>
             ${boss.twists.map((t) => `<p class="boss-twist">${ICON[t.family]} <b>${esc(t.name)}</b> · ${FAMILY_NAME[t.family]} Severity ${t.severity}<br>${esc(t.description)}</p>`).join('')}</div>` : ''}
           <div class="card"><h3>Suggested</h3><ul class="tips">${tips.map((t) => `<li>${esc(t.text)}</li>`).join('') || '<li>Looking good.</li>'}</ul></div>
@@ -100,6 +104,10 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
       build?.destroy();
       el.remove();
       handlers.onStartDay();
+    });
+    el.querySelector<HTMLInputElement>('input[data-bonus]')?.addEventListener('change', (e) => {
+      run = handlers.onBonusTwist((e.target as HTMLInputElement).checked);
+      render();
     });
     for (const b of el.querySelectorAll<HTMLButtonElement>('button[data-tab]')) {
       b.addEventListener('click', () => {

@@ -1,4 +1,3 @@
-import { MILESTONES, milestoneProgress, newMilestones, type MetaState } from '../sim/meta';
 import { dayTwists, type RunState } from '../sim/run';
 import { formatClock } from '../sim/clock';
 import { dayName } from './dayEnd';
@@ -15,25 +14,13 @@ const REASON = {
   manual: 'by Manual Divert',
 } as const;
 
-/** The end-of-Day overview: money, traffic, safety, Milestones and what comes next. */
-export function showDayReport(root: HTMLElement, run: RunState, meta: MetaState, onContinue: () => void): void {
+/** The Day's sections (money, traffic, safety) for the Day report and the Score Screen. */
+export function daySections(run: RunState): string {
   const r = run.history[run.history.length - 1];
-  if (!r) {
-    onContinue();
-    return;
-  }
-  const reached = newMilestones(meta, run);
-  const progress = milestoneProgress(meta, run);
+  if (!r) return '';
   const diversions = Object.entries(r.diversionsByReason).filter(([, n]) => n > 0) as Array<[keyof typeof REASON, number]>;
-  const twists = dayTwists(run);
-  const el = document.createElement('div');
-  el.className = 'overlay';
-  el.setAttribute('role', 'dialog');
-  el.setAttribute('aria-modal', 'true');
-  el.setAttribute('aria-label', 'Day report');
-  el.innerHTML = `
-    <div class="card report">
-      <h2>${dayName(r.week, r.weekday)} <span class="${r.quotaMet ? 'ok' : 'bad'}">${r.quotaMet ? '✓ Quota met' : '✗ Quota missed'}</span></h2>
+  return `
+      <h3 class="day-title">${dayName(r.week, r.weekday)} <span class="${r.quotaMet ? 'ok' : 'bad'}">${r.quotaMet ? '✓ Quota met' : '✗ Quota missed'}</span></h3>
       <p class="lead">${r.movements} of ${r.quota} Movements${r.movements > r.quota ? ` (+${r.movements - r.quota} spare)` : ''} · busiest hour ${String(r.busiestHour).padStart(2, '0')}:00</p>
       <div class="report-cols">
         <section><h3>Money</h3><dl>
@@ -52,14 +39,24 @@ export function showDayReport(root: HTMLElement, run: RunState, meta: MetaState,
       </div>
       <section><h3>Safety</h3>${r.highlights.length
         ? `<ul class="events">${r.highlights.map((h) => `<li class="${h.kind === 'crash' ? 'bad' : 'warn'}"><span class="t">${hhmm(h.minute)}</span> ${KIND[h.kind]}: ${esc(h.callsign)} (${esc(h.aircraft)})${h.cost ? ` · ${signed(-h.cost)}` : ''}</li>`).join('')}</ul>`
-        : '<p class="ok">No Crashes or Incidents today.</p>'}</section>
-      <section><h3>Progress</h3>
-        ${reached.map((id) => {
-          const m = MILESTONES.find((x) => x.id === id)!;
-          return `<p class="milestone">★ Milestone reached: <b>${esc(m.name)}</b>, unlocks ${esc(m.unlocks)} from your next Run</p>`;
-        }).join('')}
-        <ul class="progress">${progress.map((p) => `<li>${esc(p.text)}</li>`).join('')}</ul>
-      </section>
+        : '<p class="ok">No Crashes or Incidents today.</p>'}</section>`;
+}
+
+/** The end-of-Day overview: money, traffic, safety and what comes next. */
+export function showDayReport(root: HTMLElement, run: RunState, onContinue: () => void): void {
+  if (!run.history.length) {
+    onContinue();
+    return;
+  }
+  const twists = dayTwists(run);
+  const el = document.createElement('div');
+  el.className = 'overlay';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-label', 'Day report');
+  el.innerHTML = `
+    <div class="card report">
+      ${daySections(run)}
       <p class="lead">Next: <b>${dayName(run.week, run.weekday)}</b>${run.weekday === 6 ? ' · Boss Day' : run.weekday === 5 ? ' · Rush Day' : ''}${twists.map((t) => ` · ${esc(t.name)}`).join('')}</p>
       <button type="button" class="primary">Plan the next Day</button>
     </div>`;

@@ -220,9 +220,37 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
       break;
     }
     case 'supportBuilding': {
-      box(g, x, y, w, h - 4, 4, COLOURS.roof, COLOURS.wall);
-      hvac(g, x + 2, y + 2, 4, 2.6);
-      const name = { rampAgentStation: 'RAMP', adminOffice: 'ADMIN', airlineOffice: 'AIRLINE' }[s.role];
+      const name = {
+        rampAgentStation: 'RAMP', adminOffice: 'ADMIN', airlineOffice: 'AIRLINE', fireRescueStation: 'FIRE & RESCUE', fuelFarm: 'FUEL', deIcingPad: 'DE-ICING',
+      }[s.role];
+      if (s.role === 'fireRescueStation') {
+        // red roof with a cross, open bays and two fire trucks on the apron in front
+        box(g, x, y, w, h - 9, 3, 0x3d1d1a, 0x1b1513, 0x5e2a25, 0x140c0b);
+        g.rect(x + w - 7, y + 1.5, 4.5, 3.5).stroke({ width: 0.5, color: 0xe8d7d4 });
+        g.moveTo(x + w - 4.75, y + 2).lineTo(x + w - 4.75, y + 4.6).moveTo(x + w - 6.4, y + 3.25).lineTo(x + w - 3.1, y + 3.25).stroke({ width: 0.5, color: 0xe8d7d4 });
+        for (let k = 0; k < 3; k++) g.rect(x + 1.5 + k * 7, y + h - 9 + 3.2, 5.5, 2.4).fill(0x0d0f0e);
+        for (const dx of [2, 11]) {
+          g.roundRect(x + dx + 0.5, y + h - 5.4, 5, 4.6, 0.6).fill(SHADOW);
+          g.roundRect(x + dx, y + h - 6, 5, 4.6, 0.6).fill(0xc0392b);
+          g.rect(x + dx + 0.6, y + h - 5.6, 3.8, 1).fill(0x2b3732);
+          g.rect(x + dx + 1, y + h - 4.2, 3, 0.5).fill(COLOURS.edgeLight);
+        }
+      } else if (s.role === 'fuelFarm') {
+        g.rect(x, y, w, h).fill(0x1d2420).stroke({ width: 0.4, color: COLOURS.fence });
+        for (const [cx, cy] of [[x + 5, y + 5], [x + 12, y + 5], [x + 19, y + 5], [x + 8.5, y + 11.5], [x + 15.5, y + 11.5]] as const) {
+          g.circle(cx + 1, cy + 1, 3).fill(SHADOW);
+          g.circle(cx, cy, 3).fill(0xc9ced0);
+          g.circle(cx, cy, 2).stroke({ width: 0.3, color: 0x8a9496 });
+        }
+      } else if (s.role === 'deIcingPad') {
+        g.rect(x, y, w, h).fill(COLOURS.asphalt);
+        g.rect(x + 1, y + 1, w - 2, h - 2).stroke({ width: 0.5, color: 0x7fc4ff });
+        g.rect(x + 2, y + h / 2 - 2, 3, 4).fill(0x2f6f9f);
+        g.rect(x + w - 5, y + h / 2 - 2, 3, 4).fill(0x2f6f9f);
+      } else {
+        box(g, x, y, w, h - 4, 4, COLOURS.roof, COLOURS.wall);
+        hvac(g, x + 2, y + 2, 4, 2.6);
+      }
       labels.addChild(label(name, x + w / 2, y - 1));
       break;
     }
