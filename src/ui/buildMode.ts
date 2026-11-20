@@ -22,7 +22,7 @@ const HINT: Record<Tool, string> = {
   taxiway: 'Drag on the map to draw a Taxiway.',
   stand: 'Click to place a Stand (top-left at the cursor).',
   holdingBay: 'Click to place a Holding Bay (top-left at the cursor).',
-  runway: 'Click to place a new Runway, or pick “Lengthen” and click a Runway.',
+  runway: 'Click to place a new Runway, or pick “Lengthen” and click the end of a Runway to grow it on that side.',
   building: 'Click to place a building (top-left at the cursor).',
   land: 'Click a dimmed Land Plot next to your land to buy it.',
   move: 'Click a building, Holding Bay or Remote Stand, then click where it should go. Free.',
@@ -210,7 +210,10 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         if (opt.runwayAction === 'lengthen') {
           const r = structureAt(session.layout, t);
           if (r?.kind !== 'runway') return null;
-          const longer = lengthened(r);
+          // grow on the side that was clicked: the west/north half lengthens it that way, the east/south half the other
+          const horizontal = r.w >= r.h;
+          const startSide = horizontal ? t.x < r.x + r.w / 2 : t.y < r.y + r.h / 2;
+          const longer = lengthened(r, startSide ? 'start' : 'end');
           return longer ? { change: { kind: 'replace', from: r, to: longer }, rects: [longer] } : null;
         }
         const s = newRunway(session, t, opt.length, opt.orientation === 'vertical', opt.surface === 'grass');

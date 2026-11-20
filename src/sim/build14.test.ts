@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addPending, applyChange, checkChange, confirmBuild, newBuilding, newRunway, newStand, openBuild, pendingTotal,
+  addPending, applyChange, checkChange, confirmBuild, lengthened, newBuilding, newRunway, newStand, openBuild, pendingTotal,
   taxiwayFromDrag, type BuildSession,
 } from './build';
 import type { Structure } from './layout';
@@ -38,6 +38,19 @@ describe('New Runways', () => {
     const c = checkChange(s, { kind: 'replace', from: runway, to: longer });
     expect(c.ok).toBe(true);
     expect(c.cost).toBe(80_000);
+  });
+
+  it('can be lengthened on either side: the clicked end grows, the other stays put', () => {
+    let s = openBuild(rich());
+    const runway = s.layout.runways[0]!; // x 6–41
+    expect(lengthened(runway, 'end')).toMatchObject({ x: 6, w: 48, length: 'long' });
+    const west = lengthened(runway, 'start')!;
+    expect(west).toMatchObject({ x: -6, w: 48, length: 'long' }); // still ends at x 41
+    expect(failing(checkChange(s, { kind: 'replace', from: runway, to: west }))).toContain('Inside owned land');
+    s = applyChange(s, { kind: 'buyPlot', plot: { px: -1, py: 1 } }); // land on the west side
+    expect(checkChange(s, { kind: 'replace', from: runway, to: west }).ok).toBe(true);
+    const vertical = newRunway(s, { x: 43, y: 2 }, 'short', true);
+    expect(lengthened(vertical, 'start')).toMatchObject({ y: 2 + 24 - 36, h: 36 });
   });
 });
 

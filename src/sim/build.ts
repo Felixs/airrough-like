@@ -493,12 +493,16 @@ export function structureAt(layout: AirportLayout, t: Tile): Structure | undefin
     .sort((a, b) => rank[a.kind] - rank[b.kind])[0];
 }
 
-/** The same Runway one length class longer (extending east or south), or null when already Long. */
-export function lengthened(r: Runway): Runway | null {
+/**
+ * The same Runway one length class longer, or null when already Long. It grows at its `end` (east or south, the
+ * default) or at its `start` (west or north), keeping the other end where it is.
+ */
+export function lengthened(r: Runway, side: 'start' | 'end' = 'end'): Runway | null {
   const next: RunwayLength | undefined = r.length === 'short' ? 'medium' : r.length === 'medium' ? 'long' : undefined;
   if (!next) return null;
   const tiles = BUILD_COSTS.runwayTiles[next];
-  return r.w >= r.h ? { ...r, w: tiles, length: next } : { ...r, h: tiles, length: next };
+  if (r.w >= r.h) return { ...r, x: side === 'start' ? r.x + r.w - tiles : r.x, w: tiles, length: next };
+  return { ...r, y: side === 'start' ? r.y + r.h - tiles : r.y, h: tiles, length: next };
 }
 
 /** Plot price for the next purchase in this session. */

@@ -78,7 +78,8 @@ Screen, which turns Score into Air Miles for the meta-progression.
 ## Runways, wind and direction
 
 - Lengths Short / Medium / Long are 24 / 36 / 48 tiles (`BUILD_COSTS.runwayTiles`); a Runway fits aircraft up to
-  Small / Medium / Large. Surfaces: Grass (Small only, daylight), Asphalt, Lit (night operations), ILS (bad-weather
+  Small / Medium / Large. A Runway can be lengthened one class at a time for the price difference, on either end:
+  clicking its west (north) half grows it that way, its east (south) half the other way; the far end stays put. Surfaces: Grass (Small only, daylight), Asphalt, Lit (night operations), ILS (bad-weather
   landings, fewer Pilot Errors).
 - **Wind** (`wind.ts`) is random per Day, sampled every 30 minutes and drifting slowly; the Wind Shift Twist turns it
   round. Each Runway lands and takes off into the wind: once the tailwind for its current direction exceeds 5 kt it
