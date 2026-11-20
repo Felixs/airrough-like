@@ -56,14 +56,14 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - Build Mode tools: Taxiway, Stands, Holding Bay, Runways, Buildings, Land, Move, Demolish. Tools with variants show
   them as small tiles under the tools, grouped (Stands: Terminal / Cargo × Contact / Remote, each Small / Medium /
   Large; Holding Bays by size; Runways: new 09-27 or 18-36 by length, Grass strips, Lengthen; Buildings: main
-  Terminal / Cargo Hub, wings and Support Buildings).
-- **Main buildings:** a whole Terminal (10 × 4 tiles) or Cargo Hub (7 × 4) can always be built, standing alone and
-  with no Unlockable, when the airport has none of that kind (e.g. after demolishing the starting ones). With one
-  standing, more of it is a wing (3 × 4, an Unlockable) that must touch it; a second free-standing Terminal needs the
-  Second Terminal Unlockable. Price 1,500 per tile. Each tile has a top-down picture, its name and what it costs now (copy surcharge included);
+  Terminal / Cargo Hub, wings and Support Buildings). Each tile has a top-down picture, its name and its price;
   tiles that are locked or cost more than the money left after pending changes are greyed out and can't be picked.
   After something is placed the cursor is free (nothing follows it) until the next tool or tile is picked; Demolish
   stays on so several things can be cleared in a row.
+- **Main buildings:** a whole Terminal (10 × 4 tiles) or Cargo Hub (7 × 4) can always be built, standing alone and
+  with no Unlockable, when the airport has none of that kind (e.g. after demolishing the starting ones). With one
+  standing, more of it is a wing (3 × 4, an Unlockable) that must touch it; a second free-standing Terminal needs the
+  Second Terminal Unlockable. Price 1,500 per tile.
 - Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment) and priced before they are
   confirmed; Demolish refunds what building the same thing again would cost (so removing and rebuilding is free); Move keeps a structure and re-checks it at the new place.
   Changes are pending until confirmed. Leaving Build Mode (switching to Overview or pressing Start Day) with pending
@@ -186,7 +186,9 @@ cooldown (`simulation.ts → ACTIONS`).
 
 - Money starts at 30,000 (`run.ts → STARTING_MONEY`). Each flight pays an Arrival Fee when unloading finishes and a
   Departure Fee on takeoff (`aircraft.ts → AIRCRAFT_TYPES`). Upkeep is paid at 24:00 (`run.ts → UPKEEP`). Prices are in
-  `build.ts → BUILD_COSTS` and `plan.ts → PRICES`; each extra copy of a Stand, Holding Bay or Runway costs 25% more.
+  `build.ts → BUILD_COSTS` and `plan.ts → PRICES`. Prices are fixed: a fifth Medium Stand costs what the first did.
+  (Costing each extra copy 25% more was dropped as confusing; a typical Week-2 expansion of two Medium Stands, a
+  second Medium Runway and a Large Stand costs about 148k instead of 188k.)
 - Daily Quota: 75% of the Day's Demand in Movements, 90% on the Sunday Boss Day.
 - **Plan Mode Overview** is a dashboard for the next Day, in tabs Overview · Build · Last Day (the Last Day tab shows
   the previous Day's report, Summary and Details, again).

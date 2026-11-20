@@ -26,20 +26,20 @@ describe('Stand footprints', () => {
 });
 
 describe('Stand and Holding Bay prices', () => {
-  it('start at Small 8k / Medium 16k / Large 36k, Remote half, Bays 4k / 8k / 16k, +25% per copy already built', () => {
+  it('cost Small 8k / Medium 16k / Large 36k, Remote half, Bays 4k / 8k / 16k, however many are built', () => {
     const session = openBuild(run());
     const cost = (s: Parameters<typeof placementChecks>[1]) => placementChecks(session, s).cost;
     // three Small and two Medium Contact Stands and one Medium Holding Bay already exist
-    expect(cost(newStand(session, { x: 23, y: 8 }, 'small', 'contact', 'terminal'))).toBe(8_000 * 1.75);
-    expect(cost(newStand(session, { x: 23, y: 8 }, 'medium', 'contact', 'terminal'))).toBe(16_000 * 1.5);
+    expect(cost(newStand(session, { x: 23, y: 8 }, 'small', 'contact', 'terminal'))).toBe(8_000);
+    expect(cost(newStand(session, { x: 23, y: 8 }, 'medium', 'contact', 'terminal'))).toBe(16_000);
     expect(cost(newStand(session, { x: 20, y: 15 }, 'medium', 'remote', 'terminal'))).toBe(8_000);
-    expect(cost(newHoldingBay(session, { x: 38, y: 8 }, 'medium'))).toBe(8_000 * 1.25);
+    expect(cost(newHoldingBay(session, { x: 38, y: 8 }, 'medium'))).toBe(8_000);
   });
 
-  it('raises the price of the next copy while one is pending', () => {
+  it('keeps the price of the next one while one is pending', () => {
     const first = newStand(openBuild(run()), { x: 20, y: 15 }, 'medium', 'remote', 'terminal');
     const session = addPending(openBuild(run()), first);
-    expect(placementChecks(session, newStand(session, { x: 24, y: 15 }, 'medium', 'remote', 'terminal')).cost).toBe(10_000);
+    expect(placementChecks(session, newStand(session, { x: 24, y: 15 }, 'medium', 'remote', 'terminal')).cost).toBe(8_000);
   });
 });
 

@@ -21,11 +21,11 @@ describe('New Runways', () => {
     expect(newRunway(s, { x: 6, y: 30 }, 'long', false)).toMatchObject({ w: 48, h: 4 });
   });
 
-  it('cost 30k / 80k / 160k, +25% per Runway already built', () => {
+  it('cost 30k / 80k / 160k, however many Runways are built', () => {
     const s = openBuild(rich());
     const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 43, y: 2 }, 'short', true) });
     expect(c.ok).toBe(true);
-    expect(c.cost).toBe(37_500);
+    expect(c.cost).toBe(30_000);
     expect(c.upkeep).toBe(300);
   });
 
@@ -110,9 +110,9 @@ describe('Demolish', () => {
     expect(checkChange(s, { kind: 'remove', structure: link })).toMatchObject({ ok: true, cost: -7_200, upkeep: -24 });
     const stand3 = find(s, (x) => x.kind === 'stand' && x.id === '3'); // the Medium one
     const after = confirmBuild(applyChange(s, { kind: 'remove', structure: stand3 }));
-    expect(after.money).toBe(run.money + 20_000); // what building it again costs: 16k + 25% for the Medium Contact Stand left
+    expect(after.money).toBe(run.money + 16_000); // what building it again costs
     const s2 = openBuild(after);
-    expect(checkChange(s2, { kind: 'add', structure: stand3 }).cost).toBe(20_000);
+    expect(checkChange(s2, { kind: 'add', structure: stand3 }).cost).toBe(16_000);
     expect(upkeep(after)).toBe(upkeep(run) - 100);
   });
 
