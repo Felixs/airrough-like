@@ -17,8 +17,6 @@ export const BUILD_COSTS = {
   stand: { small: 8_000, medium: 16_000, large: 36_000 },
   remoteStandFactor: 0.5,
   holdingBay: { small: 4_000, medium: 8_000, large: 16_000 },
-  /** Each copy of the same Stand, Holding Bay or Runway already built (or pending) adds this share. */
-  perCopy: 0.25,
   runway: { short: 30_000, medium: 80_000, long: 160_000 },
   runwayTiles: { short: 24, medium: 36, long: 48 },
   runwayWidth: 4,
@@ -176,15 +174,6 @@ export function newHoldingBay(session: BuildSession, at: Tile, size: SizeClass):
 
 const SIZE_NAME: Record<SizeClass, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
 
-/** Price of a Stand or Holding Bay given how many copies of the same kind exist (built or pending). */
-function spotPrice(layout: AirportLayout, s: Stand | HoldingBay): number {
-  const copies = layout.structures.filter((o) =>
-    o.kind === s.kind && o.size === s.size && (o.kind !== 'stand' || s.kind !== 'stand' || o.placement === s.placement)).length;
-  const base = s.kind === 'stand'
-    ? BUILD_COSTS.stand[s.size] * (s.placement === 'remote' ? BUILD_COSTS.remoteStandFactor : 1)
-    : BUILD_COSTS.holdingBay[s.size];
-  return Math.round(base * (1 + BUILD_COSTS.perCopy * copies));
-}
 
 
 /** A new Runway: Grass strips are Short; paved ones get the airport's Runway Surface (Lit and ILS carry over). */
@@ -217,7 +206,7 @@ export const ROLE_NAME: Record<SupportRole, string> = {
 };
 const LENGTH_NAME: Record<RunwayLength, string> = { short: 'Short', medium: 'Medium', long: 'Long' };
 
-/** Base price (no copy surcharge) used for refunds. */
+/** The price of building it. */
 function basePrice(s: Structure): number {
   switch (s.kind) {
     case 'taxiway': return s.w * s.h * BUILD_COSTS.taxiwayPerTile;
@@ -255,11 +244,9 @@ function describe(s: Structure): string {
   }
 }
 
-/** Price of a new structure, with the copy surcharge for Stands, Holding Bays and Runways. */
-export function priceOf(layout: AirportLayout, s: Structure): number {
-  if (s.kind === 'stand' || s.kind === 'holdingBay') return spotPrice(layout, s);
-  if (s.kind === 'runway') return Math.round(basePrice(s) * (1 + BUILD_COSTS.perCopy * layout.runways.length));
-  return basePrice(s);
+/** Price of a new structure: fixed, however many of the same are already built (the layout is kept for callers). */
+export function priceOf(_layout: AirportLayout, s: Structure): number {
+  return Math.round(basePrice(s));
 }
 
 /** Structures are matched by value, so they survive merges and rebuilt layouts. */
@@ -398,7 +385,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       const s = change.structure;
       const after = without(layout, s);
       label = `Demolish ${describe(s)}`;
-      // 100% back means what building it again would cost (with the copy surcharge of what is left)
+      // 100% back: what building it again costs
       cost = -Math.round(priceOf(after, s) * BUILD_COSTS.refundShare);
       upkeepCost = -structureUpkeep(s);
       if (s.kind === 'runway') items.push({ label: 'Not the last Runway', ok: after.runways.length > 0 });

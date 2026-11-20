@@ -63,7 +63,7 @@ describe('Unlockables', () => {
     const s = openBuild({ ...startRun(1, { ...emptyMeta(), unlocks: ['grassStrip'] }), money: 1e6 });
     const grass = newRunway(s, { x: 44, y: 2 }, 'long', true, true);
     expect(grass).toMatchObject({ length: 'short', surface: 'grass', h: 24 });
-    expect(checkChange(s, { kind: 'add', structure: grass })).toMatchObject({ ok: true, cost: 15_000 }); // 12k + 25% for the second Runway
+    expect(checkChange(s, { kind: 'add', structure: grass })).toMatchObject({ ok: true, cost: 12_000 });
   });
 });
 
