@@ -125,6 +125,10 @@ export interface Options {
   readonly reduceMotion?: boolean;
   /** Keep the Live Day running while the game's tab is hidden (otherwise it pauses). */
   readonly runInBackground?: boolean;
+  /** Background music: "off", "random" or a song id. */
+  readonly music?: string;
+  /** Music volume, 0–100. */
+  readonly musicVolume?: number;
 }
 
 /** Whether to reduce motion: the Player's choice, else the system setting. */
@@ -133,7 +137,7 @@ export function reduceMotion(options: Options): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export const DEFAULT_OPTIONS: Options = { defaultSpeed: 1, autoSlow: true, eventPopups: true };
+export const DEFAULT_OPTIONS: Options = { defaultSpeed: 1, autoSlow: true, eventPopups: true, music: 'random', musicVolume: 40 };
 
 export function loadOptions(store: KeyValueStore): Options {
   const r = readSave(store, KEYS.options, 1);

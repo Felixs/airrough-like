@@ -10,6 +10,7 @@ import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
+import { MusicPlayer } from './audio/music';
 import { browserStore, clearRun, loadMeta, loadOptions, loadRun, reduceMotion, resetProgress, saveMeta, saveOptions, saveRun } from './sim/save';
 import { awardRun } from './sim/meta';
 import { showMainMenu } from './ui/mainMenu';
@@ -32,6 +33,15 @@ async function start(): Promise<void> {
   const store = browserStore();
   let meta = loadMeta(store);
   let options = loadOptions(store);
+  const music = new MusicPlayer();
+  const applyMusic = () => {
+    music.setVolume((options.musicVolume ?? 40) / 100);
+    music.setChoice(options.music ?? 'random');
+  };
+  applyMusic();
+  // browsers start audio only after a click or key press
+  for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => music.unlock());
+  document.addEventListener('visibilitychange', () => music.setHidden(document.hidden && !options.runInBackground));
   let run: RunState = startRun(newSeed(), meta);
   let sim: Simulation = startLiveDay(run);
   let quota = dayPlan(run).quota;
@@ -183,6 +193,7 @@ async function start(): Promise<void> {
         saveOptions(store, options);
         autoSlow.checked = options.autoSlow;
         calmLights = reduceMotion(options);
+        applyMusic();
       },
       onResetProgress() {
         resetProgress(store);

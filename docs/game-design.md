@@ -241,6 +241,14 @@ cooldown (`simulation.ts → ACTIONS`).
   the map.
 - **Reduce motion** (Options; follows the system setting until changed): aircraft beacons glow steadily and strobes
   stay off instead of flashing.
+- **Music** (Options): three lo-fi 8-bit loops of about a minute each, made live from notes rather than recordings
+  (`audio/music.ts → SONGS`): "Tower at Night" (A minor, 72 BPM, 16 bars), "Gate Lounge" (D major, 84 BPM, 20 bars),
+  "Red-eye" (E minor, 66 BPM, 16 bars). Each is a one-chord-per-bar progression with a soft square-wave chord pad, a
+  triangle bass (root, fifth, root), noise drums (kick on 1 and 3, snare on 2 and 4, hats on the eighths), a
+  square-wave melody written from the song's own seed (so it sounds the same every time; it rests for the first two
+  bars and the last one), swung eighths, a low-pass filter and a faint vinyl crackle. The Player picks a song (it
+  loops), Random (a different random song after each one ends; the default) or Off, and a volume (default 40%). Music
+  starts with the first click or key press, and pauses while the tab is hidden unless the Day keeps running there.
 - **Unlockables & Boosts:** items that need more Air Miles are dimmed with their price in red; one line above the lists
   says how many Air Miles the Player has. The Main Menu's Play tab also shows the career (Runs played, Air Miles,
   Unlockables and Boost levels owned, the cheapest next item) and the controls.

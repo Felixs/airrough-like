@@ -1,3 +1,4 @@
+import { SONGS } from '../audio/music';
 import { buyBoost, buyUnlockable, metaShop, type BoostId, type MetaState, type ShopItem, type UnlockableId } from '../sim/meta';
 import { parseSeed, type RunState } from '../sim/run';
 import { reduceMotion, type Options } from '../sim/save';
@@ -78,6 +79,8 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
           <label>Starting speed <select data-opt="defaultSpeed">${[1, 2, 4, 8].map((v) => `<option value="${v}"${options.defaultSpeed === v ? ' selected' : ''}>${v}×</option>`).join('')}</select></label>
           <label class="check"><input type="checkbox" data-opt="autoSlow" ${options.autoSlow ? 'checked' : ''}> Auto-slow: 1× while aircraft land or take off</label>
           <label class="check"><input type="checkbox" data-opt="eventPopups" ${options.eventPopups ? 'checked' : ''}> Pause with a pop-up on Incidents, Crashes and Diversions</label>
+          <label>Music <select data-opt="music">${[['random', 'Random'], ...SONGS.map((s) => [s.id, s.title]), ['off', 'Off']].map(([v, l]) => `<option value="${v}"${(options.music ?? 'random') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label>Music volume <input type="range" min="0" max="100" step="5" data-opt="musicVolume" value="${options.musicVolume ?? 40}" aria-valuetext="${options.musicVolume ?? 40}%"></label>
           <label class="check"><input type="checkbox" data-opt="runInBackground" ${options.runInBackground ? 'checked' : ''}> Keep the Day running while the game's tab is hidden (otherwise it pauses)</label>
           <label class="check"><input type="checkbox" data-opt="reduceMotion" ${reduceMotion(options) ? 'checked' : ''}> Reduce motion: aircraft lights stay steady instead of flashing${options.reduceMotion === undefined ? ' <small>(following your system setting)</small>' : ''}</label>
           <div class="danger-zone"><h3>Reset progress</h3><p class="lead">Deletes Air Miles, Unlockables, Boosts and the saved Run.</p>
@@ -138,14 +141,22 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
     if (b.dataset.unlock || b.dataset.boost) handlers.onMeta(meta);
     render(b.dataset.unlock ?? b.dataset.boost);
   });
-  el.addEventListener('change', (e) => {
+  const onOption = (e: Event) => {
     const input = e.target as HTMLInputElement | HTMLSelectElement;
     const key = input.dataset.opt as keyof Options | undefined;
     if (!key) return;
     options = key === 'defaultSpeed'
       ? { ...options, defaultSpeed: Number(input.value) as Options['defaultSpeed'] }
+      : key === 'music' ? { ...options, music: input.value }
+      : key === 'musicVolume' ? { ...options, musicVolume: Number(input.value) }
       : { ...options, [key]: (input as HTMLInputElement).checked };
+    if (key === 'musicVolume') input.setAttribute('aria-valuetext', `${input.value}%`);
     handlers.onOptions(options);
+  };
+  el.addEventListener('change', onOption);
+  // the volume follows the slider while it is dragged
+  el.addEventListener('input', (e) => {
+    if ((e.target as HTMLElement).dataset.opt === 'musicVolume') onOption(e);
   });
   render();
 }
