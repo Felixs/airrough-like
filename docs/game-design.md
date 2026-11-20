@@ -53,6 +53,13 @@ Screen, which turns Score into Air Miles for the meta-progression.
   away from its building. The footprint turns with the facing.
 - A **Contact Stand** is attached when it shares at least one full tile of edge with its Terminal or Cargo Hub, on any
   side. Remote Stands stand free (an Unlockable) and turn round 1.5× slower.
+- Build Mode tools: Taxiway, Stands, Holding Bay, Runways, Buildings, Land, Move, Demolish. Tools with variants show
+  them as small tiles under the tools, grouped (Stands: Terminal / Cargo × Contact / Remote, each Small / Medium /
+  Large; Holding Bays by size; Runways: new 09-27 or 18-36 by length, Grass strips, Lengthen; Buildings: wings and
+  Support Buildings). Each tile has a top-down picture, its name and what it costs now (copy surcharge included);
+  tiles that are locked or cost more than the money left after pending changes are greyed out and can't be picked.
+  After something is placed the cursor is free (nothing follows it) until the next tool or tile is picked; Demolish
+  stays on so several things can be cleared in a row.
 - Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment) and priced before they are
   confirmed; Demolish refunds what building the same thing again would cost (so removing and rebuilding is free); Move keeps a structure and re-checks it at the new place.
   Changes are pending until confirmed. Leaving Build Mode (switching to Overview or pressing Start Day) with pending
@@ -197,8 +204,8 @@ cooldown (`simulation.ts → ACTIONS`).
 ## Controls and accessibility
 
 - **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
-  answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, Enter confirms, Ctrl Z undoes,
-  Esc cancels. Buttons name their keys; the Main Menu lists them.
+  answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
+  confirms, Ctrl Z undoes, Esc frees the cursor. Buttons name their keys; the Main Menu lists them.
 - **Never colour alone:** Stands and Holding Bays in the side panel say their state in words and a symbol (○ free,
   ◐ due with the arriving callsign, ● with the parked callsign); played Days on the Run Calendar carry ✓ or ✗;
   alerts start with what happened (CRASH, MAYDAY, …).

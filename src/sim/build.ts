@@ -255,7 +255,7 @@ function describe(s: Structure): string {
 }
 
 /** Price of a new structure, with the copy surcharge for Stands, Holding Bays and Runways. */
-function priceOf(layout: AirportLayout, s: Structure): number {
+export function priceOf(layout: AirportLayout, s: Structure): number {
   if (s.kind === 'stand' || s.kind === 'holdingBay') return spotPrice(layout, s);
   if (s.kind === 'runway') return Math.round(basePrice(s) * (1 + BUILD_COSTS.perCopy * layout.runways.length));
   return basePrice(s);
