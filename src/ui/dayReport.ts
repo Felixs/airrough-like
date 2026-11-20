@@ -33,7 +33,7 @@ export function daySections(run: RunState): string {
         <section><h3>Traffic</h3><dl>
           <dt>Landed</dt><dd>${r.landed.passenger} passenger · ${r.landed.cargo} cargo</dd>
           <dt>Diverted</dt><dd>${r.diversions}</dd>
-          ${diversions.map(([k, n]) => `<dt class="sub">${n} ${REASON[k]}</dt><dd></dd>`).join('')}
+          ${diversions.map(([k, n]) => `<dt class="sub">${n} ${REASON[k]}</dt>`).join('')}
           <dt>Parked overnight</dt><dd>${run.overnight.length}</dd>
         </dl></section>
       </div>

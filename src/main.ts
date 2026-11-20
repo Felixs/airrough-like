@@ -16,7 +16,9 @@ import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
 import { showNotice } from './ui/resume';
 
-const newSeed = () => Math.floor(Math.random() * 2 ** 31);
+// `?seed=123` makes every New Run use that seed (used for README screenshots and bug reports).
+const fixedSeed = Number(new URLSearchParams(location.search).get('seed'));
+const newSeed = () => (Number.isFinite(fixedSeed) && fixedSeed > 0 ? fixedSeed : Math.floor(Math.random() * 2 ** 31));
 
 async function start(): Promise<void> {
   const appEl = document.querySelector<HTMLElement>('#app')!;
