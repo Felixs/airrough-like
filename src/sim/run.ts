@@ -9,7 +9,7 @@ import { FAMILIES, describeTwist, simulationEffects, twistsFor, type Twist } fro
 import { createRandom } from './random';
 import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
 import { AIRCRAFT_TYPES } from './aircraft';
-import { acknowledgeAlert, type DiversionReason, carryOver, createSimulation, daySettled, finishDay, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
+import { HOURS, TIMINGS, acknowledgeAlert, type DiversionReason, carryOver, createSimulation, daySettled, finishDay, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
   readonly px: number;
@@ -226,6 +226,47 @@ export function dayPlan(run: RunState): DayPlan {
   return planDay({
     layout: run.layout, week: run.week, weekday: run.weekday, seed: run.seed, includeOvernight: run.dayIndex === 0, twist: dayTwists(run),
   });
+}
+
+/** The money a Day is expected to make if every flight that comes is handled (no Incidents, Fines or Diversions). */
+export interface DayEstimate {
+  /** Arrival Fees of today's arrivals. */
+  readonly arrivalFees: number;
+  /** Departure Fees of aircraft that can leave today (overnight aircraft included; late ones leave tomorrow). */
+  readonly departureFees: number;
+  readonly fees: number;
+  /** Paid at 24:00. */
+  readonly upkeep: number;
+  /** fees − upkeep. */
+  readonly net: number;
+  /** Money after the Day, if it goes to plan. */
+  readonly moneyAfter: number;
+}
+
+/**
+ * What the next Day should earn: every arrival pays its Arrival Fee, and every aircraft pays its Departure Fee if it can
+ * still leave today (its Turnaround ends before dusk, or a fitting Lit/ILS Runway works tonight). Upkeep is taken off.
+ */
+export function estimateDay(run: RunState): DayEstimate {
+  const plan = dayPlan(run);
+  const flights: readonly ScheduledFlight[] = [...run.overnight, ...plan.schedule];
+  const effects = simulationEffects(dayTwists(run), mixSeed(run.seed, run.dayIndex), run.towerModules.weatherStation, hasBuilding(run, 'deIcingPad'));
+  const fits = { short: 1, medium: 2, long: 3 } as const;
+  const size = { small: 1, medium: 2, large: 3 } as const;
+  const nightRunway = (s: keyof typeof size) => !effects.noLights &&
+    run.layout.runways.some((r) => (r.surface === 'lit' || r.surface === 'ils') && fits[r.length] >= size[s]);
+  const fee = (f: ScheduledFlight) => Math.round(AIRCRAFT_TYPES[f.type].fee * run.modifiers.feeFactor);
+  let arrivalFees = 0;
+  let departureFees = 0;
+  for (const f of flights) {
+    const type = AIRCRAFT_TYPES[f.type];
+    if (!(f.overnight && f.arrivalFeePaid !== false)) arrivalFees += fee(f);
+    const ready = (f.overnight ? HOURS.operationsStart : f.arrivalMinute) + TIMINGS.turnaroundMinutes[type.size] * run.modifiers.turnaroundFactor;
+    if (ready < HOURS.dusk || nightRunway(type.size)) departureFees += fee(f);
+  }
+  const fees = arrivalFees + departureFees;
+  const cost = upkeep(run);
+  return { arrivalFees, departureFees, fees, upkeep: cost, net: fees - cost, moneyAfter: run.money + fees - cost };
 }
 
 /** The Live Day simulation for the current Day: last night's aircraft plus today's Schedule. */

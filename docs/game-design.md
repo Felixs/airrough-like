@@ -96,7 +96,8 @@ Screen, which turns Score into Air Miles for the meta-progression.
   hold short → takeoff → departed; or crashed / diverted.
 - The ATC Tower gives each Runway to one aircraft at a time with Runway Separation (landing 4 → 2 min, takeoff 3 →
   1.5 min, improved by Radar and Controller Training). A landed aircraft takes the next free fitting Stand in landing
-  order, else a free Holding Bay; if neither is free it keeps holding. Low-fuel aircraft get priority; a departure
+  order, the smallest that fits first (a bigger one only when no smaller one is free), else a free Holding Bay (also
+  smallest first); if neither is free it keeps holding. Low-fuel aircraft get priority; a departure
   held short over 3 minutes goes before normal arrivals.
 - Fuel Reserves 40 / 45 / 55 min; an aircraft that runs dry while no fitting Runway is usable is Diverted.
 
@@ -121,6 +122,10 @@ Office), each with a cooldown (`simulation.ts → ACTIONS`).
   Departure Fee on takeoff (`aircraft.ts → AIRCRAFT_TYPES`). Upkeep is paid at 24:00 (`run.ts → UPKEEP`). Prices are in
   `build.ts → BUILD_COSTS` and `plan.ts → PRICES`; each extra copy of a Stand, Holding Bay or Runway costs 25% more.
 - Daily Quota: 75% of the Day's Demand in Movements, 90% on the Sunday Boss Day.
+- **Expected money** (Plan Mode Forecast): the fees the next Day earns if every flight that comes is handled —
+  each arrival's Arrival Fee, and the Departure Fee of every aircraft that can still leave that Day (its Turnaround
+  ends before dusk, or a fitting Lit/ILS Runway works tonight; overnight aircraft count too). Upkeep is taken off for
+  the expected net and the money after the Day. Incidents, Crash Fines and Diversions are not included.
 - Twists (`twists.ts`, Severity 1–4 rising with the Week): Weather, Infrastructure and Traffic Surge families, shown in
   advance on the Run Calendar.
 

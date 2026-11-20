@@ -169,3 +169,25 @@ describe('Departures at dusk', () => {
     expect(carryOver(sim).map((f) => f.id).sort()).toEqual(['D', 'E']); // they leave next morning
   });
 });
+
+describe('Stand choice', () => {
+  it('puts an aircraft on the smallest free Stand that fits, and on a bigger one only when no smaller one is free', async () => {
+    const { createLayout } = await import('./layout');
+    const small = { kind: 'stand' as const, id: 'S1', x: 21, y: 6, w: 2, h: 3, size: 'small' as const, serves: 'terminal' as const, placement: 'contact' as const };
+    const mixed = createLayout(layout.width, layout.height, [...layout.structures, small]);
+    const land = (ids: string[]) => {
+      let sim: Simulation = createSimulation({ layout: mixed, seed: 5, schedule: ids.map((id, k) => ({ id, type: 'C208' as const, arrivalMinute: 6 * 60 + k * 5 })) });
+      const got = new Map<string, string>();
+      while (sim.clock.minute < 7 * 60) {
+        sim = stepSimulation(sim);
+        if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };
+        for (const f of sim.flights) if (f.standId && !got.has(f.id)) got.set(f.id, f.standId);
+      }
+      return ids.map((id) => got.get(id) ?? null);
+    };
+    const [first, second] = land(['P', 'Q']); // Q lands while P is still on S1
+    expect(first).toBe('S1'); // the Small Stand, not one of the Medium ones next to it
+    expect(second).not.toBe('S1'); // S1 taken: a Medium Stand will do
+    expect(second).not.toBeNull();
+  });
+});

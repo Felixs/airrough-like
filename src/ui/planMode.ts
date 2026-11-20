@@ -1,5 +1,5 @@
 import { upgradeOffers, runCalendar, suggestions, type UpgradeId } from '../sim/plan';
-import { BONUS_TWIST_SCORE_PER_WEEK, canTakeBonusTwist, dayPlan, dayTwists, upkeep, type RunState } from '../sim/run';
+import { BONUS_TWIST_SCORE_PER_WEEK, canTakeBonusTwist, dayPlan, dayTwists, estimateDay, upkeep, type RunState } from '../sim/run';
 import { FAMILY_NAME, type Twist } from '../sim/twists';
 import { WEEKDAY_NAMES } from '../sim/schedule';
 import { mountBuildMode, type BuildModeView } from './buildMode';
@@ -39,6 +39,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
     build = null;
     const plan = dayPlan(run);
     const f = plan.forecast;
+    const est = estimateDay(run);
     const last = run.history[run.history.length - 1];
     const calendar = runCalendar(run);
     const boss = calendar.find((w) => w.week === run.week)?.days[6];
@@ -75,6 +76,10 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             <dt class="sub">Passenger</dt><dd title="Need Terminal Stands">S ${f.arrivalsByPurpose.passenger.small} · M ${f.arrivalsByPurpose.passenger.medium} · L ${f.arrivalsByPurpose.passenger.large}</dd>
             <dt class="sub">Cargo</dt><dd title="Need Cargo Hub Stands">S ${f.arrivalsByPurpose.cargo.small} · M ${f.arrivalsByPurpose.cargo.medium} · L ${f.arrivalsByPurpose.cargo.large}</dd>
             <dt>Peak hour</dt><dd>${String(f.peakHour).padStart(2, '0')}:00</dd>
+            <dt title="If every flight that comes is handled: no Incidents, Fines or Diversions">Expected fees</dt><dd class="expect" title="${esc(`Arrival Fees ${money(est.arrivalFees)} · Departure Fees ${money(est.departureFees)} (aircraft that can't leave before dark pay theirs tomorrow)`)}">≈ ${money(est.fees)}</dd>
+            <dt class="sub">Upkeep at 24:00</dt><dd>${money(-est.upkeep)}</dd>
+            <dt class="sub">Expected net</dt><dd class="expect ${est.net < 0 ? 'neg' : 'pos'}">≈ ${est.net >= 0 ? '+' : ''}${money(est.net)}</dd>
+            <dt class="sub">Money after the Day</dt><dd class="expect">≈ ${money(est.moneyAfter)}</dd>
             <dt>Turned away</dt><dd>${f.turnedAway.total}</dd>
             ${turned.map(([k, v]) => `<dt class="sub">${REASON[k] ?? k}</dt><dd>${v}</dd>`).join('')}
           </dl>${f.quota > (f.demand - f.turnedAway.total) * 2 ? '<p class="warn">The Schedule can’t reach the Quota: expand the airport.</p>' : ''}</div>
