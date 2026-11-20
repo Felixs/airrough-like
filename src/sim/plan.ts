@@ -154,8 +154,20 @@ export function suggestions(run: RunState): Suggestion[] {
   const out: Suggestion[] = [];
   const surface = airportSurface(run.layout);
   if (forecast.turnedAway.noFittingRunway > 0) out.push({ text: `${forecast.turnedAway.noFittingRunway} flights need a longer Runway`, upgrade: null });
-  if (forecast.turnedAway.noFittingStand > 0) out.push({ text: `${forecast.turnedAway.noFittingStand} flights have no Stand of their size`, upgrade: null });
-  if (forecast.turnedAway.standCapacity > 0) out.push({ text: `${forecast.turnedAway.standCapacity} flights turned away: not enough Stands`, upgrade: null });
+  // say which Stands are missing: by size and by building
+  const SIZE_WORD = { small: 'Small', medium: 'Medium', large: 'Large' } as const;
+  const groups = (reason: 'noFittingStand' | 'standCapacity') => forecast.turnedAwayDetail.filter((d) => d.reason === reason)
+    .map((d) => `${d.count} ${SIZE_WORD[d.size]} ${d.purpose}`).join(', ');
+  const building = (reason: 'noFittingStand' | 'standCapacity') => {
+    const kinds = new Set(forecast.turnedAwayDetail.filter((d) => d.reason === reason).map((d) => d.purpose === 'passenger' ? 'Terminal' : 'Cargo Hub'));
+    return [...kinds].join(' and ');
+  };
+  if (forecast.turnedAway.noFittingStand > 0) {
+    out.push({ text: `${forecast.turnedAway.noFittingStand} flights won't come because no Stand is big enough for them (${groups('noFittingStand')}). Build a ${building('noFittingStand')} Stand of that size or larger.`, upgrade: null });
+  }
+  if (forecast.turnedAway.standCapacity > 0) {
+    out.push({ text: `${forecast.turnedAway.standCapacity} flights won't come because the Stands that fit them are booked up for the Day (${groups('standCapacity')}). A Stand takes about 10 Small, 8 Medium or 6 Large arrivals a Day; more ${building('standCapacity')} Stands of those sizes let them come.`, upgrade: null });
+  }
   if (surface === 'grass' || surface === 'asphalt') out.push({ text: 'A Lit Runway stops evening flights diverting at 20:00', upgrade: 'surface' });
   if (run.towerModules.radar < 3) out.push({ text: 'Radar 3 unlocks Emergency Alerts before a Crash', upgrade: 'radar' });
   if (run.fireRescueLevel === 0) out.push({ text: 'A Fire & Rescue Station clears Crashes faster', upgrade: 'fireRescue' });

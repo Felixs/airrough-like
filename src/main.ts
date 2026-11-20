@@ -215,14 +215,28 @@ async function start(): Promise<void> {
     }
   });
 
-  app.ticker.add((ticker) => {
+  /** Runs the Day on by `realMs` of real time. */
+  const play = (realMs: number) => {
     // Auto-slow: watch landings and takeoffs at 1×, rush through the quiet minutes.
     const moving = sim.flights.some((f) => f.phase === 'landing' || f.phase === 'takeoff');
     const effective: Speed = autoSlow.checked && moving && speed > 1 ? 1 : speed;
     document.querySelector('.speed')?.classList.toggle('slowed', effective !== speed);
-    if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, effective));
+    if (!ended) sim = runTo(sim, advance(sim.clock, realMs, effective));
     // Nothing left to happen today (last departure gone, the rest parked for the night): end the Day now.
     if (!ended && !sim.pendingAlert && daySettled(sim)) sim = finishDay(sim);
+  };
+  // A hidden tab gets no animation frames, so the Day stops; with "Keep running in the background" a timer runs it
+  // on by the real time that passed (drawing catches up when the tab is shown again).
+  let lastBackground = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    const elapsed = now - lastBackground;
+    lastBackground = now;
+    if (document.hidden && options.runInBackground) play(Math.min(elapsed, 5_000));
+  }, 1_000);
+  app.ticker.add((ticker) => {
+    lastBackground = performance.now();
+    play(ticker.deltaMS);
     flightLayer.calm = calmLights;
     flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute), performance.now(), sim.clock.minute, stepFraction(sim.clock));
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));

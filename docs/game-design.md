@@ -29,6 +29,8 @@ Screen, which turns Score into Air Miles for the meta-progression.
   taxiing to, or holding short of, a Runway that can't be used at night goes to a reachable fitting Lit/ILS Runway
   instead; if there is none it turns round to a free fitting Stand (Contact or Remote; else a Holding Bay), stays
   overnight and leaves the next morning.
+- When the game's tab is hidden the browser stops drawing, so the Day pauses; the Options switch "Keep the Day running
+  while the game's tab is hidden" runs it on in the background instead.
 - The Day ends early once nothing more can happen (last departure gone, the rest parked overnight).
 - The game is deterministic: one Run Seed (shown, copyable, replayable) drives every random roll through a seeded RNG.
 
@@ -52,7 +54,7 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - A **Contact Stand** is attached when it shares at least one full tile of edge with its Terminal or Cargo Hub, on any
   side. Remote Stands stand free (an Unlockable) and turn round 1.5× slower.
 - Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment) and priced before they are
-  confirmed; Demolish refunds the base price; Move keeps a structure and re-checks it at the new place.
+  confirmed; Demolish refunds what building the same thing again would cost (so removing and rebuilding is free); Move keeps a structure and re-checks it at the new place.
   Changes are pending until confirmed. Leaving Build Mode (switching to Overview or pressing Start Day) with pending
   changes asks: build them (if they can't be built, the reason shows and the Player stays), discard them, or keep
   building.
@@ -157,6 +159,10 @@ cooldown (`simulation.ts → ACTIONS`).
   Departure Fee on takeoff (`aircraft.ts → AIRCRAFT_TYPES`). Upkeep is paid at 24:00 (`run.ts → UPKEEP`). Prices are in
   `build.ts → BUILD_COSTS` and `plan.ts → PRICES`; each extra copy of a Stand, Holding Bay or Runway costs 25% more.
 - Daily Quota: 75% of the Day's Demand in Movements, 90% on the Sunday Boss Day.
+- Plan Mode explains flights that won't come by size and Purpose: "no Stand big enough" (build a Stand of that size or
+  larger at that building) or "Stands booked up" (each Stand takes about 10 Small / 8 Medium / 6 Large arrivals a Day).
+  When even a perfect Day can't reach the Quota (two Movements per arrival, one per overnight aircraft), the Forecast
+  says so with the numbers.
 - **Expected money** (Plan Mode Forecast): the fees the next Day earns if every flight that comes is handled —
   each arrival's Arrival Fee, and the Departure Fee of every aircraft that can still leave that Day (its Turnaround
   ends before dusk, or a fitting Lit/ILS Runway works tonight; overnight aircraft count too). Upkeep is taken off for

@@ -123,6 +123,8 @@ export interface Options {
   readonly eventPopups: boolean;
   /** Steady instead of flashing aircraft lights; unset follows the system's reduced-motion setting. */
   readonly reduceMotion?: boolean;
+  /** Keep the Live Day running while the game's tab is hidden (otherwise it pauses). */
+  readonly runInBackground?: boolean;
 }
 
 /** Whether to reduce motion: the Player's choice, else the system setting. */
