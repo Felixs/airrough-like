@@ -1,62 +1,16 @@
 import type { Graphics } from 'pixi.js';
-import { TILE_SIZE, type AirportLayout, type TileRect } from '../sim/layout';
+import { TILE_SIZE, type AirportLayout } from '../sim/layout';
 import { holdShortLines } from '../sim/markings';
+import { centreLine } from '../sim/taxi';
 
 const T = TILE_SIZE;
 type Dir = 'n' | 's' | 'e' | 'w';
 const STEP: Record<Dir, [number, number]> = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
 const key = (x: number, y: number) => `${x},${y}`;
 
-/**
- * Centre-line tiles of the Taxiway network: the middle row/column of every strip, extended into
- * neighbouring strips up to their centre line so junctions meet. Tiles from the hold line onwards are left out.
- */
+/** Centre-line tiles to draw the yellow line on: the network's centre line, stopping at the hold-short lines. */
 export function centreTiles(layout: AirportLayout): Set<string> {
-  const taxiways = layout.structures.filter((s): s is TileRect & { kind: 'taxiway' } => s.kind === 'taxiway');
-  const at = (x: number, y: number) => taxiways.find((t) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h);
-  const out = new Set<string>();
-  const centreOf = (t: TileRect) => ({ cx: t.x + Math.floor(t.w / 2), cy: t.y + Math.floor(t.h / 2) });
-  for (const t of taxiways) {
-    const { cx, cy } = centreOf(t);
-    // A square piece follows whatever it joins: only above/below → vertical, only left/right → horizontal,
-    // both → a real junction. Runway connectors are vertical (or horizontal for vertical Runways).
-    const row = (yy: number) => Array.from({ length: t.w }, (_, i) => at(t.x + i, yy)).some(Boolean);
-    const col = (xx: number) => Array.from({ length: t.h }, (_, i) => at(xx, t.y + i)).some(Boolean);
-    const touchesRunwayEnd = layout.runways.some((r) => (t.y + t.h === r.y || t.y === r.y + r.h) && t.x >= r.x && t.x + t.w <= r.x + r.w);
-    const touchesRunwaySide = layout.runways.some((r) => (t.x + t.w === r.x || t.x === r.x + r.w) && t.y >= r.y && t.y + t.h <= r.y + r.h);
-    const ns = row(t.y - 1) || row(t.y + t.h) || touchesRunwayEnd;
-    const ew = col(t.x - 1) || col(t.x + t.w) || touchesRunwaySide;
-    const vertical = t.h > t.w || (t.h === t.w && ns && !ew);
-    if (t.h === t.w && ns && ew) {
-      out.add(key(cx, cy));
-      // squares that are not Runway connectors join every neighbour they touch
-      for (const d of ['n', 's', 'e', 'w'] as Dir[]) extend(cx, cy, d);
-      continue;
-    }
-    if (vertical) for (let y = t.y; y < t.y + t.h; y++) out.add(key(cx, y));
-    else for (let x = t.x; x < t.x + t.w; x++) out.add(key(x, cy));
-    if (vertical) {
-      extend(cx, t.y, 'n');
-      extend(cx, t.y + t.h - 1, 's');
-    } else {
-      extend(t.x, cy, 'w');
-      extend(t.x + t.w - 1, cy, 'e');
-    }
-  }
-  function extend(x: number, y: number, d: Dir): void {
-    const [dx, dy] = STEP[d];
-    const first = at(x + dx, y + dy);
-    if (!first) return;
-    const { cx, cy } = centreOf(first);
-    // walk into the neighbour until reaching its centre line (perpendicular) or a few tiles (parallel)
-    for (let i = 1; i <= 4; i++) {
-      const nx = x + dx * i;
-      const ny = y + dy * i;
-      if (!at(nx, ny)) return;
-      out.add(key(nx, ny));
-      if ((dx === 0 && ny === cy) || (dy === 0 && nx === cx)) return;
-    }
-  }
+  const out = centreLine(layout);
   for (const h of holdShortLines(layout)) {
     for (let y = h.y; y < h.y + h.h; y++) for (let x = h.x; x < h.x + h.w; x++) out.delete(key(x, y));
   }

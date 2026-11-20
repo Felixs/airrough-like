@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, taxiwayEdgeLights } from '../sim/markings';
+import { centreLine } from '../sim/taxi';
 import { drawCentreLines } from './taxiLines';
 
 /** Colours from the accepted UI baseline (ATC Console, night palette, v5 realistic vector art). */
@@ -219,8 +220,7 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
       drawRunway(g, s, labels);
       break;
     case 'taxiway':
-      g.rect(x, y, w, h).fill(COLOURS.asphalt);
-      break;
+      break; // drawn all together by drawTaxiways
     case 'terminal': {
       const wall = 6;
       const d = h - wall;
@@ -291,26 +291,112 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
       labels.addChild(label(name, x + w / 2, y - 1));
       break;
     }
-    case 'atcTower': {
-      // base building, tall shaft, octagonal glass cab, antenna; (cx, base) = foot of the shaft
-      const cx = x + w / 2;
-      const base = y + h - 2;
-      g.poly([cx + 3, base, cx + 30, base + 12, cx + 30, base + 16, cx - 3, base + 4]).fill(SHADOW);
-      box(g, x - 2, base - 6, w + 4, 6, 3, COLOURS.terminalRoof, COLOURS.wall);
-      const top = y + 7;
-      g.rect(cx - 2.6, top, 5.2, base - top - 4).fill(0x2b3732);
-      g.rect(cx - 2.6, top, 1.9, base - top - 4).fill(0x3a4943);
-      const oct = (r: number) => [-0.38, -0.92, 0.38, -0.92, 0.92, -0.38, 0.92, 0.38, 0.38, 0.92, -0.38, 0.92, -0.92, 0.38, -0.92, -0.38]
-        .map((v, i) => (i % 2 === 0 ? cx + v * r : top + v * r));
-      g.poly(oct(7.5)).fill(COLOURS.roofEdge);
-      g.poly(oct(5.3)).fill(COLOURS.glass).stroke({ width: 0.4, color: COLOURS.glassHi });
-      g.circle(cx, top, 2.6).fill(COLOURS.roof);
-      g.rect(cx - 0.4, top - 10, 0.8, 8).fill(0x8a9a95);
-      g.circle(cx, top - 10, 0.8).fill(0xff5a4a);
-      labels.addChild(label('TWR', cx, y + h + 6));
+    case 'atcTower':
+      drawTower(g, s, labels);
       break;
-    }
   }
+}
+
+/** Deterministic 0…1 noise per tile (so the paving looks the same every time it is drawn). */
+const noise = (x: number, y: number, salt = 0) => {
+  let h = (x * 374761393 + y * 668265263 + salt * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
+/**
+ * Taxiways as one paved surface, like the Runway: a darker edge round the outside, concrete slabs with joints,
+ * weathered patches and rubber on the centre line, and paved shoulders with a faint edge line along the outer sides.
+ */
+function drawTaxiways(g: Graphics, layout: AirportLayout): void {
+  const strips = layout.structures.filter((s) => s.kind === 'taxiway');
+  const paved = new Set<string>();
+  for (const s of strips) for (let x = s.x; x < s.x + s.w; x++) for (let y = s.y; y < s.y + s.h; y++) paved.add(`${x},${y}`);
+  const others = new Set<string>();
+  for (const s of layout.structures) {
+    if (s.kind === 'runway' || s.kind === 'stand' || s.kind === 'holdingBay') for (let x = s.x; x < s.x + s.w; x++) for (let y = s.y; y < s.y + s.h; y++) others.add(`${x},${y}`);
+  }
+  for (const s of strips) g.rect(s.x * T - 0.6, s.y * T - 0.6, s.w * T + 1.2, s.h * T + 1.2).fill(COLOURS.asphaltEdge);
+  for (const s of strips) g.rect(s.x * T, s.y * T, s.w * T, s.h * T).fill(COLOURS.asphalt);
+  for (const k of paved) {
+    const [tx, ty] = k.split(',').map(Number) as [number, number];
+    const px = tx * T;
+    const py = ty * T;
+    // slab tone varies a little; some slabs are patched
+    const n = noise(tx, ty);
+    g.rect(px, py, T, T).fill({ color: n > 0.5 ? 0x232a2e : 0x12171a, alpha: Math.abs(n - 0.5) * 0.5 });
+    if (noise(tx, ty, 1) > 0.88) g.rect(px + 1 + noise(tx, ty, 2) * 3, py + 1 + noise(tx, ty, 3) * 3, 2.5, 2).fill({ color: 0x0e1214, alpha: 0.5 });
+    for (let i = 0; i < 3; i++) g.circle(px + noise(tx, ty, 10 + i) * T, py + noise(tx, ty, 20 + i) * T, 0.25).fill({ color: 0x2c3438, alpha: 0.7 });
+    // slab joints on the tile grid
+    g.moveTo(px, py).lineTo(px + T, py).moveTo(px, py).lineTo(px, py + T).stroke({ width: 0.18, color: 0x0b0f11, alpha: 0.7 });
+    // shoulder and edge line on sides that face open ground
+    const side = (dx: number, dy: number) => {
+      const nk = `${tx + dx},${ty + dy}`;
+      return !paved.has(nk) && !others.has(nk);
+    };
+    const shoulder = 1.6;
+    const edgeLine = { width: 0.3, color: COLOURS.taxiLine, alpha: 0.35 };
+    if (side(0, -1)) { g.rect(px, py, T, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + shoulder).lineTo(px + T, py + shoulder).stroke(edgeLine); }
+    if (side(0, 1)) { g.rect(px, py + T - shoulder, T, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + T - shoulder).lineTo(px + T, py + T - shoulder).stroke(edgeLine); }
+    if (side(-1, 0)) { g.rect(px, py, shoulder, T).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + shoulder, py).lineTo(px + shoulder, py + T).stroke(edgeLine); }
+    if (side(1, 0)) { g.rect(px + T - shoulder, py, shoulder, T).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + T - shoulder, py).lineTo(px + T - shoulder, py + T).stroke(edgeLine); }
+  }
+  // tyre rubber along the centre line
+  for (const k of centreLine(layout)) {
+    const [tx, ty] = k.split(',').map(Number) as [number, number];
+    g.rect(tx * T + 1.5, ty * T + 1.5, T - 3, T - 3).fill({ color: 0x0c1012, alpha: 0.35 });
+  }
+}
+
+/**
+ * The ATC Tower in the same oblique 3D as the other buildings: a base building, a tapered concrete shaft lit from the
+ * west, a catwalk, the glass cab with mullions under an overhanging roof, a radar dome and a mast with a red light.
+ */
+function drawTower(g: Graphics, s: Structure, labels: Container): void {
+  const x = s.x * T;
+  const y = s.y * T;
+  const w = s.w * T;
+  const h = s.h * T;
+  const cx = x + w / 2;
+  const base = y + h - 2; // foot of the shaft
+  const top = y + 6; // cab roof centre
+  // long shadow of the shaft and cab towards the south-east
+  g.poly([cx - 3, base, cx + 3, base - 2, cx + 30, base + 11, cx + 33, base + 17, cx + 26, base + 18, cx - 2, base + 4]).fill(SHADOW);
+  box(g, x - 2, base - 6, w + 4, 6, 3, COLOURS.terminalRoof, COLOURS.wall);
+  // tapered shaft: light west face, dark east face, ring joints and a window slit
+  const shaftTop = top + 9;
+  const bw = 3.6;
+  const tw = 2.6;
+  g.poly([cx - bw, base - 3, cx, base - 3, cx, shaftTop, cx - tw, shaftTop]).fill(0x4a5a54);
+  g.poly([cx, base - 3, cx + bw, base - 3, cx + tw, shaftTop, cx, shaftTop]).fill(0x26302c);
+  for (let yy = shaftTop + 4; yy < base - 4; yy += 4) {
+    const k = (yy - shaftTop) / (base - 3 - shaftTop);
+    const half = tw + (bw - tw) * k;
+    g.moveTo(cx - half, yy).lineTo(cx + half, yy).stroke({ width: 0.25, color: 0x161d1a, alpha: 0.8 });
+  }
+  g.rect(cx - 0.45, shaftTop + 2, 0.9, base - shaftTop - 8).fill({ color: COLOURS.glassHi, alpha: 0.45 });
+  // octagon helper around (cx, cy) with radius r, squashed vertically for the oblique view
+  const oct = (cy: number, r: number) => [-0.38, -0.92, 0.38, -0.92, 0.92, -0.38, 0.92, 0.38, 0.38, 0.92, -0.38, 0.92, -0.92, 0.38, -0.92, -0.38]
+    .map((v, i) => (i % 2 === 0 ? cx + v * r : cy + v * r * 0.6));
+  // catwalk below the cab
+  g.poly(oct(shaftTop, 7.6)).fill(0x1b2320).stroke({ width: 0.35, color: 0x6f7f79 });
+  // glass cab: a band of tilted windows between the catwalk and the roof
+  const cabTop = top + 1.5;
+  const r = 6.2;
+  g.poly([cx - r * 0.92, cabTop, cx + r * 0.92, cabTop, cx + r * 0.92, shaftTop - 1, cx - r * 0.92, shaftTop - 1]).fill(0x1f5752);
+  g.poly(oct(shaftTop - 1, r)).fill(0x1f5752);
+  g.rect(cx - r * 0.92, cabTop, r * 0.9, shaftTop - 1 - cabTop).fill({ color: COLOURS.glassHi, alpha: 0.35 }); // lit west half
+  for (let k = -3; k <= 3; k++) g.moveTo(cx + k * r * 0.28, cabTop).lineTo(cx + k * r * 0.3, shaftTop - 0.6).stroke({ width: 0.3, color: 0x0d1f1d });
+  g.moveTo(cx - r * 0.92, cabTop + 1.4).lineTo(cx + r * 0.92, cabTop + 1.4).stroke({ width: 0.25, color: 0x8fd6cd, alpha: 0.5 });
+  // overhanging roof with an edge highlight
+  g.poly(oct(top, 7.4)).fill(COLOURS.roofEdge);
+  g.poly(oct(top - 0.6, 6.4)).fill(COLOURS.roof).stroke({ width: 0.3, color: 0x4a5a54 });
+  // radar dome, mast and obstruction light
+  g.circle(cx - 2.2, top - 1.2, 1.5).fill(0xd6dedb).stroke({ width: 0.25, color: 0x8a9a95 });
+  g.rect(cx + 1.6, top - 9, 0.7, 8).fill(0x8a9a95);
+  g.rect(cx + 0.6, top - 6.5, 2.7, 0.35).fill(0x8a9a95);
+  g.circle(cx + 1.95, top - 9.2, 0.8).fill(0xff5a4a);
+  labels.addChild(label('TWR', cx, y + h + 6));
 }
 
 /** Perimeter fence round everything built (plus a margin), with trees only outside it. */
@@ -385,7 +471,8 @@ export function drawAirfield(layout: AirportLayout): Container {
   // Paved surfaces first, buildings and markings on top.
   const order: Structure['kind'][] = ['taxiway', 'runway', 'holdingBay', 'stand', 'terminal', 'cargoHub', 'supportBuilding', 'atcTower'];
   for (const kind of order) {
-    for (const s of layout.structures) if (s.kind === kind) drawStructure(g, s, labels, layout);
+    if (kind === 'taxiway') drawTaxiways(g, layout);
+    else for (const s of layout.structures) if (s.kind === kind) drawStructure(g, s, labels, layout);
     if (kind === 'runway') drawTaxiMarkings(g, layout, labels);
   }
   root.addChild(ground, g, labels);

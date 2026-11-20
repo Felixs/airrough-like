@@ -45,7 +45,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
 
 ## Taxiing
 
-- The taxi network is every Taxiway tile; routes are shortest paths over 4-connected tiles. A route into a Stand ends
+- The taxi network is every Taxiway tile; routes are cheapest paths over 4-connected tiles where a step along the
+  **centre line** (the yellow line: the middle row/column of each strip, extended into the strips it joins) costs 1 and
+  any other tile 6, so aircraft keep to the yellow line and leave it only to turn into a Stand or onto a Runway connector.
+  A route into a Stand ends
   with a straight walk from the entry tile to the Stand's centre; aircraft park nose-in, facing away from the open side.
 - Aircraft taxi at 6 tiles per minute (`TIMINGS.taxiTilesPerMinute`), slower under the Taxiway-works Twist.
 - **Taxi Incidents**: the more aircraft taxi at once, the likelier one is stopped by an Incident (lowered by Ground
@@ -107,7 +110,10 @@ Office), each with a cooldown (`simulation.ts → ACTIONS`).
 ## Presentation
 
 - **View:** top-down, oblique 3D buildings with shadows to the south-east, dark muted palette, yellow Taxiway markings,
-  blue Taxiway edge lights. Names TERMINAL and CARGO are written on the roofs; Stands show their number and Holding
+  blue Taxiway edge lights. Taxiways are paved like the Runway: a darker outer edge, concrete slabs with joints and
+  weathered patches, darker tyre rubber along the centre line, and lighter shoulders with a faint edge line on sides
+  facing open ground. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
+  glass cab with mullions under an overhanging roof, radar dome and a mast with a red light. Names TERMINAL and CARGO are written on the roofs; Stands show their number and Holding
   Bays B1, B2… inside, in the corner away from the Taxiway; both have a curved yellow lead-in and a stop bar.
 - **Runway lights follow the surface:** none on Grass and Asphalt; white edge and green threshold lights when Lit;
   approach lights added with ILS.

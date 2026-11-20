@@ -54,3 +54,16 @@ describe('A Taxiway closed by an Incident', () => {
     expect(get('B').route !== lane || get('B').routeProgress > waited).toBe(true); // moving again once it is cleared
   });
 });
+
+describe('Taxi routes', () => {
+  it('keep to the centre line (the yellow line) and leave it only to turn into a Stand', async () => {
+    const { routeToStand } = await import('./taxi');
+    const along = taxiRoute(network, { x: 8, y: 10 }, { x: 40, y: 10 });
+    expect(along.every((t) => t.y === 10)).toBe(true);
+    const stand = layout.stands.find((s) => s.id === 'C2')!;
+    const route = routeToStand(network, network.runwayExit, stand);
+    const onTaxiway = route.filter((t) => network.tiles.has(key(t)));
+    const off = onTaxiway.filter((t) => !network.centre.has(key(t)));
+    expect(off.length).toBeLessThanOrEqual(3); // the hold point / exit and the Stand entry only
+  });
+});

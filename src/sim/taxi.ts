@@ -7,6 +7,64 @@ import { spotEntry, type AirportLayout, type Facing, type Runway, type TileRect 
 /** A Stand or Holding Bay: a spot an aircraft taxis into from the Taxiway below it. */
 export type Spot = TileRect & { readonly id: string; readonly facing?: Facing };
 
+type Dir = 'n' | 's' | 'e' | 'w';
+const STEP: Record<Dir, [number, number]> = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
+
+/**
+ * Centre-line tiles of the Taxiway network: the middle row/column of every strip, extended into
+ * neighbouring strips up to their centre line so junctions meet.
+ * Aircraft taxi along these tiles (the yellow line) and leave them only to turn into a Stand or onto a Runway.
+ */
+export function centreLine(layout: AirportLayout): Set<string> {
+  const taxiways = layout.structures.filter((s): s is TileRect & { kind: 'taxiway' } => s.kind === 'taxiway');
+  const at = (x: number, y: number) => taxiways.find((t) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h);
+  const out = new Set<string>();
+  const centreOf = (t: TileRect) => ({ cx: t.x + Math.floor(t.w / 2), cy: t.y + Math.floor(t.h / 2) });
+  for (const t of taxiways) {
+    const { cx, cy } = centreOf(t);
+    // A square piece follows whatever it joins: only above/below → vertical, only left/right → horizontal,
+    // both → a real junction. Runway connectors are vertical (or horizontal for vertical Runways).
+    const row = (yy: number) => Array.from({ length: t.w }, (_, i) => at(t.x + i, yy)).some(Boolean);
+    const col = (xx: number) => Array.from({ length: t.h }, (_, i) => at(xx, t.y + i)).some(Boolean);
+    const touchesRunwayEnd = layout.runways.some((r) => (t.y + t.h === r.y || t.y === r.y + r.h) && t.x >= r.x && t.x + t.w <= r.x + r.w);
+    const touchesRunwaySide = layout.runways.some((r) => (t.x + t.w === r.x || t.x === r.x + r.w) && t.y >= r.y && t.y + t.h <= r.y + r.h);
+    const ns = row(t.y - 1) || row(t.y + t.h) || touchesRunwayEnd;
+    const ew = col(t.x - 1) || col(t.x + t.w) || touchesRunwaySide;
+    const vertical = t.h > t.w || (t.h === t.w && ns && !ew);
+    if (t.h === t.w && ns && ew) {
+      out.add(`${cx},${cy}`);
+      // squares that are not Runway connectors join every neighbour they touch
+      for (const d of ['n', 's', 'e', 'w'] as Dir[]) extend(cx, cy, d);
+      continue;
+    }
+    if (vertical) for (let y = t.y; y < t.y + t.h; y++) out.add(`${cx},${y}`);
+    else for (let x = t.x; x < t.x + t.w; x++) out.add(`${x},${cy}`);
+    if (vertical) {
+      extend(cx, t.y, 'n');
+      extend(cx, t.y + t.h - 1, 's');
+    } else {
+      extend(t.x, cy, 'w');
+      extend(t.x + t.w - 1, cy, 'e');
+    }
+  }
+  function extend(x: number, y: number, d: Dir): void {
+    const [dx, dy] = STEP[d];
+    const first = at(x + dx, y + dy);
+    if (!first) return;
+    const { cx, cy } = centreOf(first);
+    // walk into the neighbour until reaching its centre line (perpendicular) or a few tiles (parallel)
+    for (let i = 1; i <= 4; i++) {
+      const nx = x + dx * i;
+      const ny = y + dy * i;
+      if (!at(nx, ny)) return;
+      out.add(`${nx},${ny}`);
+      if ((dx === 0 && ny === cy) || (dy === 0 && nx === cx)) return;
+    }
+  }
+  return out;
+}
+
+
 export interface Tile {
   readonly x: number;
   readonly y: number;
@@ -52,6 +110,8 @@ export interface TaxiNetwork {
   readonly layout: AirportLayout;
   /** Taxiway tiles keyed by "x,y". */
   readonly tiles: ReadonlySet<string>;
+  /** The centre-line tiles (the yellow line) aircraft keep to. */
+  readonly centre: ReadonlySet<string>;
   /** Runways with Taxiway connectors at both ends; others can't be used. */
   readonly runways: readonly RunwayAccess[];
   /** The first usable Runway (kept for single-Runway callers). */
@@ -128,7 +188,7 @@ export function buildTaxiNetwork(layout: AirportLayout): TaxiNetwork {
     if (c !== undefined && withExit.has(c) && withHold.has(c)) reachableSpots.add(s.id);
   }
   return {
-    layout, tiles, runways, component, reachableSpots,
+    layout, tiles, centre: centreLine(layout), runways, component, reachableSpots,
     runway: main?.runway ?? layout.runways[0], runwayExit: main?.runwayExit ?? nowhere, holdPoint: main?.holdPoint ?? nowhere,
   };
 }
@@ -148,19 +208,65 @@ function shortestPath(network: TaxiNetwork, from: Tile, to: Tile): Tile[] {
   return path;
 }
 
+/** Stepping off the centre line costs this much more than following it, so routes keep to the yellow line. */
+const OFF_CENTRE_COST = 6;
+
+/**
+ * Cheapest 4-neighbour path over Taxiway tiles (Dijkstra): a step onto a centre-line tile costs 1, any other tile
+ * OFF_CENTRE_COST, so aircraft follow the centre line and leave it only where they have to (a Stand entry, a hold
+ * point). Ties go to the neighbour found first (east, west, south, north), so routes are deterministic.
+ */
 function searchPath(network: TaxiNetwork, from: Tile, to: Tile, avoid?: ReadonlySet<string>): Tile[] | null {
   const start = key(from);
   const goal = key(to);
+  const cost = new Map<string, number>([[start, 0]]);
   const prev = new Map<string, string | null>([[start, null]]);
-  const queue: Tile[] = [from];
-  while (queue.length) {
-    const t = queue.shift()!;
-    if (key(t) === goal) break;
+  const done = new Set<string>();
+  // binary heap of [cost, order, tile]
+  const heap: [number, number, Tile][] = [[0, 0, from]];
+  let order = 0;
+  const less = (a: [number, number, Tile], b: [number, number, Tile]) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+  const push = (e: [number, number, Tile]) => {
+    heap.push(e);
+    for (let i = heap.length - 1; i > 0;) {
+      const p = (i - 1) >> 1;
+      if (!less(heap[i]!, heap[p]!)) break;
+      [heap[i], heap[p]] = [heap[p]!, heap[i]!];
+      i = p;
+    }
+  };
+  const pop = () => {
+    const top = heap[0]!;
+    const last = heap.pop()!;
+    if (heap.length) {
+      heap[0] = last;
+      for (let i = 0; ;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < heap.length && less(heap[l]!, heap[m]!)) m = l;
+        if (r < heap.length && less(heap[r]!, heap[m]!)) m = r;
+        if (m === i) break;
+        [heap[i], heap[m]] = [heap[m]!, heap[i]!];
+        i = m;
+      }
+    }
+    return top;
+  };
+  while (heap.length) {
+    const [c, , t] = pop();
+    const k = key(t);
+    if (done.has(k)) continue;
+    done.add(k);
+    if (k === goal) break;
     for (const n of [{ x: t.x + 1, y: t.y }, { x: t.x - 1, y: t.y }, { x: t.x, y: t.y + 1 }, { x: t.x, y: t.y - 1 }]) {
-      const k = key(n);
-      if (network.tiles.has(k) && !prev.has(k) && !avoid?.has(k)) {
-        prev.set(k, key(t));
-        queue.push(n);
+      const nk = key(n);
+      if (!network.tiles.has(nk) || done.has(nk) || avoid?.has(nk)) continue;
+      const nc = c + (network.centre.has(nk) ? 1 : OFF_CENTRE_COST);
+      if (nc < (cost.get(nk) ?? Infinity)) {
+        cost.set(nk, nc);
+        prev.set(nk, k);
+        push([nc, ++order, n]);
       }
     }
   }
