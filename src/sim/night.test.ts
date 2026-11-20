@@ -90,3 +90,24 @@ describe('Overnight carry-over', () => {
     expect(later.money).toBe(1200);
   });
 });
+
+describe('Ending the Day early', () => {
+  it('is possible once the last departure has gone', async () => {
+    const { daySettled } = await import('./simulation');
+    let s = createSimulation({ layout: withRunway('lit'), schedule: [{ id: 'A', type: 'C208', arrivalMinute: 360 }], seed: 1 });
+    expect(daySettled(s)).toBe(false);
+    while (s.flights[0]!.phase !== 'departed') s = stepSimulation(s);
+    expect(daySettled(s)).toBe(true);
+    expect(s.clock.minute).toBeLessThan(8 * 60);
+  });
+
+  it('waits while an aircraft on a Stand can still leave, but not for ones parked for the night', async () => {
+    const { daySettled } = await import('./simulation');
+    const parked = run('asphalt', [{ id: 'S', type: 'A320', arrivalMinute: 19 * 60 + 30 }], 20 * 60 + 30);
+    expect(parked.flights[0]!.phase).toBe('onStand');
+    expect(daySettled(parked)).toBe(true);
+    const lit = run('lit', [{ id: 'S', type: 'A320', arrivalMinute: 19 * 60 + 30 }], 20 * 60 + 5);
+    expect(lit.flights[0]!.phase).toBe('onStand');
+    expect(daySettled(lit)).toBe(false);
+  });
+});

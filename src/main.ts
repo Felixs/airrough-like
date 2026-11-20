@@ -5,7 +5,7 @@ import { FlightLayer } from './render/flights';
 import { advance, formatClock, isDayOver, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
 import { continueEndless, dayPlan, dayTwists, endDay, startLiveDay, startRun, type RunState } from './sim/run';
-import { acknowledgeAlert, runTo, useAction, type Simulation } from './sim/simulation';
+import { acknowledgeAlert, daySettled, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
 import { showPlanMode } from './ui/planMode';
@@ -139,6 +139,8 @@ async function start(): Promise<void> {
     const effective: Speed = autoSlow.checked && moving && speed > 1 ? 1 : speed;
     document.querySelector('.speed')?.classList.toggle('slowed', effective !== speed);
     if (!ended) sim = runTo(sim, advance(sim.clock, ticker.deltaMS, effective));
+    // Nothing left to happen today (last departure gone, the rest parked for the night): end the Day now.
+    if (!ended && !sim.pendingAlert && daySettled(sim)) sim = finishDay(sim);
     flightLayer.update(sim.flights);
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
