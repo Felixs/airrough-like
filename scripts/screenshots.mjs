@@ -86,6 +86,9 @@ await page.screenshot({ path: out('live-day-dawn') });
 await page.click('[data-speed="8"]');
 await until('08:40', 90_000);
 await page.click('[data-speed="0"]');
+// pick a taxiing aircraft from the flight strips: it is ringed on the map
+const taxiing = await page.$('.strips[data-group="ground"] li[data-id]');
+if (taxiing) await taxiing.click();
 await settle(800);
 await page.screenshot({ path: out('live-day') });
 

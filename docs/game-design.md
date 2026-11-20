@@ -244,6 +244,11 @@ cooldown (`simulation.ts → ACTIONS`).
 - **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
   answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
   confirms, Ctrl Z undoes, Esc frees the cursor. Buttons name their keys; the Main Menu lists them.
+- **Finding an aircraft:** clicking a flight strip (Inbound, Holding or Ground) or an alert about an aircraft picks
+  it: its strip is outlined in yellow (the rail opens and scrolls to it) and on the map it gets a gently pulsing yellow
+  ring with a pointer above it (steady with Reduce motion). Clicking it again drops it; it is dropped by itself when
+  the aircraft leaves. Picking a Holding aircraft also makes it the target of Manual Divert and Priority Landing.
+  Enter or Space on a focused strip or alert does the same.
 - **Never colour alone:** Stands and Holding Bays in the side panel say their state in words and a symbol (○ free,
   ◐ due with the arriving callsign, ● with the parked callsign); played Days on the Run Calendar carry ✓ or ✗;
   alerts start with what happened (CRASH, MAYDAY, …).

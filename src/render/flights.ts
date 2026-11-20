@@ -258,6 +258,14 @@ export class FlightLayer {
   private minute = -1;
   /** Reduce motion: the beacon glows steadily and the strobes stay off instead of flashing. */
   calm = false;
+  /** The aircraft picked in the flight strips or alerts: drawn with a ring round it. */
+  highlight: string | undefined;
+  private readonly ring = new Graphics();
+
+  constructor() {
+    this.ring.zIndex = 5;
+    this.container.addChild(this.ring);
+  }
 
   /**
    * `darkness` 0 (day) … ~0.6 (night) from the daylight curve; lights fade in as it gets dark. `minute` and `fraction`
@@ -275,6 +283,7 @@ export class FlightLayer {
         this.sprites.delete(id);
       }
     }
+    this.ring.clear();
     this.lights.visible = darkness > 0.1;
     this.lights.alpha = Math.min(1, (darkness - 0.1) / 0.25);
     for (const f of flights) {
@@ -309,6 +318,14 @@ export class FlightLayer {
       s.shadow.position.set(pose.x + look.shadowOffset, pose.y + look.shadowOffset);
       s.shadow.rotation = rotation;
       s.shadow.alpha = look.shadowAlpha;
+      if (f.id === this.highlight) {
+        // a ring round it (pulsing gently, steady with Reduce motion) and a pointer above it
+        const radius = (SPECS[f.type].length * 0.75 + 4) * look.scale;
+        const pulse = this.calm ? 1 : 0.6 + 0.4 * Math.sin(nowMs / 250);
+        this.ring.circle(pose.x, pose.y, radius).stroke({ width: 1.6, color: 0xf0d24a, alpha: pulse });
+        this.ring.circle(pose.x, pose.y, radius + 3).stroke({ width: 0.6, color: 0xf0d24a, alpha: pulse * 0.5 });
+        this.ring.poly([pose.x, pose.y - radius - 2, pose.x - 3, pose.y - radius - 7, pose.x + 3, pose.y - radius - 7]).fill({ color: 0xf0d24a, alpha: pulse });
+      }
       if (!this.lights.visible) continue;
       const l = s.lights;
       l.root.position.set(pose.x, pose.y);

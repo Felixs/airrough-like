@@ -71,6 +71,8 @@ export interface Alert {
   readonly kind: SimEvent['kind'];
   readonly severity: 'info' | 'warn' | 'danger';
   readonly text: string;
+  /** The aircraft it is about (none for a Runway change). */
+  readonly flightId: string | null;
 }
 
 const ALERT_TEXT: Record<SimEvent['kind'], [Alert['severity'], (id: string) => string]> = {
@@ -99,7 +101,10 @@ export function describeEvent(sim: Simulation, e: SimEvent): string {
 }
 
 export function alerts(sim: Simulation): Alert[] {
-  return [...sim.events].reverse().map((e) => ({ minute: e.minute, kind: e.kind, severity: ALERT_TEXT[e.kind][0], text: describeEvent(sim, e) }));
+  return [...sim.events].reverse().map((e) => ({
+    minute: e.minute, kind: e.kind, severity: ALERT_TEXT[e.kind][0], text: describeEvent(sim, e),
+    flightId: e.kind !== 'runwayChange' && sim.flights.some((f) => f.id === e.flightId) ? e.flightId : null,
+  }));
 }
 
 export interface SpotStatus {
