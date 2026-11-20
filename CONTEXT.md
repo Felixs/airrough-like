@@ -102,10 +102,6 @@ _Avoid_: Simulation, battle
 A Player intervention available during a Live Day, each on its own cooldown. Building is not an Emergency Action.
 _Avoid_: Ability, power, skill
 
-**Ground Stop**:
-Emergency Action that freezes all taxiing briefly to untangle a jam; always available, long cooldown (about once or twice a Day).
-_Avoid_: Freeze, halt
-
 **Rush Turnaround**:
 Emergency Action that shortens one aircraft's Turnaround; requires a Ramp Agent Station.
 _Avoid_: Speed up, quick turn
@@ -131,8 +127,12 @@ An automatic pause triggered when a Crash from an error is about to happen, givi
 _Avoid_: Warning, slow-mo, save
 
 **Fuel Alert**:
-An automatic pause, unlocked at Radar level 3, when a Holding aircraft's Fuel Reserve runs low, so the Player can use Emergency Actions (e.g. Manual Divert, Priority Landing) in time. It gives no second roll.
+The pause when a Holding aircraft's Fuel Reserve runs low (always, whatever the Radar or pop-up setting): the Player must choose to divert it or to declare a Mayday.
 _Avoid_: Fuel warning, low-fuel pause
+
+**Mayday**:
+A declared fuel emergency: the aircraft lands next, every Runway stops for it until it is down, and if its landing goes wrong it Crashes, having no fuel to go around. It may land with no Stand free and then waits by its exit.
+_Avoid_: Emergency landing, priority
 
 **ATC Tower**:
 The building that automatically routes every aircraft (Runway, taxi route, Stand). Its Tower Modules decide how many aircraft it can handle and how often it makes mistakes.
@@ -199,6 +199,10 @@ _Avoid_: Strip, lane
 **Crosswind**:
 Wind blowing across a Runway rather than along it; raises Go-Around and Pilot Error chances, so Runways in both orientations (horizontal and vertical) pay off.
 _Avoid_: Side wind
+
+**Runway Designator**:
+The name of a Runway end as seen on approach: 09/27 for horizontal and 18/36 for vertical Runways, plus L / C / R for parallels (two L R, three L C R; from four on, each further group of up to three takes the next number). The letter swaps at the other end (09L is 27R).
+_Avoid_: Runway number, R1/R2
 
 **Runway Length**:
 Short, Medium or Long; a Runway serves its matching Size Class and every smaller one.

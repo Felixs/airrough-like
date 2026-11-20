@@ -171,3 +171,41 @@ const SURFACE_RANK: Record<RunwaySurface, number> = { grass: 0, asphalt: 1, lit:
 export function airportSurface(layout: AirportLayout): RunwaySurface {
   return layout.runways.reduce<RunwaySurface>((best, r) => (SURFACE_RANK[r.surface] > SURFACE_RANK[best] ? r.surface : best), 'grass');
 }
+
+/** The two names of a Runway: `forward` for landing east or south (09 / 18), `reverse` for west or north (27 / 36). */
+export interface RunwayName { readonly forward: string; readonly reverse: string }
+
+/**
+ * Runway designators as on a real airport: 09/27 (horizontal) or 18/36 (vertical), and parallel Runways get letters as
+ * seen from the approach (ICAO Annex 14): two L R, three L C R; from four on they are split into groups of up to three
+ * and each further group takes the next number (e.g. 09L 09R 10L 10R). Letters swap at the other end: 09L is 27R.
+ */
+export function runwayNames(layout: AirportLayout): RunwayName[] {
+  const names: RunwayName[] = layout.runways.map(() => ({ forward: '', reverse: '' }));
+  const two = (n: number) => String(n).padStart(2, '0');
+  const flip: Record<string, string> = { L: 'R', R: 'L', C: 'C', '': '' };
+  const groups = (n: number): string[][] => {
+    if (n === 1) return [['']];
+    if (n === 2) return [['L', 'R']];
+    if (n === 3) return [['L', 'C', 'R']];
+    if (n === 4) return [['L', 'R'], ['L', 'R']];
+    if (n === 5) return [['L', 'C', 'R'], ['L', 'R']];
+    return [['L', 'C', 'R'], ...groups(n - 3)];
+  };
+  for (const vertical of [false, true]) {
+    // left to right as seen landing east (09: north first) or south (18: east first)
+    const order = layout.runways.map((r, i) => ({ r, i })).filter(({ r }) => (r.h > r.w) === vertical)
+      .sort((a, b) => (vertical ? b.r.x - a.r.x : a.r.y - b.r.y));
+    const base = vertical ? 18 : 9;
+    let k = 0;
+    groups(order.length || 1).forEach((letters, g) => {
+      for (const letter of letters) {
+        const at = order[k++];
+        if (!at) return;
+        const forward = (base + g - 1) % 36 + 1;
+        names[at.i] = { forward: two(forward) + letter, reverse: two((forward + 17) % 36 + 1) + flip[letter] };
+      }
+    });
+  }
+  return names;
+}

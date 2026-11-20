@@ -13,6 +13,7 @@ const REASON = {
   noRunway: 'low on fuel with no usable Runway',
   curfew: 'after 22:00 / at the Curfew',
   manual: 'by Manual Divert',
+  lowFuel: 'at low fuel, by your choice',
 } as const;
 
 /** The Day's sections (money, traffic, safety) for the Day report and the Score Screen. */

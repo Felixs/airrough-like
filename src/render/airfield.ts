@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type Structure, type TileRect } from '../sim/layout';
+import { runwayNames, sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type RunwayName, type Facing, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, taxiwayEdgeLights } from '../sim/markings';
 import { centreLine } from '../sim/taxi';
 import { drawCentreLines } from './taxiLines';
@@ -65,7 +65,7 @@ function hvac(g: Graphics, x: number, y: number, w = 5, d = 3.5): void {
 }
 
 function text(labels: Container, value: string, x: number, y: number, size: number, fill: number, rotation = 0): void {
-  const t = new Text({ text: value, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: size, fontWeight: '700', fill } });
+  const t = new Text({ text: value, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: size, fontWeight: '700', fill, align: 'center', lineHeight: size * 1.1 } });
   t.resolution = 6;
   t.anchor.set(0.5);
   t.position.set(x, y);
@@ -73,7 +73,7 @@ function text(labels: Container, value: string, x: number, y: number, size: numb
   labels.addChild(t);
 }
 
-function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Container): void {
+function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Container, name: RunwayName): void {
   const x = s.x * T;
   const y = s.y * T;
   const w = s.w * T;
@@ -102,12 +102,15 @@ function drawRunway(g: Graphics, s: Structure & { kind: 'runway' }, labels: Cont
   }
   r(0, 0.5, len, 0.4);
   r(0, wid - 0.9, len, 0.4);
-  // designators: '09'/'27' (or '18'/'36') read from each landing direction
-  const [a, b] = vertical ? ['18', '36'] : ['09', '27'];
+  // designators (e.g. 09L / 27R) read from each landing direction
+  const { forward: a, reverse: b } = name;
   const rot = vertical ? 0 : Math.PI / 2;
   const at = (along: number) => (vertical ? [x + wid / 2, y + along] : [x + along, y + wid / 2]) as [number, number];
-  text(labels, a!, ...at(14), 5, COLOURS.marking, vertical ? 0 : -rot);
-  text(labels, b!, ...at(len - 14), 5, COLOURS.marking, vertical ? Math.PI : rot);
+  // the number, with a parallel Runway's letter (L / C / R) under it, nearer the threshold
+  const paint = (name: string) => (name.length > 2 ? `${name.slice(0, 2)}\n${name.slice(2)}` : name);
+  // upright for the pilot on approach: the top of the digits points the way the aircraft lands
+  text(labels, paint(a), ...at(14), 5, COLOURS.marking, vertical ? Math.PI : rot);
+  text(labels, paint(b), ...at(len - 14), 5, COLOURS.marking, vertical ? 0 : -rot);
   // white edge and green threshold lights once the Runway is Lit; approach lights only with an ILS
   if (s.surface !== 'lit' && s.surface !== 'ils') return;
   for (let d = 4; d < len; d += 8) {
@@ -217,7 +220,7 @@ function drawStructure(g: Graphics, s: Structure, labels: Container, layout: Air
   const h = s.h * T;
   switch (s.kind) {
     case 'runway':
-      drawRunway(g, s, labels);
+      drawRunway(g, s, labels, runwayNames(layout)[layout.runways.indexOf(s)] ?? { forward: '09', reverse: '27' });
       break;
     case 'taxiway':
       break; // drawn all together by drawTaxiways
@@ -448,13 +451,14 @@ function drawTaxiMarkings(g: Graphics, layout: AirportLayout, labels: Container)
         else g.rect(o - 0.25, start + p, 0.5, seg).fill(COLOURS.taxiLine);
       }
     });
-    const sx = across ? h.x * T - 7.5 : (h.side === 'west' ? h.x * T - 7.5 : (h.x + 1) * T + 0.5);
+    const sw = 1.6 + h.sign.length * 1.45; // the plate fits "09-27" as well as "09L-27R"
+    const sx = across ? h.x * T - sw - 0.5 : (h.side === 'west' ? h.x * T - sw - 0.5 : (h.x + 1) * T + 0.5);
     const sy = across ? (h.side === 'north' ? h.y * T + 1 : h.y * T + 3) : h.y * T - 4;
-    g.roundRect(sx, sy, 7, 3.4, 0.4).fill(COLOURS.signRed);
+    g.roundRect(sx, sy, sw, 3.4, 0.4).fill(COLOURS.signRed);
     const text = new Text({ text: h.sign, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 2.4, fontWeight: '700', fill: COLOURS.signText } });
     text.resolution = 6;
     text.anchor.set(0.5);
-    text.position.set(sx + 3.5, sy + 1.75);
+    text.position.set(sx + sw / 2, sy + 1.75);
     labels.addChild(text);
   }
   for (const l of taxiwayEdgeLights(layout)) g.circle(l.x * T, l.y * T, 0.45).fill(COLOURS.edgeLight);

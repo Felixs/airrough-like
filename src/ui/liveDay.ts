@@ -21,10 +21,11 @@ export interface LiveDayView {
 export interface LiveDayHandlers {
   onAction(id: ActionId, targetId: string | undefined): void;
   onAcknowledgeAlert(): void;
+  /** The low-fuel decision. */
+  onFuelChoice(choice: 'divert' | 'mayday'): void;
 }
 
 const ACTION_LABEL: Record<ActionId, [string, string]> = {
-  groundStop: ['Ground Stop', 'Freezes all taxiing for 5 minutes'],
   rushTurnaround: ['Rush Turnaround', 'Halves the Turnaround at the Stand the most urgent Holding aircraft waits for'],
   manualDivert: ['Manual Divert', 'Sends the selected (or lowest-fuel) Holding aircraft away'],
   priorityLanding: ['Priority Landing', 'Moves the selected (or lowest-fuel) Holding aircraft to the front of the queue'],
@@ -51,11 +52,8 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
   });
   $('#alert-banner').addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    const action = target.closest<HTMLButtonElement>('button[data-alert-action]');
-    if (action && !action.disabled && current?.pendingAlert) {
-      // act on the aircraft the alert is about, then carry on
-      handlers.onAction(action.dataset.alertAction as ActionId, current.pendingAlert.flightId);
-      handlers.onAcknowledgeAlert();
+    if (target.closest('button[data-fuel="divert"]')) {
+      handlers.onFuelChoice('divert');
     } else if (target.closest('button[data-ack]')) {
       handlers.onAcknowledgeAlert();
     }
@@ -180,17 +178,11 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
     }
     const f = sim.flights.find((x) => x.id === alert.flightId);
     const who = `${esc(callsignOf(sim, alert.flightId))} (${f?.type ?? ''})`;
-    const available = actionAvailability(sim);
-    const actionButton = (id: ActionId) => {
-      const a = available[id];
-      const why = a.missing ? `Needs ${BUILDING[a.missing]}` : a.cooldownLeft > 0 ? `Ready in ${Math.ceil(a.cooldownLeft)} min` : '';
-      return `<button type="button" data-alert-action="${id}" ${a.ready ? '' : 'disabled'} title="${esc(why || ACTION_LABEL[id][1])}">${ACTION_LABEL[id][0]}${why ? `<small>${esc(why)}</small>` : ''}</button>`;
-    };
     banner.hidden = false;
     banner.className = `alert-banner ${alert.kind}`;
     if (alert.kind === 'fuel') {
-      banner.innerHTML = `<b>FUEL ALERT</b><span>${who} is low on fuel: ${Math.ceil(f?.fuelMinutes ?? 0)} min left.</span>
-        <div class="alert-actions">${actionButton('priorityLanding')}${actionButton('manualDivert')}<button type="button" data-ack>Continue</button></div>`;
+      banner.innerHTML = `<b>LOW FUEL</b><span>${who} has ${Math.ceil(f?.fuelMinutes ?? 0)} min of fuel left. Divert it now (no fees, no Movement, no fine), or declare a Mayday: it lands next and every Runway waits for it, but if the landing goes wrong it crashes, with no fuel to go around.</span>
+        <div class="alert-actions"><button type="button" data-fuel="divert">Divert</button><button type="button" data-ack class="danger">Mayday landing</button></div>`;
     } else if (alert.kind === 'emergency') {
       banner.innerHTML = `<b>EMERGENCY ALERT</b><span>${who} is about to crash. Intervene for a second roll (${Math.round(secondRollChance(sim.controllerTrainingLevel) * 100)}% to save it).</span>
         <div class="alert-actions"><button type="button" data-ack>Intervene</button></div>`;
@@ -203,7 +195,7 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
         ? 'Diverted aircraft bring no fees or Movements.'
         : blocked.length ? `${blocked.map((r) => `RWY ${r.name} blocked until ${r.until !== null ? hhmm(r.until) : ''}`).join(', ')}. A Fire & Rescue Station clears it faster.` : '';
       banner.innerHTML = `<b>${worst}</b><span>${events.map((e) => esc(describeEvent(sim, e))).join('<br>')}${cost ? `<br>Cost: −$${cost.toLocaleString('en-US')}` : ''}${advice ? `<br><small>${esc(advice)}</small>` : ''}</span>
-        <div class="alert-actions">${events.some((e) => e.kind === 'taxiIncident') ? actionButton('groundStop') : ''}<button type="button" data-ack>Continue</button></div>`;
+        <div class="alert-actions"><button type="button" data-ack>Continue</button></div>`;
     }
     banner.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
   }

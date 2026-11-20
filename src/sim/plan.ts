@@ -25,7 +25,7 @@ const MODULE_NAME: Record<keyof TowerModules, string> = {
   radar: 'Radar', groundRadar: 'Ground Radar', weatherStation: 'Weather Station', controllerTraining: 'Controller Training',
 };
 const MODULE_EFFECT: Record<keyof TowerModules, string> = {
-  radar: 'More aircraft airborne before ATC Errors rise; shorter Runway Separation; Fuel Alerts at 3, Emergency Alerts at 3–4',
+  radar: 'More aircraft airborne before ATC Errors rise; shorter Runway Separation; Emergency Alerts at 3–4',
   groundRadar: 'Fewer Taxiway Incidents',
   weatherStation: 'Handles storms better',
   controllerTraining: 'Lower ATC Error chance; shorter Runway Separation; better second rolls',
@@ -157,7 +157,7 @@ export function suggestions(run: RunState): Suggestion[] {
   if (forecast.turnedAway.noFittingStand > 0) out.push({ text: `${forecast.turnedAway.noFittingStand} flights have no Stand of their size`, upgrade: null });
   if (forecast.turnedAway.standCapacity > 0) out.push({ text: `${forecast.turnedAway.standCapacity} flights turned away: not enough Stands`, upgrade: null });
   if (surface === 'grass' || surface === 'asphalt') out.push({ text: 'A Lit Runway stops evening flights diverting at 20:00', upgrade: 'surface' });
-  if (run.towerModules.radar < 3) out.push({ text: 'Radar 3 unlocks Fuel Alerts and Emergency Alerts', upgrade: 'radar' });
+  if (run.towerModules.radar < 3) out.push({ text: 'Radar 3 unlocks Emergency Alerts before a Crash', upgrade: 'radar' });
   if (run.fireRescueLevel === 0) out.push({ text: 'A Fire & Rescue Station clears Crashes faster', upgrade: 'fireRescue' });
   return out.slice(0, 4);
 }

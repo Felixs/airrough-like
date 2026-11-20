@@ -3,8 +3,7 @@
  * Runway chip, Movements per hour). Pure functions of the simulation; the DOM only renders them.
  */
 import { AIRCRAFT_TYPES, type AircraftTypeId, type Purpose } from './aircraft';
-import type { SizeClass } from './layout';
-import { activeDesignator } from './wind';
+import { runwayNames, type SizeClass } from './layout';
 import { ATC, HOURS, TIMINGS, isDark, windAt, type FlightPhase, type ScheduledFlight, type SimEvent, type Simulation } from './simulation';
 
 interface StripBase {
@@ -76,6 +75,7 @@ export interface Alert {
 
 const ALERT_TEXT: Record<SimEvent['kind'], [Alert['severity'], (id: string) => string]> = {
   lowFuel: ['warn', (id) => `${id} low on fuel`],
+  mayday: ['danger', (id) => `MAYDAY: ${id} lands next, all Runways held`],
   goAround: ['info', (id) => `${id} went around`],
   rejectedTakeoff: ['info', (id) => `${id} rejected takeoff`],
   incident: ['warn', (id) => `Runway Incident: ${id}`],
@@ -134,7 +134,8 @@ export function runwayStatuses(sim: Simulation): RunwayStatus[] {
   const now = sim.clock.minute;
   const wind = windAt(sim, now);
   return sim.layout.runways.map((r, i): RunwayStatus => {
-    const name = activeDesignator(r.h > r.w, sim.runwayReverse[i] ?? false) + (sim.layout.runways.length > 1 ? ` (R${i + 1})` : '');
+    const ends = runwayNames(sim.layout)[i]!;
+    const name = sim.runwayReverse[i] ? ends.reverse : ends.forward;
     const lit = !sim.noLights && (r.surface === 'lit' || r.surface === 'ils');
     const active = sim.windows.filter((w) => (w.runway === undefined || w.runway === i) && now >= w.from && now < w.to);
     const closedTo = Math.max(0, ...active.filter((w) => w.kind === 'closed').map((w) => w.to));

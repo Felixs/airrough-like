@@ -244,6 +244,7 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .alert-banner { flex-wrap: wrap; }
 .alert-banner span { flex: 1 1 260px; line-height: 1.5; }
 .alert-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.alert-actions button.danger { border-color: var(--red); color: var(--red); font-weight: 700; }
 .alert-banner button small { display: block; font-size: 9px; font-weight: 400; color: var(--mute); }
 .alert-banner button:disabled { opacity: 0.55; cursor: not-allowed; }
 .alert-banner button { height: auto; min-height: 32px; }

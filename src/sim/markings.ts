@@ -2,7 +2,7 @@
  * Where airfield markings go, in tile coordinates: hold-short lines and signs where Taxiways meet a Runway,
  * and blue Taxiway edge lights (none across junction mouths). Pure, so the renderer only draws them.
  */
-import type { AirportLayout, Runway, TileRect } from './layout';
+import { runwayNames, type AirportLayout, type Runway, type TileRect } from './layout';
 
 export interface HoldShortLine {
   /** Tile row (north/south) or column (west/east) of the hold line, and its extent. */
@@ -15,11 +15,11 @@ export interface HoldShortLine {
   readonly sign: string;
 }
 
-const runwaySign = (r: Runway) => (r.w >= r.h ? '09-27' : '18-36');
-
 export function holdShortLines(layout: AirportLayout): HoldShortLine[] {
   const out: HoldShortLine[] = [];
-  for (const r of layout.runways) {
+  const names = runwayNames(layout);
+  for (const [i, r] of layout.runways.entries()) {
+    const runwaySign = (_: Runway) => `${names[i]!.forward}-${names[i]!.reverse}`;
     for (const t of layout.structures) {
       if (t.kind !== 'taxiway') continue;
       const alongX = t.x >= r.x && t.x + t.w <= r.x + r.w;

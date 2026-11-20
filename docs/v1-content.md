@@ -14,7 +14,6 @@ Larger/rarer types may become Unlockables later.
 
 | Action | Requires |
 |---|---|
-| Ground Stop | always available (long cooldown) |
 | Rush Turnaround | Ramp Agent Station |
 | Manual Divert | Admin Office |
 | Priority Landing | Airline Office |
