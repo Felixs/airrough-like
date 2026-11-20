@@ -163,3 +163,14 @@ describe('Main buildings', () => {
     expect(failing(wing).some((f) => f.includes('Unlockable'))).toBe(true);
   });
 });
+
+describe('Grass strips', () => {
+  it('cannot be lengthened (they would turn into a free Medium Runway)', () => {
+    let s = openBuild(rich());
+    const grass = newRunway(s, { x: 44, y: 2 }, 'short', true, true);
+    s = applyChange(s, { kind: 'buyPlot', plot: { px: 3, py: 0 } });
+    s = applyChange(s, { kind: 'add', structure: grass });
+    const longer = lengthened(grass)!;
+    expect(failing(checkChange(s, { kind: 'replace', from: grass, to: longer }))).toContain('Grass strips can’t be lengthened: build a paved Runway');
+  });
+});
