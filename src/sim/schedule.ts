@@ -58,6 +58,10 @@ export interface Forecast {
   /** Arrivals by Purpose and Size Class (passenger flights need Terminal Stands, cargo flights Cargo Hub Stands). */
   readonly arrivalsByPurpose: Readonly<Record<Purpose, Readonly<Record<SizeClass, number>>>>;
   readonly turnedAway: Readonly<Record<TurnAwayReason | 'total', number>>;
+  /** The flights that won't come, by why, Size Class and Purpose (largest groups first). */
+  readonly turnedAwayDetail: readonly { readonly reason: TurnAwayReason; readonly size: SizeClass; readonly purpose: Purpose; readonly count: number }[];
+  /** The most Movements the Schedule allows: two per arrival (landing and takeoff), one per aircraft parked overnight. */
+  readonly maxMovements: number;
   /** Hour (0–23) with the most arrivals. */
   readonly peakHour: number;
 }
@@ -143,6 +147,14 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     sizeRank(size) > longestRunway ? 'noFittingRunway' : fittingStands(size, purpose).length === 0 ? 'noFittingStand' : null;
 
   const turnedAway: Record<TurnAwayReason, number> = { noFittingRunway: 0, noFittingStand: 0, standCapacity: 0 };
+  const detail = new Map<string, { reason: TurnAwayReason; size: SizeClass; purpose: Purpose; count: number }>();
+  const turnAway = (reason: TurnAwayReason, size: SizeClass, purpose: Purpose) => {
+    turnedAway[reason]++;
+    const k = `${reason}/${size}/${purpose}`;
+    const d = detail.get(k) ?? { reason, size, purpose, count: 0 };
+    d.count++;
+    detail.set(k, d);
+  };
   const arrivals = new Map<string, number>();
   const overnightStandsLeft = new Map<string, Set<string>>(); // purpose → free stand ids for overnight aircraft
   const flights: ScheduledFlight[] = [];
@@ -160,7 +172,7 @@ export function planDay(setup: DayPlanSetup): DayPlan {
       reason = null;
     }
     if (reason) {
-      turnedAway[reason]++;
+      turnAway(reason, size, purpose);
       continue;
     }
     const full = (sz: SizeClass) => (arrivals.get(`${sz}/${purpose}`) ?? 0) >= capacity(sz, purpose);
@@ -169,7 +181,7 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     if (full(size) && week <= 1 && weekday < SCHEDULE_RULES.smallSwapDays && size !== 'small' && !full('small')) size = 'small';
     const capKey = `${size}/${purpose}`;
     if (full(size)) {
-      turnedAway.standCapacity++;
+      turnAway('standCapacity', size, purpose);
       continue;
     }
     arrivals.set(capKey, (arrivals.get(capKey) ?? 0) + 1);
@@ -218,6 +230,11 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     demand,
     quota,
     schedule,
-    forecast: { demand, quota, arrivalsBySize, arrivalsByPurpose, turnedAway: { ...turnedAway, total }, peakHour: perHour.indexOf(Math.max(...perHour)) },
+    forecast: {
+      demand, quota, arrivalsBySize, arrivalsByPurpose, turnedAway: { ...turnedAway, total },
+      turnedAwayDetail: [...detail.values()].sort((a, b) => b.count - a.count),
+      maxMovements: schedule.reduce((n, f) => n + (f.overnight ? 1 : 2), 0),
+      peakHour: perHour.indexOf(Math.max(...perHour)),
+    },
   };
 }

@@ -28,7 +28,7 @@ export const BUILD_COSTS = {
   supportBuildingSize: { w: 3, h: 2 },
   /** Terminal and Cargo Hub wings, per tile. */
   wingPerTile: 1_500,
-  /** Demolish refunds this share of the base price (100% while testing how layouts play). */
+  /** Demolish refunds this share of the price of building it again (100% while testing how layouts play). */
   refundShare: 1,
   /** Land Plot n (counting from the first bought) costs this × n. */
   plotBase: 24_000,
@@ -394,7 +394,8 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       const s = change.structure;
       const after = without(layout, s);
       label = `Demolish ${describe(s)}`;
-      cost = -Math.round(basePrice(s) * BUILD_COSTS.refundShare);
+      // 100% back means what building it again would cost (with the copy surcharge of what is left)
+      cost = -Math.round(priceOf(after, s) * BUILD_COSTS.refundShare);
       upkeepCost = -structureUpkeep(s);
       if (s.kind === 'runway') items.push({ label: 'Not the last Runway', ok: after.runways.length > 0 });
       if (s.kind === 'atcTower') items.push({ label: 'Not the ATC Tower', ok: false });

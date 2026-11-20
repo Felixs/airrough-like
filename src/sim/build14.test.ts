@@ -110,7 +110,9 @@ describe('Demolish', () => {
     expect(checkChange(s, { kind: 'remove', structure: link })).toMatchObject({ ok: true, cost: -7_200, upkeep: -24 });
     const stand3 = find(s, (x) => x.kind === 'stand' && x.id === '3'); // the Medium one
     const after = confirmBuild(applyChange(s, { kind: 'remove', structure: stand3 }));
-    expect(after.money).toBe(run.money + 16_000);
+    expect(after.money).toBe(run.money + 20_000); // what building it again costs: 16k + 25% for the Medium Contact Stand left
+    const s2 = openBuild(after);
+    expect(checkChange(s2, { kind: 'add', structure: stand3 }).cost).toBe(20_000);
     expect(upkeep(after)).toBe(upkeep(run) - 100);
   });
 

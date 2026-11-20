@@ -126,7 +126,7 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             <dt class="sub">Money after the Day</dt><dd class="expect">≈ ${money(est.moneyAfter)}</dd>
             <dt>Turned away</dt><dd>${f.turnedAway.total}</dd>
             ${turned.map(([k, v]) => `<dt class="sub">${REASON[k] ?? k}</dt><dd>${v}</dd>`).join('')}
-          </dl>${f.quota > (f.demand - f.turnedAway.total) * 2 ? '<p class="warn">The Schedule can’t reach the Quota: expand the airport.</p>' : ''}</div>
+          </dl>${f.maxMovements < f.quota ? `<p class="warn">This Day can't meet its Quota as the airport is: only ${f.demand - f.turnedAway.total} of ${f.demand} flights can come, so even if every one lands and takes off that is at most ${f.maxMovements} Movements, short of the Quota of ${f.quota}. Add Stands (see Suggested) before you start the Day.</p>` : ''}</div>
         </section>
         <section class="col wide">
           <div class="card"><h3>Run Calendar</h3>

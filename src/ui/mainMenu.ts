@@ -32,8 +32,9 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
 
   const SHORT = 'Not enough Air Miles';
   // "Not enough Air Miles" is said once above the lists; such items are dimmed with their price in red instead
+  const cannotAfford = (i: ShopItem) => i.reason !== 'Owned' && i.reason !== 'Max level' && i.cost > meta.airMiles;
   const item = (kind: 'unlock' | 'boost', i: ShopItem) => `
-    <button type="button" class="offer${i.locked ? ' locked' : ''}${i.reason === SHORT ? ' short' : ''}" data-${kind}="${i.id}" ${i.available ? '' : 'disabled'} title="${esc(i.effect + (i.reason === SHORT ? ` · needs ✈ ${i.cost - meta.airMiles} more` : ''))}">
+    <button type="button" class="offer${i.locked ? ' locked' : ''}${cannotAfford(i) ? ' short' : ''}" data-${kind}="${i.id}" ${i.available ? '' : 'disabled'} title="${esc(i.effect + (i.reason === SHORT ? ` · needs ✈ ${i.cost - meta.airMiles} more` : ''))}">
       <b>${i.locked ? '🔒 ' : ''}${esc(i.name)}${i.maxLevel > 1 ? ` ${i.level}/${i.maxLevel}` : ''}</b>
       <span class="cost">${i.reason === 'Owned' ? '✓ Owned' : i.reason === 'Max level' ? 'Max' : `✈ ${i.cost.toLocaleString('en-US')}`}</span>
       <small class="effect">${esc(i.effect)}${i.reason && i.reason !== 'Owned' && i.reason !== 'Max level' && i.reason !== SHORT ? ` · ${esc(i.reason)}` : ''}</small></button>`;
@@ -77,6 +78,7 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
           <label>Starting speed <select data-opt="defaultSpeed">${[1, 2, 4, 8].map((v) => `<option value="${v}"${options.defaultSpeed === v ? ' selected' : ''}>${v}×</option>`).join('')}</select></label>
           <label class="check"><input type="checkbox" data-opt="autoSlow" ${options.autoSlow ? 'checked' : ''}> Auto-slow: 1× while aircraft land or take off</label>
           <label class="check"><input type="checkbox" data-opt="eventPopups" ${options.eventPopups ? 'checked' : ''}> Pause with a pop-up on Incidents, Crashes and Diversions</label>
+          <label class="check"><input type="checkbox" data-opt="runInBackground" ${options.runInBackground ? 'checked' : ''}> Keep the Day running while the game's tab is hidden (otherwise it pauses)</label>
           <label class="check"><input type="checkbox" data-opt="reduceMotion" ${reduceMotion(options) ? 'checked' : ''}> Reduce motion: aircraft lights stay steady instead of flashing${options.reduceMotion === undefined ? ' <small>(following your system setting)</small>' : ''}</label>
           <div class="danger-zone"><h3>Reset progress</h3><p class="lead">Deletes Air Miles, Unlockables, Boosts and the saved Run.</p>
             ${confirmReset ? '<button type="button" class="danger" data-go="reset-yes">Yes, delete everything</button> <button type="button" class="secondary small" data-go="reset-no">Cancel</button>' : '<button type="button" class="secondary small" data-go="reset">Reset progress…</button>'}</div>
