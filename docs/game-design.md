@@ -200,6 +200,13 @@ cooldown (`simulation.ts → ACTIONS`).
   navigation lights and a white tail light whenever not parked on a Stand; a flashing red beacon while moving; white
   strobes double-flashing and a landing-light beam on the Runway; a short taxi-light beam while taxiing.
 - Aircraft in Holding are not drawn; they appear only in the flight strips.
+- **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
+  report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
+  the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day
+  with its Twists and the button to plan it. Details lists money (fees, Upkeep, fines, net), traffic (landed by Purpose,
+  diversions by reason, parked overnight, busiest hour), every Crash and Incident with its time, and the Run Seed. The
+  Score Screen's Summary shows Score, Air Miles earned and Days survived (and, after a loss, how many Movements the last
+  Day was short); its Details hold the Run totals and the last Day's details.
 
 ## Controls and accessibility
 
