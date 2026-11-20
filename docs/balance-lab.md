@@ -47,15 +47,36 @@ Current set: `baseline`, `meta`, `upgrade-value`, `stand-prices`, `land-price`, 
 | planner (expert) | wins about 70–80% |
 | planner with all Unlockables and Boosts | wins 90% or more |
 
-## Findings so far (Nov 2026, 8 seeds; rerun with more on GitHub)
+## Findings so far (20 Nov 2026: all experiments, 30 seeds each, 1,230 Runs in 29 minutes on GitHub)
 
-- The scripted players are still weaker than a good human: the planner wins **0%** with no meta (median 13 Days,
-  lost mostly on the Week 2 weekend), the reactive player 0% (median 19 Days). With every Unlockable and Boost the
-  planner wins **~50%**. Until the planner is a real expert, its numbers are a floor, not the expert target.
-- **A second Runway is out of reach.** Losses are mostly "holding": on Rush and Boss Days one Runway can't land
-  everyone before fuel runs out. A parallel Runway needs ~4 more Land Plots, and Land costs 24k × n (the 3rd–6th plot
-  cost 72k–144k each), so the Runway with its Taxiways costs ~600k: more than the planner holds by Week 3.
+| Player | Win rate (95% CI) | Median Days survived | Lost most on |
+|---|---|---|---|
+| idle | 0% | 5 | W1 Sat |
+| random | 0% | 6 | W1 Sat |
+| reactive | 0% (0–11%) | 19 | W3 Sat |
+| planner | 3% (1–17%) | 13 | W2 Sun |
+| planner, all Unlockables & Boosts | 47% (30–64%) | 27 | W4 Sun |
+
+- **The scripted players are still weaker than a good human** (you reached the last Boss Day). Read the planner as a
+  floor, not the expert target, until it plays better (see next steps).
+- **The Week 2 Boss Day is a wall for one Runway.** Almost every loss is "holding": on the busiest Days a single
+  Runway can't land everyone before fuel runs out. The planner never gets its second Runway built: the planner without
+  it does just as well, because a parallel Runway needs ~4 more Land Plots and Land costs 24k × n (the 3rd–6th plot
+  72k–144k each), about 600k with its Taxiways.
+- **Land price matters most:** plots at 12k × n lift the planner from 3% to 13%; 36k × n drops it to 0%. Stands −25%
+  also gives 13%; a Boss Quota of 85% gives 10%.
+- **Meta-progression is strong:** all Unlockables and Boosts take the planner from 3% to 47%. Fire & Rescue, Remote
+  Stands and Starting Money are likely the big ones (the next experiment should split them).
+- **Taxiway Incident rate barely matters** any more since queues no longer roll them; traffic growth +25/Week ends
+  every Run in Week 2.
 - **Mayday pile-ups:** answering every low-fuel aircraft with a Mayday (as the plain auto-play did) stops every
   Runway again and again and turns a busy Day into a crash chain. The lab's player diverts while another Mayday waits.
 - **Taxiway Incident spiral:** queues of waiting aircraft used to roll Taxiway Incidents too (62 on one Rush Day);
   now only aircraft on the move do.
+
+## Next steps
+
+1. Make the planner a real expert: plan a second Runway from Week 1 (reserve land early), compare layouts, use
+   Emergency Actions, then re-check the targets.
+2. Decide the Land price (and whether a second Runway should be reachable by Week 2's Boss Day).
+3. Split the meta-progression experiment by Unlockable and Boost to price them.
