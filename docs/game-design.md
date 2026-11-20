@@ -55,8 +55,12 @@ Screen, which turns Score into Air Miles for the meta-progression.
   side. Remote Stands stand free (an Unlockable) and turn round 1.5× slower.
 - Build Mode tools: Taxiway, Stands, Holding Bay, Runways, Buildings, Land, Move, Demolish. Tools with variants show
   them as small tiles under the tools, grouped (Stands: Terminal / Cargo × Contact / Remote, each Small / Medium /
-  Large; Holding Bays by size; Runways: new 09-27 or 18-36 by length, Grass strips, Lengthen; Buildings: wings and
-  Support Buildings). Each tile has a top-down picture, its name and what it costs now (copy surcharge included);
+  Large; Holding Bays by size; Runways: new 09-27 or 18-36 by length, Grass strips, Lengthen; Buildings: main
+  Terminal / Cargo Hub, wings and Support Buildings).
+- **Main buildings:** a whole Terminal (10 × 4 tiles) or Cargo Hub (7 × 4) can always be built, standing alone and
+  with no Unlockable, when the airport has none of that kind (e.g. after demolishing the starting ones). With one
+  standing, more of it is a wing (3 × 4, an Unlockable) that must touch it; a second free-standing Terminal needs the
+  Second Terminal Unlockable. Price 1,500 per tile. Each tile has a top-down picture, its name and what it costs now (copy surcharge included);
   tiles that are locked or cost more than the money left after pending changes are greyed out and can't be picked.
   After something is placed the cursor is free (nothing follows it) until the next tool or tile is picked; Demolish
   stays on so several things can be cleared in a row.
@@ -198,6 +202,9 @@ cooldown (`simulation.ts → ACTIONS`).
   facing open ground. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
   glass cab with mullions under an overhanging roof, radar dome and a mast with a red light. Names TERMINAL and CARGO are written on the roofs; Stands show their number and Holding
   Bays B1, B2… inside, in the corner away from the Taxiway; both have a curved yellow lead-in and a stop bar.
+- **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
+  boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
+  (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
 - **Runway lights follow the surface:** none on Grass and Asphalt; white edge and green threshold lights when Lit;
   approach lights added with ILS.
 - **Day and night:** during the Live Day a tint follows the clock (`clock.ts → daylight`): dark until 05:30, a warm

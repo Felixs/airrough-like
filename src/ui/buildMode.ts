@@ -29,8 +29,10 @@ const HINT: Record<Tool, string> = {
   demolish: 'Click something to demolish it. You get back what building it again would cost.',
 };
 
-type Building = SupportRole | 'terminalWing' | 'cargoWing';
+type Building = SupportRole | 'terminal' | 'cargoHub' | 'terminalWing' | 'cargoWing';
 const TERMINAL_WING = { w: 3, h: 4 } as const;
+/** A whole Terminal or Cargo Hub, the size of the Starting Airport's. */
+const MAIN_BUILDING = { terminal: { w: 10, h: 4 }, cargoHub: { w: 7, h: 4 } } as const;
 const SIZE_NAME: Record<SizeClass, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
 const LENGTH_NAME: Record<RunwayLength, string> = { short: 'Short', medium: 'Medium', long: 'Long' };
 const SUPPORT_ROLES = ['rampAgentStation', 'adminOffice', 'airlineOffice', 'fireRescueStation', 'fuelFarm', 'deIcingPad'] as const;
@@ -78,9 +80,13 @@ function runwayIcon(length: RunwayLength | 'lengthen', vertical: boolean, grass:
   return svg(strip + arrow);
 }
 const BUILDING_GLYPH: Record<Building, string> = {
-  terminalWing: 'T', cargoWing: 'C', rampAgentStation: 'RA', adminOffice: 'AO', airlineOffice: 'AL', fireRescueStation: 'FR', fuelFarm: 'F', deIcingPad: 'DI',
+  terminal: 'TERM', cargoHub: 'CARGO', terminalWing: 'T+', cargoWing: 'C+', rampAgentStation: 'RA', adminOffice: 'AO', airlineOffice: 'AL', fireRescueStation: 'FR', fuelFarm: 'F', deIcingPad: 'DI',
 };
 function buildingIcon(b: Building): string {
+  if (b === 'terminal' || b === 'cargoHub') {
+    return svg(`<rect x="1" y="6" width="30" height="13" rx="1" fill="${b === 'terminal' ? '#4d6f8c' : '#8c6f3e'}" stroke="#0b1210"/>
+      <text x="16" y="14.8" text-anchor="middle" font-size="6" font-family="monospace" font-weight="700" fill="#f2f5f4">${BUILDING_GLYPH[b]}</text>`);
+  }
   const color = b === 'terminalWing' ? '#4d6f8c' : b === 'cargoWing' ? '#8c6f3e' : b === 'fireRescueStation' ? '#8c4a42' : '#56645f';
   const tall = b === 'terminalWing' || b === 'cargoWing';
   return svg(`<rect x="${tall ? 9 : 5}" y="${tall ? 2 : 6}" width="${tall ? 14 : 22}" height="${tall ? 20 : 13}" rx="1" fill="${color}" stroke="#0b1210"/>
@@ -166,11 +172,17 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         return out;
       }
       case 'building':
-        return (['terminalWing', 'cargoWing', ...SUPPORT_ROLES] as const).map((b): Variant => ({
-          id: b, group: b === 'terminalWing' || b === 'cargoWing' ? 'Wings' : 'Support', label: b === 'terminalWing' ? 'Terminal wing' : b === 'cargoWing' ? 'Cargo wing' : ROLE_NAME[b], icon: buildingIcon(b),
-          price: b === 'terminalWing' || b === 'cargoWing' ? TERMINAL_WING.w * TERMINAL_WING.h * BUILD_COSTS.wingPerTile : BUILD_COSTS.supportBuilding[b],
-          unlock: b, set: { building: b },
-        }));
+        return [
+          ...(['terminal', 'cargoHub'] as const).map((b): Variant => ({
+            id: b, group: 'Main buildings', label: b === 'terminal' ? 'Terminal' : 'Cargo Hub', icon: buildingIcon(b),
+            price: MAIN_BUILDING[b].w * MAIN_BUILDING[b].h * BUILD_COSTS.wingPerTile, unlock: null, set: { building: b },
+          })),
+          ...(['terminalWing', 'cargoWing', ...SUPPORT_ROLES] as const).map((b): Variant => ({
+            id: b, group: b === 'terminalWing' || b === 'cargoWing' ? 'Wings' : 'Support', label: b === 'terminalWing' ? 'Terminal wing' : b === 'cargoWing' ? 'Cargo wing' : ROLE_NAME[b], icon: buildingIcon(b),
+            price: b === 'terminalWing' || b === 'cargoWing' ? TERMINAL_WING.w * TERMINAL_WING.h * BUILD_COSTS.wingPerTile : BUILD_COSTS.supportBuilding[b],
+            unlock: b, set: { building: b },
+          })),
+        ];
       default:
         return [];
     }
@@ -354,7 +366,8 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         return { change: { kind: 'add', structure: s }, rects: [s] };
       }
       case 'building': {
-        const s: Structure = opt.building === 'terminalWing' ? { kind: 'terminal', x: t.x, y: t.y, ...TERMINAL_WING }
+        const s: Structure = opt.building === 'terminal' || opt.building === 'cargoHub' ? { kind: opt.building, x: t.x, y: t.y, ...MAIN_BUILDING[opt.building] }
+          : opt.building === 'terminalWing' ? { kind: 'terminal', x: t.x, y: t.y, ...TERMINAL_WING }
           : opt.building === 'cargoWing' ? { kind: 'cargoHub', x: t.x, y: t.y, ...TERMINAL_WING }
           : newBuilding(session, t, opt.building);
         return { change: { kind: 'add', structure: s }, rects: [s] };

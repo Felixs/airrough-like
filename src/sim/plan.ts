@@ -85,7 +85,8 @@ export function upgradeOffers(run: RunState): UpgradeOffer[] {
   const next = SURFACE_ORDER[SURFACE_ORDER.indexOf(surface) + 1];
   const surfaceOffer = make(
     'surface', next ? `Runway Surface: ${SURFACE_NAME[next]}` : `Runway Surface: ${SURFACE_NAME[surface]}`,
-    next === 'lit' ? 'Night operations after 20:00 (no dusk Diversions)' : next === 'ils' ? 'Bad-weather landings; Pilot Error ×0.6' : 'Medium and Large aircraft, daylight',
+    (next === 'lit' ? 'Night operations after 20:00 (no dusk Diversions)' : next === 'ils' ? 'Bad-weather landings; Pilot Error ×0.6' : 'Medium and Large aircraft, daylight')
+      + (next && next !== 'asphalt' && run.layout.runways.some((r) => r.surface === 'grass') ? '. Grass strips stay grass' : ''),
     SURFACE_ORDER.indexOf(surface), !next, next ? PRICES.surface[next as keyof typeof PRICES.surface] : 0,
   );
   const fire = run.fireRescueLevel;
