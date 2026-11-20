@@ -284,3 +284,7 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .report .totals { grid-template-columns: 1fr auto; }
 @media (max-width: 720px) { .shop-cols { grid-template-columns: 1fr; } }
 .bonus-card label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; cursor: pointer; }
+/* [hidden] must win over the banner's display: flex */
+.alert-banner[hidden] { display: none; }
+.report dt.sub { grid-column: 1 / -1; }
+.report-cols dd { white-space: nowrap; }
