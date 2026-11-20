@@ -2,9 +2,11 @@
  * Plan Mode between Days: the Run Calendar, the Forecast, suggestions, and upgrades that need no placing
  * (Tower Modules, Runway Surface, Fire & Rescue levels).
  */
-import type { RunwaySurface, Structure } from './layout';
+import type { RunwaySurface, SizeClass, Structure } from './layout';
 import { airportSurface, createLayout } from './layout';
 import { dayPlan, hasBuilding, upkeep, type DayReport, type RunState, type TowerModules } from './run';
+import { AIRCRAFT_TYPES, type Purpose } from './aircraft';
+import { HOURS } from './simulation';
 import { BOSS_DAY, RUSH_DAY, planDay } from './schedule';
 import { twistsFor, type Twist } from './twists';
 import { unlockableName, type UnlockableId } from './meta';
@@ -150,27 +152,97 @@ export interface Suggestion {
   readonly upgrade: UpgradeId | null;
 }
 
+/** Tips that are not about money lost tomorrow (those are Money Warnings). */
 export function suggestions(run: RunState): Suggestion[] {
-  const forecast = dayPlan(run).forecast;
   const out: Suggestion[] = [];
   const surface = airportSurface(run.layout);
-  if (forecast.turnedAway.noFittingRunway > 0) out.push({ text: `${forecast.turnedAway.noFittingRunway} flights need a longer Runway`, upgrade: null });
-  // say which Stands are missing: by size and by building
-  const SIZE_WORD = { small: 'Small', medium: 'Medium', large: 'Large' } as const;
-  const groups = (reason: 'noFittingStand' | 'standCapacity') => forecast.turnedAwayDetail.filter((d) => d.reason === reason)
-    .map((d) => `${d.count} ${SIZE_WORD[d.size]} ${d.purpose}`).join(', ');
-  const building = (reason: 'noFittingStand' | 'standCapacity') => {
-    const kinds = new Set(forecast.turnedAwayDetail.filter((d) => d.reason === reason).map((d) => d.purpose === 'passenger' ? 'Terminal' : 'Cargo Hub'));
-    return [...kinds].join(' and ');
-  };
-  if (forecast.turnedAway.noFittingStand > 0) {
-    out.push({ text: `${forecast.turnedAway.noFittingStand} flights won't come because no Stand is big enough for them (${groups('noFittingStand')}). Build a ${building('noFittingStand')} Stand of that size or larger.`, upgrade: null });
-  }
-  if (forecast.turnedAway.standCapacity > 0) {
-    out.push({ text: `${forecast.turnedAway.standCapacity} flights won't come because the Stands that fit them are booked up for the Day (${groups('standCapacity')}). A Stand takes about 10 Small, 8 Medium or 6 Large arrivals a Day; more ${building('standCapacity')} Stands of those sizes let them come.`, upgrade: null });
-  }
-  if (surface === 'grass' || surface === 'asphalt') out.push({ text: 'A Lit Runway stops evening flights diverting at 20:00', upgrade: 'surface' });
+  if (surface === 'grass' || surface === 'asphalt') out.push({ text: 'A Lit Runway lets aircraft land and take off after 20:00', upgrade: 'surface' });
   if (run.towerModules.radar < 3) out.push({ text: 'Radar 3 unlocks Emergency Alerts before a Crash', upgrade: 'radar' });
-  if (run.fireRescueLevel === 0) out.push({ text: 'A Fire & Rescue Station clears Crashes faster', upgrade: 'fireRescue' });
+  if (run.fireRescueLevel === 0) out.push({ text: 'A Fire & Rescue Station clears Crashes and Incidents faster', upgrade: 'fireRescue' });
   return out.slice(0, 4);
+}
+
+/** Something about the airport that will cost money (or the Run) on the next Day, with what it costs and the fix. */
+export interface MoneyWarning {
+  readonly severity: 'critical' | 'warn';
+  /** What kind of problem, for its icon: the Quota, Stands, Runway length, darkness. */
+  readonly kind: 'quota' | 'stands' | 'runway' | 'dark';
+  readonly title: string;
+  readonly detail: string;
+  /** Fees lost (Arrival + Departure) on the next Day, roughly; 0 when not about fees. */
+  readonly lost: number;
+  readonly fix: string;
+  /** An upgrade that fixes it, offered as a button; otherwise the fix is in Build Mode. */
+  readonly upgrade: UpgradeId | null;
+}
+
+const SIZE_WORD = { small: 'Small', medium: 'Medium', large: 'Large' } as const;
+/** The average fee of the Aircraft Types of one Size Class and Purpose. */
+function typicalFee(size: SizeClass, purpose: Purpose, factor: number): number {
+  const types = Object.values(AIRCRAFT_TYPES).filter((t) => t.size === size && t.purpose === purpose);
+  return types.length ? (types.reduce((n, t) => n + t.fee, 0) / types.length) * factor : 0;
+}
+
+/**
+ * What will lose money on the next Day, worst first: a Quota the Schedule can't reach, flights turned away (no
+ * Runway long enough, no Stand big enough, Stands booked up), and evening arrivals that divert at dusk without a Lit
+ * Runway. Each says roughly how much it costs (Arrival + Departure Fees of the flights lost) and what fixes it.
+ */
+export function moneyWarnings(run: RunState): MoneyWarning[] {
+  const plan = dayPlan(run);
+  const f = plan.forecast;
+  const fee = (size: SizeClass, purpose: Purpose) => typicalFee(size, purpose, run.modifiers.feeFactor) * 2;
+  const out: MoneyWarning[] = [];
+  if (f.maxMovements < f.quota) {
+    out.push({
+      severity: 'critical', kind: 'quota', title: `The Quota can't be met: at most ${f.maxMovements} of ${f.quota} Movements`,
+      detail: `Only ${f.demand - f.turnedAway.total} of ${f.demand} flights can come to the airport as it is, so even a perfect Day falls short and loses the Run.`,
+      lost: 0, fix: 'Build Stands (or a longer Runway) so the flights below can come.', upgrade: null,
+    });
+  }
+  const list = (ds: typeof f.turnedAwayDetail) => ds.map((d) => `${d.count} ${SIZE_WORD[d.size]}`).join(', ');
+  for (const purpose of ['passenger', 'cargo'] as const) {
+    const building = purpose === 'passenger' ? 'Terminal' : 'Cargo Hub';
+    const of = (reason: string) => f.turnedAwayDetail.filter((d) => d.purpose === purpose && d.reason === reason);
+    const lost = (ds: typeof f.turnedAwayDetail) => Math.round(ds.reduce((n, d) => n + d.count * fee(d.size, d.purpose), 0));
+    const count = (ds: typeof f.turnedAwayDetail) => ds.reduce((n, d) => n + d.count, 0);
+    const runway = of('noFittingRunway');
+    if (runway.length) {
+      const biggest = runway.some((d) => d.size === 'large') ? 'Long' : 'Medium';
+      out.push({
+        severity: 'warn', kind: 'runway', title: `${count(runway)} ${purpose} flights won't come: no Runway long enough`,
+        detail: `${list(runway)} aircraft need a longer Runway than the airport has.`, lost: lost(runway),
+        fix: `Build or lengthen a Runway to ${biggest}.`, upgrade: null,
+      });
+    }
+    const noStand = of('noFittingStand');
+    if (noStand.length) {
+      out.push({
+        severity: 'warn', kind: 'stands', title: `${count(noStand)} ${purpose} flights won't come: no ${building} Stand big enough`,
+        detail: `${list(noStand)} aircraft have no ${building} Stand of their size or larger.`, lost: lost(noStand),
+        fix: `Build a ${SIZE_WORD[noStand.some((d) => d.size === 'large') ? 'large' : 'medium']} ${building} Stand.`, upgrade: null,
+      });
+    }
+    const full = of('standCapacity');
+    if (full.length) {
+      out.push({
+        severity: 'warn', kind: 'stands', title: `${count(full)} ${purpose} flights won't come: ${building} Stands booked up`,
+        detail: `${list(full)} aircraft find every fitting ${building} Stand full for the Day (a Stand takes about 10 Small, 8 Medium or 6 Large arrivals).`,
+        lost: lost(full), fix: `Build more ${building} Stands of those sizes (or larger).`, upgrade: null,
+      });
+    }
+  }
+  const fits = { short: 1, medium: 2, long: 3 } as const;
+  const rank = { small: 1, medium: 2, large: 3 } as const;
+  const nightFor = (size: SizeClass) => run.layout.runways.some((r) => (r.surface === 'lit' || r.surface === 'ils') && fits[r.length] >= rank[size]);
+  const late = plan.schedule.filter((s) => !s.overnight && s.arrivalMinute >= HOURS.dusk && !nightFor(AIRCRAFT_TYPES[s.type].size));
+  if (late.length) {
+    out.push({
+      severity: 'warn', kind: 'dark', title: `${late.length} evening flights will divert: no Lit Runway after 20:00`,
+      detail: 'Flights arriving after dusk can only land on a Lit or ILS Runway; without one they leave for another airport.',
+      lost: Math.round(late.reduce((n, s) => n + AIRCRAFT_TYPES[s.type].fee * run.modifiers.feeFactor * 2, 0)),
+      fix: 'Buy the Lit Runway Surface.', upgrade: 'surface',
+    });
+  }
+  return out.sort((a, b) => Number(b.severity === 'critical') - Number(a.severity === 'critical') || b.lost - a.lost);
 }

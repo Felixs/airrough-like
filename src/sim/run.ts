@@ -264,6 +264,7 @@ export function estimateDay(run: RunState): DayEstimate {
   let departureFees = 0;
   for (const f of flights) {
     const type = AIRCRAFT_TYPES[f.type];
+    if (!f.overnight && f.arrivalMinute >= HOURS.dusk && !nightRunway(type.size)) continue; // diverts at dusk: no fees
     if (!(f.overnight && f.arrivalFeePaid !== false)) arrivalFees += fee(f);
     const ready = (f.overnight ? HOURS.operationsStart : f.arrivalMinute) + TIMINGS.turnaroundMinutes[type.size] * run.modifiers.turnaroundFactor;
     if (ready < HOURS.dusk || nightRunway(type.size)) departureFees += fee(f);

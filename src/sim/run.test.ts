@@ -130,9 +130,10 @@ describe('Day estimate', () => {
     const run = startRun(7);
     const est = estimateDay(run);
     const plan = dayPlan(run);
-    const today = plan.schedule.filter((f) => !f.overnight);
+    // overnight aircraft paid their Arrival Fee yesterday; arrivals after 20:00 divert without a Lit Runway
+    const today = plan.schedule.filter((f) => !f.overnight && f.arrivalMinute < 20 * 60);
     const arrivals = today.reduce((n, f) => n + AIRCRAFT_TYPES[f.type].fee, 0);
-    expect(est.arrivalFees).toBe(arrivals); // overnight aircraft paid their Arrival Fee yesterday
+    expect(est.arrivalFees).toBe(arrivals);
     expect(est.departureFees).toBeGreaterThan(0);
     expect(est.departureFees).toBeLessThanOrEqual(plan.schedule.reduce((n, f) => n + AIRCRAFT_TYPES[f.type].fee, 0));
     expect(est.upkeep).toBe(upkeep(run));

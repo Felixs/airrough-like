@@ -101,3 +101,26 @@ describe('Runway Surface', () => {
     expect(newRunway(openBuild(run), { x: 2, y: 30 }, 'short', false).surface).toBe('ils');
   });
 });
+
+describe('Money Warnings', () => {
+  it('flag evening arrivals that divert without a Lit Runway, with the fees lost and the upgrade that fixes it', async () => {
+    const { moneyWarnings } = await import('./plan');
+    let run = startRun(1);
+    for (let i = 0; i < 3 && !moneyWarnings(run).some((w) => w.kind === 'dark'); i++) run = { ...run, weekday: run.weekday + 1 };
+    const dark = moneyWarnings(run).find((w) => w.kind === 'dark')!;
+    expect(dark.upgrade).toBe('surface');
+    expect(dark.lost).toBeGreaterThan(0);
+  });
+
+  it('flag flights turned away for want of Stands, and a Quota the Schedule cannot reach first', async () => {
+    const { moneyWarnings } = await import('./plan');
+    const run = startRun(1);
+    // no Terminal Stands at all
+    const layout = createLayout(run.layout.width, run.layout.height, run.layout.structures.filter((s) => !(s.kind === 'stand' && s.serves === 'terminal')));
+    const warnings = moneyWarnings({ ...run, layout, week: 2 });
+    expect(warnings[0]!.kind).toBe('quota');
+    const stands = warnings.find((w) => w.kind === 'stands' && w.title.includes('passenger'))!;
+    expect(stands.title).toMatch(/no Terminal Stand big enough/);
+    expect(stands.lost).toBeGreaterThan(0);
+  });
+});

@@ -17,7 +17,7 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 | | |
 |---|---|
 | ![Live Day: flight strips, the airfield, Emergency Actions and the Quota bar](docs/screenshots/live-day.png) | ![Plan Mode: Forecast, Run Calendar and upgrades](docs/screenshots/plan-mode.png) |
-| **Live Day**: the ATC Tower handles the traffic; you watch the Quota, fuel and Alerts, and click a strip or alert to ring its aircraft | **Plan Mode**: Forecast, Run Calendar with Twists, upgrades |
+| **Live Day**: the ATC Tower handles the traffic; you watch the Quota, fuel and Alerts, and click a strip or alert to ring its aircraft | **Plan Mode**: Money Warnings, Forecast, a clickable Run Calendar with Day details, grouped upgrades |
 | ![Build Mode: drawing Taxiways and placing Stands on the tile grid](docs/screenshots/build-mode.png) | ![The end-of-Day report](docs/screenshots/day-report.png) |
 | **Build Mode**: pick Stands, Runways and buildings from priced tiles; draw Taxiways, buy Land | **Day report**: money, traffic and safety at a glance |
 | ![Main Menu](docs/screenshots/main-menu.png) | ![Unlockables and Boosts](docs/screenshots/unlockables-boosts.png) |
