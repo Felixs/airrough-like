@@ -23,6 +23,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - Auto-slow (option): while any aircraft is landing or taking off, the game runs at 1×.
 - Operating hours (`simulation.ts → HOURS`): no Movements before 06:00; from 20:00 (dusk) only Lit or ILS Runways
   work; no new arrivals after 22:00; anything still airborne at 24:00 is Diverted (Curfew).
+- **Night departures:** after dusk a departure only leaves its Stand for a fitting Lit or ILS Runway. One already
+  taxiing to, or holding short of, a Runway that can't be used at night goes to a reachable fitting Lit/ILS Runway
+  instead; if there is none it turns round to a free fitting Stand (Contact or Remote; else a Holding Bay), stays
+  overnight and leaves the next morning.
 - The Day ends early once nothing more can happen (last departure gone, the rest parked overnight).
 - The game is deterministic: one Run Seed (shown, copyable, replayable) drives every random roll through a seeded RNG.
 
