@@ -8,7 +8,7 @@ import { planDay, type DayPlan } from './schedule';
 import { simulationEffects, twistsFor, type Twist } from './twists';
 import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
 import { AIRCRAFT_TYPES } from './aircraft';
-import { acknowledgeAlert, carryOver, createSimulation, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
+import { acknowledgeAlert, carryOver, createSimulation, daySettled, finishDay, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
   readonly px: number;
@@ -255,7 +255,7 @@ export function continueEndless(run: RunState): RunState {
 /** Plays the current Day to the end without any Player input (tests, autoplay). */
 export function playDay(run: RunState): RunState {
   let sim = startLiveDay(run);
-  while (sim.clock.minute < 24 * 60) sim = sim.pendingAlert ? acknowledgeAlert(sim) : stepSimulation(sim);
+  while (sim.clock.minute < 24 * 60) sim = sim.pendingAlert ? acknowledgeAlert(sim) : daySettled(sim) ? finishDay(sim) : stepSimulation(sim);
   return endDay(run, sim);
 }
 

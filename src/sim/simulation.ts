@@ -918,3 +918,21 @@ export function acknowledgeAlert(sim: Simulation): Simulation {
   if (sim.pendingAlert?.kind === 'emergency') return resolveEmergency(sim);
   return { ...sim, pendingAlert: null };
 }
+
+/**
+ * True when nothing else can happen today: no aircraft still to arrive, in the air or moving, and every
+ * aircraft left on the ground stays overnight. The Day can then end early.
+ */
+export function daySettled(sim: Simulation): boolean {
+  const now = sim.clock.minute;
+  return sim.flights.every((f) => {
+    if (f.phase === 'departed' || f.phase === 'crashed' || f.phase === 'diverted') return true;
+    if (f.phase === 'onStand' || f.phase === 'inBay') return isDark(now) && !nightRunwayFor(sim, f);
+    return false;
+  });
+}
+
+/** Ends the Day now (used once it is settled); the clock jumps to 24:00. */
+export function finishDay(sim: Simulation): Simulation {
+  return { ...sim, clock: { minute: HOURS.curfew, pendingRealMs: 0 } };
+}
