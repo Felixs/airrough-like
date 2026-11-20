@@ -80,7 +80,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
   any other tile 6, so aircraft keep to the yellow line and leave it only to turn into a Stand or onto a Runway connector.
   A route into a Stand ends
   with a straight walk from the entry tile to the Stand's centre; aircraft park nose-in, facing away from the open side.
-- Aircraft taxi at 6 tiles per minute (`TIMINGS.taxiTilesPerMinute`), slower under the Taxiway-works Twist.
+- Aircraft taxi at 6 tiles per minute on straight Taxiway (`TIMINGS.taxiTilesPerMinute`), Large aircraft 15% slower
+  (`taxiSpeedFactor`), all slower under the Taxiway-works Twist. A tile where the route turns takes longer to cross
+  (`turnTileCost`: 1.3 tiles' worth for Small, 1.6 Medium, 2 Large), as real airliners taxi at about 20 kt straight
+  and 10 kt in turns, wide-bodies the most carefully.
 - **Taxi Incidents**: the more aircraft taxi at once, the likelier one is stopped by an Incident (lowered by Ground
   Radar). It stays put for the blockage time (20 min, shortened by the Fire & Rescue Station). While it stands there
   it **closes the whole width of the Taxiway around it**. Every other aircraft whose route runs through the closure
