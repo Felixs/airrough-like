@@ -22,7 +22,7 @@ const HINT: Record<Tool, string> = {
   taxiway: 'Drag on the map to draw a Taxiway.',
   stand: 'Click to place a Stand (top-left at the cursor).',
   holdingBay: 'Click to place a Holding Bay (top-left at the cursor).',
-  runway: 'Click to place a new Runway, or pick “Lengthen” and click the end of a Runway to grow it on that side.',
+  runway: 'Click to place a new Runway (paved: Medium or Long; Grass strip: Short, Small aircraft, daylight), or pick “Lengthen” and click the end of a paved Runway to grow it on that side.',
   building: 'Click to place a building (top-left at the cursor).',
   land: 'Click a dimmed Land Plot next to your land to buy it.',
   move: 'Click a building, Holding Bay or Remote Stand, then click where it should go. Free.',
@@ -151,7 +151,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
       case 'runway': {
         const out: Variant[] = [];
         for (const vertical of [false, true]) {
-          for (const length of ['short', 'medium', 'long'] as const) {
+          for (const length of ['medium', 'long'] as const) {
             out.push({
               id: `runway-${length}-${vertical ? 'v' : 'h'}`, group: vertical ? 'New · 18-36' : 'New · 09-27', label: LENGTH_NAME[length],
               icon: runwayIcon(length, vertical, false), price: price(newRunway(session, at, length, vertical)), unlock: null,
@@ -161,8 +161,8 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         }
         for (const vertical of [false, true]) {
           out.push({
-            id: `grass-${vertical ? 'v' : 'h'}`, group: 'Grass strip (Short)', label: vertical ? '18-36' : '09-27', icon: runwayIcon('short', vertical, true),
-            price: price(newRunway(session, at, 'short', vertical, true)), unlock: 'grassStrip',
+            id: `grass-${vertical ? 'v' : 'h'}`, group: 'Grass strip · Small only, daylight', label: vertical ? '18-36' : '09-27', icon: runwayIcon('short', vertical, true),
+            price: price(newRunway(session, at, 'short', vertical, true)), unlock: null,
             set: { runwayAction: 'new', length: 'short', orientation: vertical ? 'vertical' : 'horizontal', surface: 'grass' },
           });
         }

@@ -17,16 +17,19 @@ const failing = (c: ReturnType<typeof checkChange>) => c.items.filter((i) => !i.
 describe('New Runways', () => {
   it('are 4 tiles wide and 24 / 36 / 48 long, horizontal or vertical', () => {
     const s = openBuild(rich());
-    expect(newRunway(s, { x: 43, y: 2 }, 'short', true)).toMatchObject({ kind: 'runway', x: 43, y: 2, w: 4, h: 24, length: 'short', surface: 'asphalt' });
+    expect(newRunway(s, { x: 43, y: 2 }, 'medium', true)).toMatchObject({ kind: 'runway', x: 43, y: 2, w: 4, h: 36, length: 'medium', surface: 'asphalt' });
+    // there is no paved Short Runway: asking for one gives Medium; Short is a Grass strip
+    expect(newRunway(s, { x: 43, y: 2 }, 'short', true)).toMatchObject({ length: 'medium', h: 36 });
+    expect(newRunway(s, { x: 43, y: 2 }, 'short', true, true)).toMatchObject({ length: 'short', h: 24, surface: 'grass' });
     expect(newRunway(s, { x: 6, y: 30 }, 'long', false)).toMatchObject({ w: 48, h: 4 });
   });
 
-  it('cost 30k / 80k / 160k, however many Runways are built', () => {
+  it('cost Grass strip 12k (no Unlockable) / 80k / 160k, however many Runways are built', () => {
     const s = openBuild(rich());
-    const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 43, y: 0 }, 'short', true) });
+    const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 43, y: 0 }, 'short', true, true) });
     expect(c.ok).toBe(true);
-    expect(c.cost).toBe(30_000);
-    expect(c.upkeep).toBe(300);
+    expect(c.cost).toBe(12_000);
+    expect(checkChange(openBuild(startRun(1)), { kind: 'add', structure: newRunway(s, { x: 43, y: 0 }, 'short', true, true) }).ok).toBe(true); // no Unlockable needed
   });
 
   it('can be lengthened for the price difference once there is room', () => {
@@ -49,7 +52,7 @@ describe('New Runways', () => {
     expect(failing(checkChange(s, { kind: 'replace', from: runway, to: west }))).toContain('Inside owned land');
     s = applyChange(s, { kind: 'buyPlot', plot: { px: -1, py: 1 } }); // land on the west side
     expect(checkChange(s, { kind: 'replace', from: runway, to: west }).ok).toBe(true);
-    const vertical = newRunway(s, { x: 43, y: 2 }, 'short', true);
+    const vertical = newRunway(s, { x: 43, y: 2 }, 'short', true, true);
     expect(lengthened(vertical, 'start')).toMatchObject({ y: 2 + 24 - 36, h: 36 });
   });
 });
@@ -57,7 +60,7 @@ describe('New Runways', () => {
 describe('Runway connectors', () => {
   it('a Taxiway may end against a Runway side', () => {
     let s = openBuild(rich());
-    s = addPending(s, newRunway(s, { x: 44, y: 0 }, 'short', true));
+    s = addPending(s, newRunway(s, { x: 44, y: 0 }, 'short', true, true));
     // from the east end of the parallel Taxiway (x 41) to the new Runway's side (x 44)
     expect(checkChange(s, { kind: 'add', structure: taxiwayFromDrag({ x: 42, y: 19 }, { x: 43, y: 19 }) }).ok).toBe(true);
   });
@@ -187,7 +190,7 @@ describe('Runway end zones', () => {
     const pastZone = newBuilding(s, { x: 46, y: 24 }, 'rampAgentStation');
     expect(failing(checkChange(s, { kind: 'add', structure: pastZone }))).not.toContain('Clear of the Runway ends (4 tiles)');
     // a vertical Runway whose south end zone would cover the parallel Taxiway
-    const blocked = newRunway(s, { x: 30, y: -10 }, 'short', true);
+    const blocked = newRunway(s, { x: 30, y: -10 }, 'short', true, true);
     expect(failing(checkChange(s, { kind: 'add', structure: blocked }))).toContain('Nothing built past its ends (4 tiles)');
   });
 });

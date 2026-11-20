@@ -176,9 +176,12 @@ const SIZE_NAME: Record<SizeClass, string> = { small: 'Small', medium: 'Medium',
 
 
 
-/** A new Runway: Grass strips are Short; paved ones get the airport's Runway Surface (Lit and ILS carry over). */
+/**
+ * A new Runway: a Grass strip is always Short (Small aircraft only); a paved one is Medium or Long (asking for Short
+ * gives Medium) and gets the airport's Runway Surface (Lit and ILS carry over).
+ */
 export function newRunway(session: BuildSession, at: Tile, length: RunwayLength, vertical: boolean, grass = false): Runway {
-  const size = grass ? 'short' : length;
+  const size = grass ? 'short' : length === 'short' ? 'medium' : length;
   const long = BUILD_COSTS.runwayTiles[size];
   const wide = BUILD_COSTS.runwayWidth;
   const paved = airportSurface(session.layout);
@@ -199,7 +202,6 @@ export function unlockNeeded(s: Structure): UnlockableId | null {
   if (s.kind === 'terminal') return 'terminalWing';
   if (s.kind === 'cargoHub') return 'cargoWing';
   if (s.kind === 'supportBuilding') return s.role;
-  if (s.kind === 'runway' && s.surface === 'grass') return 'grassStrip';
   return null;
 }
 

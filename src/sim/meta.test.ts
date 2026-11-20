@@ -25,7 +25,7 @@ describe('Air Miles', () => {
 
 describe('Unlockables', () => {
   it('are bought once and cost 300 to 1,200 Air Miles', () => {
-    expect(UNLOCKABLES.length).toBeGreaterThanOrEqual(13);
+    expect(UNLOCKABLES.length).toBeGreaterThanOrEqual(12);
     expect(Math.min(...UNLOCKABLES.map((u) => u.cost))).toBe(300);
     let meta = rich();
     meta = buyUnlockable(meta, 'remoteStands');
@@ -59,8 +59,8 @@ describe('Unlockables', () => {
     expect(upgradeOffers({ ...open, money: 1e6, towerModules: { ...open.towerModules, radar: 4 } }).find((o) => o.id === 'radar')!.available).toBe(true);
   });
 
-  it('Grass strip allows cheap Short Grass Runways', () => {
-    const s = openBuild({ ...startRun(1, { ...emptyMeta(), unlocks: ['grassStrip'] }), money: 1e6 });
+  it('Grass strips need no Unlockable: cheap, Short, Grass', () => {
+    const s = openBuild({ ...startRun(1, emptyMeta()), money: 1e6 });
     const grass = newRunway(s, { x: 44, y: 0 }, 'long', true, true);
     expect(grass).toMatchObject({ length: 'short', surface: 'grass', h: 24 });
     expect(checkChange(s, { kind: 'add', structure: grass })).toMatchObject({ ok: true, cost: 12_000 });
