@@ -83,6 +83,10 @@ h3 { margin: 0 0 8px; font: 600 11px var(--mono); letter-spacing: 0.08em; text-t
 #alerts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 11px; }
 .alert { padding: 4px 6px; border-radius: 3px; background: #15211d; }
 .alert .t { color: var(--mute); }
+.alert.pickable, .strip[data-id] { cursor: pointer; }
+.alert.pickable:hover, .strip[data-id]:hover { background: #1c2c27; }
+.strip.highlight, .alert.highlight { outline: 2px solid #f0d24a; outline-offset: -2px; background: #2a2a16; }
+.strip:focus-visible, .alert.pickable:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
 .alert.warn { color: var(--amber); }
 .alert.danger { color: var(--red); background: #2a1715; font-weight: 700; }
 .stand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; }

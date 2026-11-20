@@ -16,6 +16,8 @@ export interface LiveDayView {
   update(sim: Simulation, quota: number): void;
   /** Shows a short message under the Emergency Actions (e.g. why an action failed). */
   message(text: string): void;
+  /** The aircraft picked from a flight strip or an alert, to ring on the map (none: undefined). */
+  highlighted(): string | undefined;
 }
 
 export interface LiveDayHandlers {
@@ -36,16 +38,35 @@ const BUILDING: Record<string, string> = ROLE_NAME;
 export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): LiveDayView {
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
   let selected: string | undefined;
+  let highlight: string | undefined;
+  const rail = $('#rail');
   let lastAlertKey = '';
   let current: Simulation | undefined;
 
-  $('.strips[data-group="holding"] ol').addEventListener('click', (e) => {
-    const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-id]');
-    if (!li) return;
-    selected = selected === li.dataset.id ? undefined : li.dataset.id;
+  /** Picks an aircraft (or drops it when picked again): its strip lights up and it is ringed on the map. */
+  const pick = (id: string, holding: boolean) => {
+    highlight = highlight === id ? undefined : id;
+    if (holding) selected = highlight; // a Holding aircraft is also the target of Manual Divert / Priority Landing
+    rail.classList.remove('collapsed');
     lastRender = -1;
     if (current) view.update(current, lastQuota);
-  });
+    root.querySelector(`.strip[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
+  };
+  const onPick = (e: Event) => {
+    const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-id]');
+    if (li) pick(li.dataset.id!, !!li.closest('.strips[data-group="holding"]'));
+  };
+  const onKeyPick = (e: KeyboardEvent) => {
+    if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).matches('li[data-id]')) {
+      e.preventDefault();
+      e.stopPropagation();
+      onPick(e);
+    }
+  };
+  $('#rail').addEventListener('click', onPick);
+  $('#rail').addEventListener('keydown', onKeyPick);
+  $('#alerts').addEventListener('click', onPick);
+  $('#alerts').addEventListener('keydown', onKeyPick);
   $('#actions').addEventListener('click', (e) => {
     const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
     if (button && !button.disabled) handlers.onAction(button.dataset.action as ActionId, selected);
@@ -58,7 +79,6 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       handlers.onAcknowledgeAlert();
     }
   });
-  const rail = $('#rail');
   const toggle = $<HTMLButtonElement>('#rail-toggle');
   toggle.addEventListener('click', () => {
     const collapsed = rail.classList.toggle('collapsed');
@@ -69,8 +89,10 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
 
   let lastRender = -1;
   let lastEvents = -1;
+  let lastHighlight: string | undefined;
   let lastQuota = 0;
   const view: LiveDayView = {
+    highlighted: () => highlight,
     message(text) {
       $('#action-msg').textContent = text;
     },
@@ -82,6 +104,9 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       if (now === lastRender) return;
       lastRender = now;
       if (selected && !sim.flights.some((f) => f.id === selected && f.phase === 'holding')) selected = undefined;
+      if (highlight && !sim.flights.some((f) => f.id === highlight && !['departed', 'diverted', 'crashed'].includes(f.phase))) highlight = undefined;
+      const lit = (id: string) => (id === highlight ? ' highlight' : '');
+      const pickable = (id: string) => `data-id="${esc(id)}" tabindex="0" aria-pressed="${id === highlight}"`;
 
       // Quota bar
       const q = quotaProgress(sim, quota);
@@ -107,12 +132,15 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
         section.querySelector('.count')!.textContent = String(count);
         section.querySelector('ol')!.innerHTML = items.join('');
       };
-      fill('inbound', strips.inbound.slice(0, 8).map((f) =>
-        `<li class="strip" title="${esc(`${f.spoken} · ${f.type} · ${f.purpose} · arrives ${hhmm(f.eta)}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${hhmm(f.eta)}</span></li>`), strips.inbound.length);
+      const inbound = strips.inbound.slice(0, 8);
+      const picked = strips.inbound.find((f) => f.id === highlight);
+      if (picked && !inbound.includes(picked)) inbound.push(picked);
+      fill('inbound', inbound.map((f) =>
+        `<li ${pickable(f.id)} class="strip${lit(f.id)}" title="${esc(`${f.spoken} · ${f.type} · ${f.purpose} · arrives ${hhmm(f.eta)}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${hhmm(f.eta)}</span></li>`), strips.inbound.length);
       fill('holding', strips.holding.map((f) =>
-        `<li data-id="${esc(f.id)}" tabindex="0" class="strip${f.lowFuel ? ' low' : ''}${f.id === selected ? ' selected' : ''}" title="${esc(`${f.spoken} · ${f.type} · Holding since ${hhmm(f.since)} · Fuel Reserve ${Math.ceil(f.fuelMinutes)} min`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t fuel">⛽ ${Math.ceil(f.fuelMinutes)}′</span></li>`), strips.holding.length);
+        `<li ${pickable(f.id)} class="strip${f.lowFuel ? ' low' : ''}${f.id === selected ? ' selected' : ''}${lit(f.id)}" title="${esc(`${f.spoken} · ${f.type} · Holding since ${hhmm(f.since)} · Fuel Reserve ${Math.ceil(f.fuelMinutes)} min`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t fuel">⛽ ${Math.ceil(f.fuelMinutes)}′</span></li>`), strips.holding.length);
       fill('ground', strips.ground.map((f) =>
-        `<li class="strip" title="${esc(`${f.spoken} · ${f.type} · ${(f.waiting ? 'Waiting' : PHASE[f.phase] ?? f.phase)}${f.spot ? ` · ${f.spot}` : ''}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${(f.waiting ? 'Waiting' : PHASE[f.phase] ?? f.phase)}</span></li>`), strips.ground.length);
+        `<li ${pickable(f.id)} class="strip${lit(f.id)}" title="${esc(`${f.spoken} · ${f.type} · ${(f.waiting ? 'Waiting' : PHASE[f.phase] ?? f.phase)}${f.spot ? ` · ${f.spot}` : ''}`)}"><b>${esc(f.callsign)}</b><span>${f.type}</span><span class="size">${SIZE[f.size]}</span><span class="t">${(f.waiting ? 'Waiting' : PHASE[f.phase] ?? f.phase)}</span></li>`), strips.ground.length);
 
       // Emergency Actions
       const availability = actionAvailability(sim);
@@ -127,10 +155,12 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       }).join('');
 
       // Alerts (only when something new happened)
-      if (sim.events.length !== lastEvents) {
+      if (sim.events.length !== lastEvents || highlight !== lastHighlight) {
         lastEvents = sim.events.length;
-        $('#alerts').innerHTML = alerts(sim).slice(0, 12).map((a) =>
-          `<li class="alert ${a.severity}"><span class="t">${hhmm(a.minute)}</span> ${esc(a.text)}</li>`).join('') || '<li class="empty">All quiet</li>';
+        lastHighlight = highlight;
+        $('#alerts').innerHTML = alerts(sim).slice(0, 12).map((a) => a.flightId
+          ? `<li class="alert ${a.severity} pickable${lit(a.flightId)}" ${pickable(a.flightId)} role="button" title="Show this aircraft"><span class="t">${hhmm(a.minute)}</span> ${esc(a.text)}</li>`
+          : `<li class="alert ${a.severity}"><span class="t">${hhmm(a.minute)}</span> ${esc(a.text)}</li>`).join('') || '<li class="empty">All quiet</li>';
       }
 
       // Stands

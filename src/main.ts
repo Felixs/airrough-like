@@ -249,6 +249,7 @@ async function start(): Promise<void> {
     lastBackground = performance.now();
     play(ticker.deltaMS);
     flightLayer.calm = calmLights;
+    flightLayer.highlight = liveDay.highlighted();
     flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute), performance.now(), sim.clock.minute, stepFraction(sim.clock));
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
