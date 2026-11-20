@@ -1,0 +1,34 @@
+name: Balance lab
+
+# Plays the balance experiments (src/sim/lab, see docs/balance-lab.md) with scripted players over many seeds and
+# uploads the report (index.html, summary.md, results.json) as an artifact; the summary also shows on the run page.
+# Manual only: Actions → Balance lab → Run workflow, pick a branch, experiments and seeds.
+on:
+  workflow_dispatch:
+    inputs:
+      experiments:
+        description: 'Experiments (space-separated ids, or "all")'
+        default: 'all'
+      seeds:
+        description: 'Seeds per player and variant'
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  balance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Play the experiments
+        run: node scripts/balance.mjs ${{ inputs.experiments }} --seeds ${{ inputs.seeds }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: balance-report
+          path: balance-report/

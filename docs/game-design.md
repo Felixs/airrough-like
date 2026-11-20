@@ -85,7 +85,7 @@ Screen, which turns Score into Air Miles for the meta-progression.
   (`turnTileCost`: 1.3 tiles' worth for Small, 1.6 Medium, 2 Large), as real airliners taxi at about 20 kt straight
   and 10 kt in turns, wide-bodies the most carefully.
 - **Taxi Incidents**: the more aircraft taxi at once, the likelier one is stopped by an Incident (lowered by Ground
-  Radar). It stays put for the blockage time (20 min, shortened by the Fire & Rescue Station). While it stands there
+  Radar). Only aircraft on the move count; ones standing in a queue don't. It stays put for the blockage time (20 min, shortened by the Fire & Rescue Station). While it stands there
   it **closes the whole width of the Taxiway around it**. Every other aircraft whose route runs through the closure
   first looks for a detour round it; if there is none, it stops just short of the closure and waits. Later aircraft
   queue behind the ones already waiting (each only waits for those that started waiting before it, so queues never

@@ -11,6 +11,11 @@ branch); it regenerates `docs/screenshots/*.png` and commits them to that branch
 if a screen is added, renamed or its flow changes, update `scripts/screenshots.mjs` and the table in `README.md` in
 the same change.
 
+## Balance
+
+Tuning changes are checked with the balance lab (`docs/balance-lab.md`): `node scripts/balance.mjs <experiment>`
+locally or the manual Balance lab workflow; it reports win rates of scripted players against the targets there.
+
 ## Tests
 
 Locally, run the tests for the area you changed (plus a typecheck). CI runs the full suite on every PR; that run is the

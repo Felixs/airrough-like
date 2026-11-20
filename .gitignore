@@ -4,3 +4,5 @@ coverage/
 *.tsbuildinfo
 prototypes/ui-canvas/out/
 __pycache__/
+.balance/
+balance-report/

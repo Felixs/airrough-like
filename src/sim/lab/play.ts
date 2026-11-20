@@ -1,0 +1,113 @@
+/**
+ * Balance lab: plays one Run with a scripted player and records what happened, Day by Day.
+ */
+import { BOOSTS, emptyMeta, UNLOCKABLES, type MetaState } from '../meta';
+import { dayPlan, dayTwists, endDay, startLiveDay, startRun, WEEKS_TO_WIN, type RunState } from '../run';
+import { acknowledgeAlert, daySettled, finishDay, resolveFuel, stepSimulation } from '../simulation';
+import type { Player, Purchase } from './players';
+import { withTuning, type Overrides } from './tuning';
+
+export interface DayResult {
+  readonly day: number;
+  readonly week: number;
+  readonly weekday: number;
+  readonly quota: number;
+  readonly movements: number;
+  /** Movements / Quota. */
+  readonly margin: number;
+  readonly moneyAfter: number;
+  /** Flights turned away before the Day (no Stand / Runway for them). */
+  readonly turnedAway: number;
+  /** The most Movements the Schedule allowed. */
+  readonly maxMovements: number;
+  readonly diversions: Readonly<Record<string, number>>;
+  readonly crashes: number;
+  readonly incidents: number;
+  readonly twists: readonly string[];
+}
+
+/** What cost the Day its Quota, judged from the last Day of a lost Run. */
+export type LossCause = 'capacity' | 'darkness' | 'holding' | 'curfew' | 'crashes' | 'throughput';
+
+export interface RunResult {
+  readonly player: string;
+  readonly variant: string;
+  readonly seed: number;
+  readonly won: boolean;
+  readonly daysSurvived: number;
+  /** Day index (0 = Week 1 Monday) of the Day the Quota was missed; null when won. */
+  readonly lostOn: number | null;
+  readonly lossCause: LossCause | null;
+  readonly days: readonly DayResult[];
+  readonly purchases: readonly Purchase[];
+  readonly finalMoney: number;
+  readonly stands: number;
+  readonly runways: number;
+}
+
+/**
+ * Plays a Live Day the way a sensible Player answers the low-fuel question: a Mayday when no other Mayday is
+ * waiting (every Runway stops for it), otherwise Divert, so Maydays never pile up and stall the airport. Other
+ * alerts are acknowledged (Emergency Alerts take the second roll).
+ */
+export function playLiveDay(run: RunState): RunState {
+  let sim = startLiveDay(run);
+  while (sim.clock.minute < 24 * 60) {
+    if (sim.pendingAlert?.kind === 'fuel') sim = resolveFuel(sim, sim.mayday.length ? 'divert' : 'mayday');
+    else if (sim.pendingAlert) sim = acknowledgeAlert(sim);
+    else sim = daySettled(sim) ? finishDay(sim) : stepSimulation(sim);
+  }
+  return endDay(run, sim);
+}
+
+/** Meta-progression for an experiment: none, or every Unlockable and every Boost at its top level. */
+export function metaFor(kind: 'none' | 'full'): MetaState {
+  if (kind === 'none') return emptyMeta();
+  return {
+    ...emptyMeta(),
+    unlocks: UNLOCKABLES.map((u) => u.id),
+    boosts: Object.fromEntries(BOOSTS.map((b) => [b.id, b.maxLevel])),
+  };
+}
+
+export function lossCause(d: DayResult): LossCause {
+  if (d.maxMovements < d.quota) return 'capacity';
+  const lost: Array<[LossCause, number]> = [
+    ['darkness', (d.diversions.dark ?? 0) * 2],
+    ['holding', ((d.diversions.noRunway ?? 0) + (d.diversions.lowFuel ?? 0) + (d.diversions.manual ?? 0)) * 2],
+    ['curfew', (d.diversions.curfew ?? 0) * 2],
+    ['crashes', d.crashes * 2 + d.incidents],
+  ];
+  const [cause, n] = lost.sort((a, b) => b[1] - a[1])[0]!;
+  return n >= Math.max(1, d.quota - d.movements) / 2 ? cause : 'throughput';
+}
+
+/** Plays a Run of up to `WEEKS_TO_WIN` Weeks with the player's Plan Mode, under the tuning overrides. */
+export function playRun(player: Player, seed: number, opts: { overrides?: Overrides; meta?: 'none' | 'full'; variant?: string } = {}): RunResult {
+  return withTuning(opts.overrides ?? {}, () => {
+    let run: RunState = startRun(seed, metaFor(opts.meta ?? 'none'));
+    const days: DayResult[] = [];
+    const purchases: Purchase[] = [];
+    const maxDays = WEEKS_TO_WIN * 7;
+    while (run.status === 'planning' && days.length < maxDays) {
+      run = player.plan(run, purchases);
+      const forecast = dayPlan(run).forecast;
+      const twists = dayTwists(run).map((t) => t.name);
+      run = playLiveDay(run);
+      const r = run.history[run.history.length - 1]!;
+      days.push({
+        day: days.length, week: r.week, weekday: r.weekday, quota: r.quota, movements: r.movements, margin: r.movements / Math.max(1, r.quota),
+        moneyAfter: r.moneyAfter, turnedAway: forecast.turnedAway.total, maxMovements: forecast.maxMovements,
+        diversions: r.diversionsByReason, crashes: r.crashes, incidents: r.highlights.filter((h) => h.kind !== 'crash').length, twists,
+      });
+    }
+    const won = run.status === 'won';
+    const last = days[days.length - 1];
+    return {
+      player: player.id, variant: opts.variant ?? 'current', seed, won, daysSurvived: run.stats.daysSurvived,
+      lostOn: run.status === 'lost' && last ? last.day : null,
+      lossCause: run.status === 'lost' && last ? lossCause(last) : null,
+      days, purchases, finalMoney: run.money, stands: run.layout.stands.length, runways: run.layout.runways.length,
+    };
+  });
+}
