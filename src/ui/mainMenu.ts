@@ -1,6 +1,6 @@
 import { buyBoost, buyUnlockable, metaShop, type BoostId, type MetaState, type ShopItem, type UnlockableId } from '../sim/meta';
 import { parseSeed, type RunState } from '../sim/run';
-import type { Options } from '../sim/save';
+import { reduceMotion, type Options } from '../sim/save';
 import { dayName } from './dayEnd';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -30,23 +30,44 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
   el.setAttribute('aria-label', 'Main Menu');
   root.appendChild(el);
 
+  const SHORT = 'Not enough Air Miles';
+  // "Not enough Air Miles" is said once above the lists; such items are dimmed with their price in red instead
   const item = (kind: 'unlock' | 'boost', i: ShopItem) => `
-    <button type="button" class="offer${i.locked ? ' locked' : ''}" data-${kind}="${i.id}" ${i.available ? '' : 'disabled'} title="${esc(i.effect)}">
+    <button type="button" class="offer${i.locked ? ' locked' : ''}${i.reason === SHORT ? ' short' : ''}" data-${kind}="${i.id}" ${i.available ? '' : 'disabled'} title="${esc(i.effect + (i.reason === SHORT ? ` · needs ✈ ${i.cost - meta.airMiles} more` : ''))}">
       <b>${i.locked ? '🔒 ' : ''}${esc(i.name)}${i.maxLevel > 1 ? ` ${i.level}/${i.maxLevel}` : ''}</b>
-      <span>${i.reason === 'Owned' ? '✓ Owned' : i.reason === 'Max level' ? 'Max' : `✈ ${i.cost.toLocaleString('en-US')}`}</span>
-      <small class="effect">${esc(i.effect)}${i.reason && i.reason !== 'Owned' && i.reason !== 'Max level' ? ` · ${esc(i.reason)}` : ''}</small></button>`;
+      <span class="cost">${i.reason === 'Owned' ? '✓ Owned' : i.reason === 'Max level' ? 'Max' : `✈ ${i.cost.toLocaleString('en-US')}`}</span>
+      <small class="effect">${esc(i.effect)}${i.reason && i.reason !== 'Owned' && i.reason !== 'Max level' && i.reason !== SHORT ? ` · ${esc(i.reason)}` : ''}</small></button>`;
+
+  /** The right side of the Play tab: where the Player stands between Runs, and the controls. */
+  const career = () => {
+    const shop = metaShop(meta);
+    const owned = shop.unlockables.filter((u) => u.reason === 'Owned').length;
+    const levels = shop.boosts.reduce((n, b) => n + b.level, 0);
+    const next = [...shop.unlockables, ...shop.boosts].filter((i) => i.reason !== 'Owned' && i.reason !== 'Max level' && !i.locked).sort((a, b) => a.cost - b.cost)[0];
+    return `<aside class="career">
+      <h3>Your career</h3>
+      <dl><dt>Runs played</dt><dd>${meta.lifetime.runs}</dd><dt>Air Miles</dt><dd>✈ ${meta.airMiles.toLocaleString('en-US')}</dd>
+        <dt>Unlockables</dt><dd>${owned} / ${shop.unlockables.length}</dd><dt>Boost levels</dt><dd>${levels}</dd></dl>
+      ${next ? `<p class="lead">Next within reach: <b>${esc(next.name)}</b> for ✈ ${next.cost.toLocaleString('en-US')}${next.cost > meta.airMiles ? ` (✈ ${(next.cost - meta.airMiles).toLocaleString('en-US')} to go)` : ' (you can buy it now)'}.</p>` : ''}
+      <h3>Controls</h3>
+      <dl class="keys"><dt><kbd>Space</kbd></dt><dd>Pause / resume</dd><dt><kbd>1</kbd>–<kbd>5</kbd></dt><dd>Live, 1×, 2×, 4×, 8×</dd>
+        <dt><kbd>D</kbd> / <kbd>M</kbd></dt><dd>Low fuel: Divert / Mayday</dd><dt><kbd>T</kbd> <kbd>S</kbd> <kbd>B</kbd> <kbd>R</kbd> <kbd>U</kbd> <kbd>L</kbd> <kbd>M</kbd> <kbd>D</kbd></dt><dd>Build tools</dd>
+        <dt><kbd>Enter</kbd> / <kbd>Ctrl Z</kbd></dt><dd>Confirm / undo building</dd></dl>
+    </aside>`;
+  };
 
   const render = (focus?: string) => {
     const shop = metaShop(meta);
     const body: Record<Tab, () => string> = {
       play: () => `
-        <div class="play">
+        <div class="play-layout"><div class="play">
           ${saved ? `<button type="button" class="primary big" data-go="continue">Continue<small>${saved.status === 'won' ? 'Won Run' : `Next: ${dayName(saved.week, saved.weekday)}`}${saved.endless ? ' · Endless' : ''} · ${money(saved.money)} · ${saved.stats.daysSurvived} Days survived</small></button>` : ''}
           <button type="button" class="${saved ? 'secondary' : 'primary'} big" data-go="new">New Run${saved ? '<small>Replaces the saved Run</small>' : ''}</button>
           <label class="seed-input">Seed <small>(optional: replay a Run or a bug report)</small><input type="text" inputmode="numeric" id="seed-input" placeholder="random" autocomplete="off"></label>
           <p class="lead">Survive four Weeks. Every Day has a Daily Quota of Movements, and missing one ends the Run. Spend Air Miles from finished Runs on Unlockables and Boosts.</p>
-        </div>`,
+        </div>${career()}</div>`,
       shop: () => `
+        <p class="shop-note">You have <b>✈ ${meta.airMiles.toLocaleString('en-US')}</b>. Dimmed items with a red price need more Air Miles: finish Runs to earn them (more for more Days and Movements).</p>
         <div class="shop-cols">
           <section><h3>Unlockables <small>bought once, in every later Run</small></h3><div class="offers">${shop.unlockables.map((u) => item('unlock', u)).join('')}</div></section>
           <section><h3>Boosts <small>permanent bonuses in levels</small></h3><div class="offers">${shop.boosts.map((b) => item('boost', b)).join('')}</div></section>
@@ -56,6 +77,7 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
           <label>Starting speed <select data-opt="defaultSpeed">${[1, 2, 4, 8].map((v) => `<option value="${v}"${options.defaultSpeed === v ? ' selected' : ''}>${v}×</option>`).join('')}</select></label>
           <label class="check"><input type="checkbox" data-opt="autoSlow" ${options.autoSlow ? 'checked' : ''}> Auto-slow: 1× while aircraft land or take off</label>
           <label class="check"><input type="checkbox" data-opt="eventPopups" ${options.eventPopups ? 'checked' : ''}> Pause with a pop-up on Incidents, Crashes and Diversions</label>
+          <label class="check"><input type="checkbox" data-opt="reduceMotion" ${reduceMotion(options) ? 'checked' : ''}> Reduce motion: aircraft lights stay steady instead of flashing${options.reduceMotion === undefined ? ' <small>(following your system setting)</small>' : ''}</label>
           <div class="danger-zone"><h3>Reset progress</h3><p class="lead">Deletes Air Miles, Unlockables, Boosts and the saved Run.</p>
             ${confirmReset ? '<button type="button" class="danger" data-go="reset-yes">Yes, delete everything</button> <button type="button" class="secondary small" data-go="reset-no">Cancel</button>' : '<button type="button" class="secondary small" data-go="reset">Reset progress…</button>'}</div>
         </div>`,
@@ -64,7 +86,7 @@ export function showMainMenu(root: HTMLElement, state: { meta: MetaState; saved:
           <h3>How to play</h3>
           <ol>
             <li><b>Plan Mode</b>: before each Day, read the Forecast and Run Calendar, buy upgrades and use <b>Build</b> to add Taxiways, Stands, Holding Bays, Runways and buildings. Demolish refunds everything for now, so experiment.</li>
-            <li><b>Live Day</b>: the ATC Tower handles every aircraft by itself. Watch the Quota bar, the Holding strips (fuel!) and the Alerts. Use <b>Emergency Actions</b> when an aircraft runs low on fuel or the ground jams.</li>
+            <li><b>Live Day</b>: the ATC Tower handles every aircraft by itself. Watch the Quota bar, the Holding strips (fuel!) and the Alerts. Use <b>Emergency Actions</b> when traffic piles up; when an aircraft runs low on fuel you decide: divert it, or declare a Mayday.</li>
             <li><b>Daily Quota</b>: every landing and takeoff is a Movement. Miss the Quota once and the Run is over. Saturdays are Rush Days, Sundays Boss Days with a Boss Twist you can see coming in the Run Calendar.</li>
             <li><b>Money</b>: aircraft pay when they unload and when they take off. Upkeep is paid at midnight. You may go into Debt, but then you can't build.</li>
             <li><b>Between Runs</b>: the Air Miles you earn buy Unlockables (buildings and features) and Boosts.</li>

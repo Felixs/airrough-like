@@ -248,6 +248,8 @@ export class FlightLayer {
   readonly lights = new Container();
   private readonly sprites = new Map<string, Sprite>();
   private minute = -1;
+  /** Reduce motion: the beacon glows steadily and the strobes stay off instead of flashing. */
+  calm = false;
 
   /**
    * `darkness` 0 (day) … ~0.6 (night) from the daylight curve; lights fade in as it gets dark. `minute` and `fraction`
@@ -299,8 +301,8 @@ export class FlightLayer {
       const moving = runway || TAXIING.has(f.phase);
       const t = (nowMs + s.phaseMs) % 1200;
       l.nav.visible = f.phase !== 'onStand';
-      l.beacon.visible = moving && t % 1000 < 130; // red anti-collision beacon while the engines run
-      l.strobes.visible = runway && (t < 60 || (t > 160 && t < 220)); // white double flash on the Runway
+      l.beacon.visible = moving && (this.calm || t % 1000 < 130); // red anti-collision beacon while the engines run
+      l.strobes.visible = !this.calm && runway && (t < 60 || (t > 160 && t < 220)); // white double flash on the Runway
       l.landing.visible = runway;
       l.taxi.visible = TAXIING.has(f.phase) && f.phase !== 'holdShort';
     }

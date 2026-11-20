@@ -137,7 +137,9 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
       $('#stands').innerHTML = standsStatus(sim).map((s) => {
         const what = s.kind === 'holdingBay' ? `Holding Bay ${s.id}` : `Stand ${s.id} (${s.serves === 'terminal' ? 'Terminal' : 'Cargo Hub'})`;
         const tip = `${what} · ${s.size} · ${s.state}${s.aircraft ? ` · ${s.flightId} ${s.aircraft}` : ''}`;
-        return `<span class="spot ${s.state}${s.kind === 'holdingBay' ? ' bay' : ''}" title="${esc(tip)}">${esc(s.id)}<small>${SIZE[s.size]}</small></span>`;
+        // state in words and a symbol, not only in colour
+        const status = s.state === 'free' ? '○ free' : `${s.state === 'busy' ? '●' : '◐'} ${s.flightId ? callsignOf(sim, s.flightId) : ''}`;
+        return `<span class="spot ${s.state}${s.kind === 'holdingBay' ? ' bay' : ''}" title="${esc(tip)}"><b>${esc(s.id)}</b><small>${SIZE[s.size]}</small><span class="who">${esc(status)}</span></span>`;
       }).join('');
 
       // Runway and wind chips
@@ -182,7 +184,7 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
     banner.className = `alert-banner ${alert.kind}`;
     if (alert.kind === 'fuel') {
       banner.innerHTML = `<b>LOW FUEL</b><span>${who} has ${Math.ceil(f?.fuelMinutes ?? 0)} min of fuel left. Divert it now (no fees, no Movement, no fine), or declare a Mayday: it lands next and every Runway waits for it, but if the landing goes wrong it crashes, with no fuel to go around.</span>
-        <div class="alert-actions"><button type="button" data-fuel="divert">Divert</button><button type="button" data-ack class="danger">Mayday landing</button></div>`;
+        <div class="alert-actions"><button type="button" data-fuel="divert" aria-keyshortcuts="D">Divert <kbd>D</kbd></button><button type="button" data-ack class="danger" aria-keyshortcuts="M">Mayday landing <kbd>M</kbd></button></div>`;
     } else if (alert.kind === 'emergency') {
       banner.innerHTML = `<b>EMERGENCY ALERT</b><span>${who} is about to crash. Intervene for a second roll (${Math.round(secondRollChance(sim.controllerTrainingLevel) * 100)}% to save it).</span>
         <div class="alert-actions"><button type="button" data-ack>Intervene</button></div>`;

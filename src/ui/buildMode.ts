@@ -128,7 +128,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
       for (let py = WORLD.y0 / WORLD.plotH; py < (WORLD.y0 + WORLD.height) / WORLD.plotH; py++) {
         if (session.ownedPlots.some((p) => p.px === px && p.py === py)) continue;
         overlay.rect(px * WORLD.plotW * T, py * WORLD.plotH * T, WORLD.plotW * T, WORLD.plotH * T).fill({ color: 0x000000, alpha: 0.55 });
-        const t = new Text({ text: `Land Plot · ${money(price)}`, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 4, fill: 0x8fa8a0 } });
+        const t = new Text({ text: `Land Plot · ${money(price)}`, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 7, fill: 0x8fa8a0 } });
         t.resolution = 4;
         t.anchor.set(0.5);
         t.position.set((px + 0.5) * WORLD.plotW * T, (py + 0.5) * WORLD.plotH * T);

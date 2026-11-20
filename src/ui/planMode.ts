@@ -133,7 +133,9 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
             ${calendar.map((w) => `<div class="week${w.locked ? ' locked' : ''}"><span class="wk">W${w.week}</span>${w.days.map((d) => {
               const cls = ['day', d.state, d.boss ? 'boss' : '', d.rush ? 'rush' : '', d.result && !d.result.quotaMet ? 'missed' : ''].join(' ');
               const tip = w.locked ? 'Locked' : `${WEEKDAY_NAMES[d.weekday]} · Quota ${d.quota} · Demand ${d.demand}${d.boss ? ' · Boss Day' : d.rush ? ' · Rush Day' : ''}${d.twist ? ` · ${d.twist.name}: ${d.twist.description}` : ''}${d.result ? ` · done ${d.result.movements}/${d.result.quota}` : ''}`;
-              return `<span class="${cls}" title="${esc(tip)}"><small>${WEEKDAY_NAMES[d.weekday]}${d.twist ? ` ${ICON[d.twist.family]}` : ''}</small>${w.locked ? '🔒' : d.quota}</span>`;
+              // a played Day says how it went in a mark, not only in colour
+              const mark = d.result ? (d.result.quotaMet ? ' ✓' : ' ✗') : '';
+              return `<span class="${cls}" title="${esc(tip)}"><small>${WEEKDAY_NAMES[d.weekday]}${d.twist ? ` ${ICON[d.twist.family]}` : ''}</small>${w.locked ? '🔒' : d.quota}${mark ? `<i class="mark">${mark}</i>` : ''}</span>`;
             }).join('')}</div>`).join('')}
           </div>
           ${canTakeBonusTwist(run) ? `<div class="card bonus-card"><h3>Bonus Twist</h3>

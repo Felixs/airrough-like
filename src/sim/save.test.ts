@@ -76,3 +76,12 @@ describe('Options', () => {
     expect(loadRun(store).kind).toBe('none');
   });
 });
+
+describe('Reduce motion', () => {
+  it('is the Player’s choice when set, else follows the system (off where there is none)', async () => {
+    const { reduceMotion, DEFAULT_OPTIONS } = await import('./save');
+    expect(reduceMotion({ ...DEFAULT_OPTIONS, reduceMotion: true })).toBe(true);
+    expect(reduceMotion({ ...DEFAULT_OPTIONS, reduceMotion: false })).toBe(false);
+    expect(reduceMotion(DEFAULT_OPTIONS)).toBe(false); // no matchMedia outside a browser
+  });
+});
