@@ -6,8 +6,10 @@ import { createLayout } from './layout';
 import type { RunState } from './run';
 import { emptyMeta, type MetaState } from './meta';
 
-export const SAVE_VERSION = 2;
-export const KEYS = { run: 'aab.run', meta: 'aab.meta' } as const;
+export const SAVE_VERSION = 3;
+/** Meta-progression has its own version so Run format changes don't wipe Air Miles. */
+export const META_VERSION = 2;
+export const KEYS = { run: 'aab.run', meta: 'aab.meta', options: 'aab.options' } as const;
 
 /** The part of localStorage the game uses (so tests can pass a fake). */
 export interface KeyValueStore {
@@ -40,9 +42,9 @@ export function browserStore(): KeyValueStore {
 export type LoadResult<T> = { kind: 'none' } | { kind: 'discarded'; reason: string } | ({ kind: 'run' } & { run: T });
 
 /** Writes a versioned JSON value; returns false when storage fails. */
-export function writeSave(store: KeyValueStore, key: string, data: unknown): boolean {
+export function writeSave(store: KeyValueStore, key: string, data: unknown, version = SAVE_VERSION): boolean {
   try {
-    store.set(key, JSON.stringify({ version: SAVE_VERSION, data }));
+    store.set(key, JSON.stringify({ version, data }));
     return true;
   } catch {
     return false;
@@ -50,7 +52,7 @@ export function writeSave(store: KeyValueStore, key: string, data: unknown): boo
 }
 
 /** Reads a versioned JSON value; discards (and removes) anything incompatible. */
-export function readSave(store: KeyValueStore, key: string): { kind: 'none' } | { kind: 'discarded'; reason: string } | { kind: 'ok'; data: unknown } {
+export function readSave(store: KeyValueStore, key: string, version = SAVE_VERSION): { kind: 'none' } | { kind: 'discarded'; reason: string } | { kind: 'ok'; data: unknown } {
   let text: string | null;
   try {
     text = store.get(key);
@@ -68,7 +70,7 @@ export function readSave(store: KeyValueStore, key: string): { kind: 'none' } | 
   };
   try {
     const parsed = JSON.parse(text) as { version?: unknown; data?: unknown; run?: unknown };
-    if (parsed.version !== SAVE_VERSION) return discard(`The saved game is from another version (${String(parsed.version)}) and was discarded.`);
+    if (parsed.version !== version) return discard(`The saved game is from another version (${String(parsed.version)}) and was discarded.`);
     return { kind: 'ok', data: parsed.data };
   } catch {
     return discard('The saved game was damaged and was discarded.');
@@ -102,11 +104,43 @@ export function clearRun(store: KeyValueStore): void {
 
 /** Meta-progression is saved separately and always. */
 export function saveMeta(store: KeyValueStore, meta: MetaState): boolean {
-  return writeSave(store, KEYS.meta, meta);
+  return writeSave(store, KEYS.meta, meta, META_VERSION);
 }
 
 export function loadMeta(store: KeyValueStore): MetaState {
-  const r = readSave(store, KEYS.meta);
+  const r = readSave(store, KEYS.meta, META_VERSION);
   if (r.kind !== 'ok' || !r.data || typeof r.data !== 'object') return emptyMeta();
   return { ...emptyMeta(), ...(r.data as Partial<MetaState>) };
+}
+
+/** Player options, kept between sessions. */
+export interface Options {
+  /** Speed a Live Day starts at. */
+  readonly defaultSpeed: 1 | 2 | 4 | 8;
+  /** Drop to 1× while aircraft land or take off. */
+  readonly autoSlow: boolean;
+  /** Pause with an info pop-up on Incidents, Crashes and Diversions. */
+  readonly eventPopups: boolean;
+}
+
+export const DEFAULT_OPTIONS: Options = { defaultSpeed: 1, autoSlow: true, eventPopups: true };
+
+export function loadOptions(store: KeyValueStore): Options {
+  const r = readSave(store, KEYS.options, 1);
+  return r.kind === 'ok' && r.data && typeof r.data === 'object' ? { ...DEFAULT_OPTIONS, ...(r.data as Partial<Options>) } : DEFAULT_OPTIONS;
+}
+
+export function saveOptions(store: KeyValueStore, options: Options): boolean {
+  return writeSave(store, KEYS.options, options, 1);
+}
+
+/** Wipes Air Miles, Unlockables, Boosts and the saved Run. */
+export function resetProgress(store: KeyValueStore): void {
+  for (const key of [KEYS.meta, KEYS.run]) {
+    try {
+      store.remove(key);
+    } catch {
+      // ignore: storage is unavailable
+    }
+  }
 }

@@ -4,11 +4,12 @@ import {
   taxiwayFromDrag, type BuildSession,
 } from './build';
 import type { Structure } from './layout';
+import { UNLOCKABLES } from './meta';
 import { startRun, upkeep, type RunState } from './run';
 
 const rich = (): RunState => {
   const run = startRun(1);
-  return { ...run, money: 1_000_000, modifiers: { ...run.modifiers, unlocks: ['surviveWeek1', 'surviveWeek2', 'land100Large'] } };
+  return { ...run, money: 1_000_000, modifiers: { ...run.modifiers, unlocks: UNLOCKABLES.map((u) => u.id) } };
 };
 const find = (session: BuildSession, pred: (s: Structure) => boolean) => session.layout.structures.find(pred)!;
 const failing = (c: ReturnType<typeof checkChange>) => c.items.filter((i) => !i.ok).map((i) => i.label);
@@ -57,7 +58,8 @@ describe('Buildings', () => {
   });
 
   it('Terminal and Cargo Hub wings must be attached to their building', () => {
-    const s = openBuild(rich());
+    const r = rich();
+    const s = openBuild({ ...r, modifiers: { ...r.modifiers, unlocks: r.modifiers.unlocks.filter((u) => u !== 'secondTerminal') } });
     const wing: Structure = { kind: 'terminal', x: 22, y: 2, w: 3, h: 4 };
     expect(checkChange(s, { kind: 'add', structure: wing })).toMatchObject({ ok: true, cost: 18_000 });
     expect(failing(checkChange(s, { kind: 'add', structure: { ...wing, x: 2, y: 14 } }))).toContain('Attached to the Terminal');

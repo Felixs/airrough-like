@@ -8,7 +8,7 @@
 | Medium | A320, B737-800 | B737-800BCF |
 | Large | B777-300ER, A350 | B747-8F |
 
-Larger/rarer types unlock via Milestones.
+Larger/rarer types may become Unlockables later.
 
 ## Emergency Actions
 

@@ -4,10 +4,10 @@
  */
 import type { RunwaySurface, Structure } from './layout';
 import { createLayout } from './layout';
-import { dayPlan, upkeep, type DayReport, type RunState, type TowerModules } from './run';
+import { dayPlan, hasBuilding, upkeep, type DayReport, type RunState, type TowerModules } from './run';
 import { BOSS_DAY, RUSH_DAY, planDay } from './schedule';
 import { twistsFor, type Twist } from './twists';
-import { milestoneName, type MilestoneId } from './meta';
+import { unlockableName, type UnlockableId } from './meta';
 
 /** Prices *(first guess)*. */
 export const PRICES = {
@@ -57,19 +57,18 @@ function applyUpgrade(run: RunState, id: UpgradeId): RunState {
   return { ...run, towerModules: { ...run.towerModules, [id]: run.towerModules[id] + 1 } };
 }
 
-/** Milestone needed for an upgrade level, if any. */
-function lockFor(run: RunState, id: UpgradeId, nextLevel: number, nextSurface?: RunwaySurface): string | null {
-  const has = (m: MilestoneId) => run.modifiers.unlocks.includes(m);
-  if (id === 'surface' && nextSurface === 'ils' && !has('surviveWeek2')) return `Unlock: ${milestoneName('surviveWeek2')}`;
-  if (id !== 'surface' && id !== 'fireRescue' && nextLevel >= 5 && !has('land100Large')) return `Unlock: ${milestoneName('land100Large')}`;
-  if (id === 'fireRescue' && nextLevel >= 4 && !has('surviveWeek1')) return `Unlock: ${milestoneName('surviveWeek1')}`;
+/** Unlockable (or building) needed for an upgrade level, if any. */
+function lockFor(run: RunState, id: UpgradeId, nextLevel: number): string | null {
+  const has = (u: UnlockableId) => run.modifiers.unlocks.includes(u);
+  if (id !== 'surface' && id !== 'fireRescue' && nextLevel >= 4 && !has('towerLevel45')) return `🔒 Needs Unlockable: ${unlockableName('towerLevel45')}`;
+  if (id === 'fireRescue' && !has('fireRescueStation')) return `🔒 Needs Unlockable: ${unlockableName('fireRescueStation')}`;
+  if (id === 'fireRescue' && !hasBuilding(run, 'fireRescueStation')) return 'Place a Fire & Rescue Station in Build Mode first';
   return null;
 }
 
 export function upgradeOffers(run: RunState): UpgradeOffer[] {
   const make = (id: UpgradeId, label: string, effect: string, level: number, maxed: boolean, cost: number): UpgradeOffer => {
-    const surface = run.layout.runways[0]!.surface;
-    const locked = maxed ? null : lockFor(run, id, level + 1, SURFACE_ORDER[SURFACE_ORDER.indexOf(surface) + 1]);
+    const locked = maxed ? null : lockFor(run, id, level + 1);
     const reason = maxed ? 'Max level' : locked ? locked : run.inDebt ? 'In Debt: pay it off first' : run.money < cost ? 'Not enough Money' : null;
     return {
       id, label, effect, level, nextLevel: maxed ? null : level + 1, cost,
@@ -89,7 +88,7 @@ export function upgradeOffers(run: RunState): UpgradeOffer[] {
   );
   const fire = run.fireRescueLevel;
   const fireOffer = make(
-    'fireRescue', fire === 0 ? 'Fire & Rescue Station' : `Fire & Rescue ${Math.min(fire + 1, PRICES.maxLevel)}`,
+    'fireRescue', `Fire & Rescue ${Math.min(fire + 1, PRICES.maxLevel)}`,
     'Crashes and Incidents block the Runway for less time', fire, fire >= PRICES.maxLevel, PRICES.fireRescuePerLevel * (fire + 1),
   );
   return [surfaceOffer, ...modules, fireOffer];

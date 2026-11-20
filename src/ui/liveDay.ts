@@ -1,4 +1,5 @@
 import { formatClock } from '../sim/clock';
+import { ROLE_NAME } from '../sim/build';
 import { alerts, callsignOf, describeEvent, flightStrips, movementsPerHour, quotaProgress, runwayStatuses, standsStatus } from '../sim/liveView';
 import {
   ACTION_IDS, actionAvailability, mostUrgentHolding, secondRollChance, type ActionId, type Simulation,
@@ -28,7 +29,7 @@ const ACTION_LABEL: Record<ActionId, [string, string]> = {
   manualDivert: ['Manual Divert', 'Sends the selected (or lowest-fuel) Holding aircraft away'],
   priorityLanding: ['Priority Landing', 'Moves the selected (or lowest-fuel) Holding aircraft to the front of the queue'],
 };
-const BUILDING: Record<string, string> = { rampAgentStation: 'Ramp Agent Station', adminOffice: 'Admin Office', airlineOffice: 'Airline Office' };
+const BUILDING: Record<string, string> = ROLE_NAME;
 
 /** The Live Day screen panels around the map (ATC Console layout). The map itself is drawn by PixiJS. */
 export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): LiveDayView {

@@ -2,6 +2,7 @@ import { parseSpeed, type Speed } from '../sim/clock';
 
 export interface TopBar {
   showClock(text: string, dayOver: boolean): void;
+  setSpeed(speed: Speed): void;
 }
 
 /** Wires the top bar's speed buttons and returns a small view to update the clock. */
@@ -21,6 +22,7 @@ export function mountTopBar(root: HTMLElement, initial: Speed, onSpeed: (speed: 
   select(initial);
 
   return {
+    setSpeed: select,
     showClock(text, dayOver) {
       clock.textContent = text;
       status.textContent = dayOver ? 'Day over' : '';

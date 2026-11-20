@@ -2,10 +2,11 @@ import { Application, Container, Graphics, Text, type FederatedPointerEvent } fr
 import { drawAirfield, fitToScreen, worldBounds } from '../render/airfield';
 import {
   applyChange, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild,
-  pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
+  ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
 import { TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
+import type { UnlockableId } from '../sim/meta';
 import type { Tile } from '../sim/taxi';
 
 const T = TILE_SIZE;
@@ -29,6 +30,7 @@ const HINT: Record<Tool, string> = {
 };
 
 type Building = SupportRole | 'terminalWing' | 'cargoWing';
+const TERMINAL_WING = { w: 3, h: 4 } as const;
 
 export interface BuildModeHandlers {
   /** Called after Confirm with the updated Run. */
@@ -48,9 +50,11 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   let tool: Tool = 'taxiway';
   const opt = {
     size: 'medium' as SizeClass, placement: 'contact' as Stand['placement'], serves: 'terminal' as Stand['serves'],
-    length: 'medium' as RunwayLength, orientation: 'horizontal', runwayAction: 'new', building: 'rampAgentStation' as Building,
+    length: 'medium' as RunwayLength, orientation: 'horizontal', runwayAction: 'new', building: 'terminalWing' as Building, surface: 'asphalt',
   };
 
+  /** Option text with a lock when the Unlockable isn't owned yet. */
+  const lock = (id: UnlockableId, text: string) => (run.modifiers.unlocks.includes(id) ? text : `🔒 ${text}`);
   const select = (name: string, values: Array<[string, string]>, selected: string, show: Tool[]) =>
     `<label data-for="${show.join(' ')}">${name}<select data-opt="${name.toLowerCase()}">${values.map(([v, l]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`;
   root.innerHTML = `
@@ -59,12 +63,16 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         `<button type="button" data-tool="${id}" aria-pressed="${id === 'taxiway'}">${name}<kbd>${key.toUpperCase()}</kbd></button>`).join('')}
         <div class="tool-options">
           ${select('Size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']], 'medium', ['stand', 'holdingBay'])}
-          ${select('Type', [['contact', 'Contact'], ['remote', 'Remote']], 'contact', ['stand'])}
+          ${select('Type', [['contact', 'Contact'], ['remote', lock('remoteStands', 'Remote')]], 'contact', ['stand'])}
           ${select('Serves', [['terminal', 'Terminal'], ['cargoHub', 'Cargo Hub']], 'terminal', ['stand'])}
           ${select('Action', [['new', 'New Runway'], ['lengthen', 'Lengthen']], 'new', ['runway'])}
           ${select('Length', [['short', 'Short (24)'], ['medium', 'Medium (36)'], ['long', 'Long (48)']], 'medium', ['runway'])}
           ${select('Orientation', [['horizontal', '09-27 (horizontal)'], ['vertical', '18-36 (vertical)']], 'horizontal', ['runway'])}
-          ${select('Building', [['rampAgentStation', 'Ramp Agent Station'], ['adminOffice', 'Admin Office'], ['airlineOffice', 'Airline Office'], ['terminalWing', 'Terminal wing'], ['cargoWing', 'Cargo Hub wing']], 'rampAgentStation', ['building'])}
+          ${select('Surface', [['asphalt', 'Asphalt'], ['grass', lock('grassStrip', 'Grass strip (Short)')]], 'asphalt', ['runway'])}
+          ${select('Building', [
+            ['terminalWing', lock('terminalWing', 'Terminal wing')], ['cargoWing', lock('cargoWing', 'Cargo Hub wing')],
+            ...(['rampAgentStation', 'adminOffice', 'airlineOffice', 'fireRescueStation', 'fuelFarm', 'deIcingPad'] as const).map((r): [string, string] => [r, lock(r, ROLE_NAME[r])]),
+          ], 'terminalWing', ['building'])}
         </div></nav>
       <div class="build-map" aria-label="Build map"></div>
       <aside class="build-side">
@@ -193,12 +201,12 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
           const longer = lengthened(r);
           return longer ? { change: { kind: 'replace', from: r, to: longer }, rects: [longer] } : null;
         }
-        const s = newRunway(session, t, opt.length, opt.orientation === 'vertical');
+        const s = newRunway(session, t, opt.length, opt.orientation === 'vertical', opt.surface === 'grass');
         return { change: { kind: 'add', structure: s }, rects: [s] };
       }
       case 'building': {
-        const s: Structure = opt.building === 'terminalWing' ? { kind: 'terminal', x: t.x, y: t.y, w: 3, h: 4 }
-          : opt.building === 'cargoWing' ? { kind: 'cargoHub', x: t.x, y: t.y, w: 3, h: 4 }
+        const s: Structure = opt.building === 'terminalWing' ? { kind: 'terminal', x: t.x, y: t.y, ...TERMINAL_WING }
+          : opt.building === 'cargoWing' ? { kind: 'cargoHub', x: t.x, y: t.y, ...TERMINAL_WING }
           : newBuilding(session, t, opt.building);
         return { change: { kind: 'add', structure: s }, rects: [s] };
       }

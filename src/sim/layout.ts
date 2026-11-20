@@ -52,7 +52,8 @@ export interface AtcTower extends TileRect {
   readonly kind: 'atcTower';
 }
 /** Enables one Emergency Action. */
-export type SupportRole = 'rampAgentStation' | 'adminOffice' | 'airlineOffice';
+/** Small buildings: three enable an Emergency Action, the others give their bonus while placed. */
+export type SupportRole = 'rampAgentStation' | 'adminOffice' | 'airlineOffice' | 'fireRescueStation' | 'fuelFarm' | 'deIcingPad';
 export interface SupportBuilding extends TileRect {
   readonly kind: 'supportBuilding';
   readonly role: SupportRole;
