@@ -84,10 +84,24 @@ describe('Error outcomes', () => {
     expect(end.money).toBeLessThan(0);
   });
 
-  it('a rejected takeoff returns the aircraft to the hold point', () => {
+  it('a rejected takeoff brakes to the next exit past its roll, then taxis back to a hold point', () => {
     const overnight: ScheduledFlight[] = [{ id: 'N', type: 'A320', arrivalMinute: 0, overnight: true }];
-    const end = findSeed({ layout, schedule: overnight, riskMultiplier: 100 }, 6 * 60 + 5, 'rejectedTakeoff');
-    expect(['holdShort', 'takeoff']).toContain(flight(end, 'N').phase);
+    const found = findSeed({ layout, schedule: overnight, riskMultiplier: 100 }, 6 * 60 + 5, 'rejectedTakeoff');
+    let s = createSimulation({ layout, schedule: overnight, riskMultiplier: 100, seed: found.seed });
+    while (!s.events.some((e) => e.kind === 'rejectedTakeoff')) s = stepSimulation(s);
+    const n = flight(s, 'N');
+    const event = s.events.find((e) => e.kind === 'rejectedTakeoff')!;
+    expect(event.story).toBeTruthy();
+    expect(n.phase).toBe('taxiOut');
+    const access = s.network.runways[n.runway]!;
+    const hold = access.connectors[n.reverse ? access.connectors.length - 1 : 0]!;
+    const start = n.route[0]!;
+    // a Medium aircraft needs most of the Medium Runway to stop: it leaves at the far end, not where it lined up
+    expect(start.x === hold.x && start.y === hold.y).toBe(false);
+    expect(access.connectors.some((c) => c.x === start.x && c.y === start.y)).toBe(true);
+    const back = n.route[n.route.length - 1]!;
+    expect(back).toEqual(n.holdTile);
+    expect(n.altitude).toBe(0);
   });
 });
 

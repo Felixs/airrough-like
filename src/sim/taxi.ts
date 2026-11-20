@@ -110,6 +110,32 @@ export function exitsFor(a: RunwayAccess, reverse: boolean, size: keyof typeof R
   return past.length ? past : [ordered[ordered.length - 1]!];
 }
 
+/** Runway in tiles a takeoff needs ahead of where the aircraft lines up, by Size Class *(first guess)*. */
+export const TAKEOFF_TILES = { small: 18, medium: 30, large: 44 } as const;
+
+/**
+ * Where a departure of this Size Class may hold short and line up: the full-length hold point first, then every other
+ * connector with at least its takeoff run of Runway ahead (an intersection departure).
+ */
+export function departureHolds(a: RunwayAccess, reverse: boolean, size: keyof typeof TAKEOFF_TILES): Tile[] {
+  const full = holdPointFor(a, reverse);
+  const ahead = (t: Tile) => runwayLength(a) - fromThreshold(a, reverse, t);
+  const others = a.connectors
+    .filter((t) => (t.x !== full.x || t.y !== full.y) && ahead(t) >= TAKEOFF_TILES[size])
+    .sort((p, q) => fromThreshold(a, reverse, p) - fromThreshold(a, reverse, q));
+  return [full, ...others];
+}
+
+/**
+ * Where a Rejected Takeoff leaves the Runway: it brakes to a stop within its roll distance (ROLL_TILES, so a Small
+ * aircraft stops early and a Large one uses nearly all of it) from where it lined up, then takes the next connector.
+ */
+export function rejectExit(a: RunwayAccess, reverse: boolean, size: keyof typeof ROLL_TILES, from: Tile): Tile {
+  const ordered = [...a.connectors].sort((p, q) => fromThreshold(a, reverse, p) - fromThreshold(a, reverse, q));
+  const stop = fromThreshold(a, reverse, from) + ROLL_TILES[size];
+  return ordered.find((t) => fromThreshold(a, reverse, t) >= stop) ?? ordered[ordered.length - 1]!;
+}
+
 /** The first exit a landing aircraft of this Size Class can reach after its landing roll (or the last one). */
 export function exitFor(a: RunwayAccess, reverse: boolean, size: keyof typeof ROLL_TILES): Tile {
   return exitsFor(a, reverse, size)[0]!;

@@ -84,7 +84,7 @@ Screen, which turns Score into Air Miles for the meta-progression.
   A taxiing aircraft stops short of any aircraft ahead on its route that stands still (holding short, taking off,
   stopped by an Incident), goes the same way, or waits in line and started waiting before it did. So departures line up
   behind the hold point instead of stacking, and lines never wait on each other in a circle. An aircraft taking off
-  keeps the hold point claimed until it is airborne (a Rejected Takeoff returns there).
+  keeps its hold point claimed until it is airborne or has left the Runway.
 - **No passing head-on:** two aircraft that would reach the same tile in opposite directions within 3 tiles' worth of
   taxiing of each other, within the next 16 tiles, would meet. One gives way: the one not yet on the other's path, else the one that has another
   way round, else the one with the later id. It takes another Taxiway if there is one (crossing the other's path only
@@ -107,7 +107,11 @@ Screen, which turns Score into Air Miles for the meta-progression.
   changes direction, and no Movements use it for a 5-minute changeover.
 - **Runway Exits**: smaller aircraft need less Runway (`taxi.ts → ROLL_TILES`: 12 / 30 / 44 tiles). A landing aircraft
   leaves at the first connector past its roll distance, measured from the threshold in use. Departures hold short at
-  the first connector of the active direction.
+  the first connector of the active direction, or make an **Intersection Departure**: any later connector with at
+  least the aircraft's takeoff run of Runway ahead (`taxi.ts → TAKEOFF_TILES`: 18 / 30 / 44 tiles) may be used, and
+  the departure taxis to whichever of these hold points is the shortest taxi from its Stand. The Tower clears
+  departures in the order they reached a hold point, whichever one it is. If the Runway turns round, a departure whose
+  hold point no longer has enough Runway ahead goes to the new full-length hold point.
 - **Clear exit before landing:** a landing aircraft can take any connector past its landing roll, in the order it
   reaches them; it takes the first that is clear and rolls on past blocked ones. An exit is clear when the first 6
   tiles of the taxi route from it hold no aircraft that is stopped, holding short or waiting in line, no departure is
@@ -139,6 +143,15 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - Each landing and takeoff rolls ATC Error (1.25%, −15% per Controller Training level, +40% per aircraft over Radar
   capacity) and Pilot Error (0.75%, by surface). An error becomes Go-Around 80% / Incident 19% / Crash 1% on landing,
   Rejected Takeoff 85% / Incident 14% / Crash 1% on takeoff (`simulation.ts → SAFETY`).
+- **Rejected Takeoff** (also the takeoff Incident): the aircraft accelerates, aborts and brakes to a stop within its
+  roll distance from where it lined up (`ROLL_TILES` 12 / 30 / 44: a Small aircraft stops early, a Large one uses
+  nearly all of a Long Runway), leaves at the next connector past that point (or the last one) and taxis back to the
+  hold point with the shortest taxi, joining the end of the departure queue.
+- **Stories:** every Go-Around, Rejected Takeoff, Incident and Crash gets one line saying what happened, shown in the
+  alert and the Day report (`stories.ts → STORIES`): Tower-caused or crew-caused for landings and takeoffs (a vehicle
+  on the Runway, a blocked radio call; wind shear, a bird strike, an engine fire warning), and ground trouble on the
+  Taxiways (a broken-down tug, a fuel truck in the way, debris). The line is picked from the event itself (seed,
+  flight, time), never from the Day's random rolls, so it changes no outcome and a replayed seed tells the same story.
 - Incidents cost money and block the Runway 20 min; Crashes cost an escalating Crash Fine and block it 60 min; Fire &
   Rescue levels cut blockages to as little as 20%.
 - From Radar 3/4 the game pauses before an imminent Crash and a second roll can save the aircraft. The game can also
@@ -200,6 +213,12 @@ cooldown (`simulation.ts → ACTIONS`).
   navigation lights and a white tail light whenever not parked on a Stand; a flashing red beacon while moving; white
   strobes double-flashing and a landing-light beam on the Runway; a short taxi-light beam while taxiing.
 - Aircraft in Holding are not drawn; they appear only in the flight strips.
+- **Landings and takeoffs in 3D:** a landing comes in from 60 world units before the threshold, descending steadily
+  to touchdown 2 tiles past it (the first eighth or so of the landing time), then brakes evenly to its exit. A takeoff
+  accelerates from its hold point, lifts off after 80% of its takeoff run and climbs until it leaves 60 units past the
+  Runway end. Height shows as the aircraft drawn up to 45% larger (nearer the camera) while its shadow stays at true
+  size on the ground, falls up to 22 units further to the south-east and fades to 40%; airborne aircraft are drawn
+  above those on the ground. A Rejected Takeoff speeds up and brakes smoothly to its exit without lifting off.
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day

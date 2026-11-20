@@ -93,7 +93,7 @@ export function callsignOf(sim: Simulation, flightId: string): string {
 
 /** One line describing an event, e.g. "CRASH: LH 347 (−$10,000)". */
 export function describeEvent(sim: Simulation, e: SimEvent): string {
-  return ALERT_TEXT[e.kind][1](callsignOf(sim, e.flightId)) + (e.cost ? ` (−$${e.cost.toLocaleString('en-US')})` : '');
+  return ALERT_TEXT[e.kind][1](callsignOf(sim, e.flightId)) + (e.story ? `: ${e.story}` : '') + (e.cost ? ` (−$${e.cost.toLocaleString('en-US')})` : '');
 }
 
 export function alerts(sim: Simulation): Alert[] {
