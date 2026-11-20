@@ -6,7 +6,7 @@ import { AIRCRAFT_TYPES, sizeRank, type AircraftTypeId } from './aircraft';
 import { DAY_END_MINUTE, STEP_MINUTES, createDay, isDayOver, type Day } from './clock';
 import { TILE_SIZE, parkedHeading, spotEntry, type AirportLayout, type HoldingBay, type RunwayLength, type SizeClass, type Stand, type SupportRole } from './layout';
 import { createRandom, mixSeed, type Random } from './random';
-import { buildTaxiNetwork, exitFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type TaxiNetwork, type Tile } from './taxi';
+import { buildTaxiNetwork, detour, exitFor, holdPointFor, routeBetween, routeFromStand, routeToStand, taxiRoute, type RunwayAccess, type TaxiNetwork, type Tile } from './taxi';
 import { WIND_RULES, landingHeading, wantsReverse, windTimeline, type Wind, type WindSetup } from './wind';
 
 /** Timings *(first guess, from the prototypes)*. */
@@ -189,6 +189,8 @@ export interface Flight extends ScheduledFlight {
   readonly pendingOutcome: LandingOutcome | TakeoffOutcome | null;
   /** Stopped on the Taxiway by an Incident until this minute. */
   readonly stoppedUntil: number;
+  /** Since when it has been waiting in line in front of a Taxiway closed by an Incident (unset while it can move). */
+  readonly waitingSince?: number;
   /** Which error caused the pending outcome. */
   readonly pendingCause: 'atc' | 'pilot' | null;
   /** Priority Landing: first in the landing queue. */
@@ -452,7 +454,8 @@ export function stepSimulation(prev: Simulation): Simulation {
   };
   const now = prev.clock.minute;
   const rng = createRandom(mixSeed(prev.seed, Math.round(now / STEP_MINUTES)));
-  const flights = prev.flights.map((f) => stepFlight(sim, { ...f }, now));
+  const closed = taxiwayClosures(prev.flights, now);
+  const flights = prev.flights.map((f) => stepFlight(sim, { ...f }, now, closed));
   rollTaxiIncident(sim, flights, now, rng);
   updateDirections(sim, flights, now);
   const blocked = releaseBays(sim, flights, now);
@@ -726,7 +729,60 @@ function burnFuel(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   }
 }
 
-function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<Flight> {
+interface Closures {
+  /** Taxiway tiles closed by aircraft stopped by an Incident (the whole Taxiway width round them). */
+  readonly incident: ReadonlySet<string>;
+  /** Tiles held by aircraft waiting in line, with when they started waiting (to queue in order, never in a circle). */
+  readonly queue: ReadonlyMap<string, { readonly since: number; readonly id: string }>;
+}
+
+const around = (t: Tile): string[] => [-1, 0, 1].flatMap((dx) => [-1, 0, 1].map((dy) => `${t.x + dx},${t.y + dy}`));
+
+function taxiwayClosures(flights: readonly Flight[], now: number): Closures {
+  const incident = new Set<string>();
+  const queue = new Map<string, { since: number; id: string }>();
+  for (const f of flights) {
+    if (f.phase !== 'taxiIn' && f.phase !== 'taxiOut') continue;
+    const i = Math.min(Math.floor(f.routeProgress), f.route.length - 1);
+    if (f.stoppedUntil > now) {
+      for (let j = Math.max(0, i - 1); j <= Math.min(f.route.length - 1, i + 2); j++) for (const k of around(f.route[j]!)) incident.add(k);
+    } else if (f.waitingSince !== undefined) {
+      for (const k of around(f.route[i]!)) if (!queue.has(k)) queue.set(k, { since: f.waitingSince, id: f.id });
+    }
+  }
+  return { incident, queue };
+}
+
+/** How far a taxiing aircraft may move this step: it detours round a closed Taxiway, or stops and waits in line. */
+function taxiAhead(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Closures, wanted: number): number {
+  const i = Math.floor(f.routeProgress);
+  const ahead = (from: number) => f.route.slice(from).findIndex((t) => closed.incident.has(`${t.x},${t.y}`));
+  if (closed.incident.size && ahead(i + 1) >= 0) {
+    const round = detour(sim.network, f.route, Math.min(i + 1, f.route.length - 1), closed.incident);
+    if (round) f.route = round;
+  }
+  const mine = f.waitingSince ?? Infinity;
+  const blocks = (t: Tile): boolean => {
+    const k = `${t.x},${t.y}`;
+    if (closed.incident.has(k)) return true;
+    const w = closed.queue.get(k);
+    return !!w && w.id !== f.id && (w.since < mine || (w.since === mine && w.id < f.id));
+  };
+  const LOOK = 4;
+  for (let j = i + 1; j <= Math.min(f.route.length - 1, i + LOOK); j++) {
+    if (!blocks(f.route[j]!)) continue;
+    const stop = Math.max(f.routeProgress, j - 1);
+    if (wanted > stop) {
+      f.waitingSince ??= now;
+      return stop;
+    }
+    break;
+  }
+  delete f.waitingSince;
+  return wanted;
+}
+
+function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Closures): Mutable<Flight> {
   const stand = standById(sim, f.standId);
   const enter = (phase: FlightPhase) => {
     f.phase = phase;
@@ -779,7 +835,7 @@ function stepFlight(sim: MutableSim, f: Mutable<Flight>, now: number): Mutable<F
     case 'taxiIn':
     case 'taxiOut': {
       if (now < f.stoppedUntil || now < sim.groundStopUntil) break;
-      f.routeProgress = Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * sim.taxiSpeedFactor * STEP_MINUTES);
+      f.routeProgress = taxiAhead(sim, f, now, closed, Math.min(f.route.length - 1, f.routeProgress + TIMINGS.taxiTilesPerMinute * sim.taxiSpeedFactor * STEP_MINUTES));
       if (f.routeProgress < f.route.length - 1) break;
       if (f.phase === 'taxiOut') {
         // the Runway may have turned round while it was taxiing: carry on to the new hold point

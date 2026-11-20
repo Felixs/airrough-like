@@ -143,6 +143,12 @@ function standAccess(network: TaxiNetwork, stand: Spot): { entry: Tile; centre: 
 
 /** Breadth-first shortest path over Taxiway tiles. */
 function shortestPath(network: TaxiNetwork, from: Tile, to: Tile): Tile[] {
+  const path = searchPath(network, from, to);
+  if (!path) throw new Error(`No taxi route from ${key(from)} to ${key(to)}`);
+  return path;
+}
+
+function searchPath(network: TaxiNetwork, from: Tile, to: Tile, avoid?: ReadonlySet<string>): Tile[] | null {
   const start = key(from);
   const goal = key(to);
   const prev = new Map<string, string | null>([[start, null]]);
@@ -152,19 +158,34 @@ function shortestPath(network: TaxiNetwork, from: Tile, to: Tile): Tile[] {
     if (key(t) === goal) break;
     for (const n of [{ x: t.x + 1, y: t.y }, { x: t.x - 1, y: t.y }, { x: t.x, y: t.y + 1 }, { x: t.x, y: t.y - 1 }]) {
       const k = key(n);
-      if (network.tiles.has(k) && !prev.has(k)) {
+      if (network.tiles.has(k) && !prev.has(k) && !avoid?.has(k)) {
         prev.set(k, key(t));
         queue.push(n);
       }
     }
   }
-  if (!prev.has(goal)) throw new Error(`No taxi route from ${start} to ${goal}`);
+  if (!prev.has(goal)) return null;
   const path: Tile[] = [];
   for (let k: string | null | undefined = goal; k; k = prev.get(k)) {
     const [x, y] = k.split(',').map(Number);
     path.push({ x: x!, y: y! });
   }
   return path.reverse();
+}
+
+/**
+ * The same route, but around the `avoid` tiles (e.g. a Taxiway closed by an Incident) from index `from` on: the
+ * start of the route and its end off the Taxiway (the walk into a Stand) stay as they are. Null when there is no way
+ * round.
+ */
+export function detour(network: TaxiNetwork, route: readonly Tile[], from: number, avoid: ReadonlySet<string>): Tile[] | null {
+  let end = route.length - 1;
+  while (end > from && !network.tiles.has(key(route[end]!))) end--;
+  const a = route[from];
+  const b = route[end];
+  if (!a || !b || end <= from || avoid.has(key(a)) || avoid.has(key(b)) || !network.tiles.has(key(a))) return null;
+  const path = searchPath(network, a, b, avoid);
+  return path ? [...route.slice(0, from), ...path, ...route.slice(end + 1)] : null;
 }
 
 /** Shortest route between two Taxiway tiles (inclusive). */

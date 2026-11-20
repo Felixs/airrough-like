@@ -285,7 +285,7 @@ The state when no Runway is usable for any reason (Crash, Twist, darkness). No M
 _Avoid_: Shutdown, lockdown
 
 **Incident**:
-A non-fatal mishap (e.g. ground collision on a Taxiway, runway overrun) that costs money and blocks tiles for a while.
+A non-fatal mishap (e.g. ground collision on a Taxiway, runway overrun) that costs money and blocks tiles for a while. On a Taxiway it closes the Taxiway round the stopped aircraft: others detour round it or wait in line until it is cleared.
 _Avoid_: Minor crash, mishap
 
 **Holding**:

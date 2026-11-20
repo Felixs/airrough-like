@@ -52,6 +52,11 @@ const until = async (time, limitMs) => {
     await page.waitForTimeout(150);
   }
 };
+await until('06:12', 90_000);
+await page.click('[data-speed="0"]');
+await settle(800);
+await page.screenshot({ path: out('live-day-dawn') });
+await page.click('[data-speed="8"]');
 await until('08:40', 90_000);
 await page.click('[data-speed="0"]');
 await settle(800);
