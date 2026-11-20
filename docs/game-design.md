@@ -57,6 +57,15 @@ Screen, which turns Score into Air Miles for the meta-progression.
   first looks for a detour round it; if there is none, it stops just short of the closure and waits. Later aircraft
   queue behind the ones already waiting (each only waits for those that started waiting before it, so queues never
   lock up), and all carry on once the Incident is cleared. Waiting aircraft show "Waiting" on their flight strip.
+- **In-trail spacing:** every aircraft on the Taxiways claims the tiles round it (2 tiles for Large aircraft, else 1).
+  A taxiing aircraft stops short of any aircraft ahead on its route that stands still (holding short, taking off,
+  stopped by an Incident), goes the same way, or waits in line and started waiting before it did. So departures line up
+  behind the hold point instead of stacking, and lines never wait on each other in a circle. An aircraft taking off
+  keeps the hold point claimed until it is airborne (a Rejected Takeoff returns there).
+- **No passing head-on:** two aircraft that would reach the same tile in opposite directions within 3 tiles' worth of
+  taxiing of each other would meet. One gives way: the one not yet on the other's path, else the one that has another
+  way round, else the one with the later id. It takes another Taxiway if there is one (crossing the other's path only
+  well before or after it), otherwise it waits short of the other's path until it has passed.
 - A Ground Stop (Emergency Action) freezes all taxiing for 5 minutes.
 
 ## Runways, wind and direction

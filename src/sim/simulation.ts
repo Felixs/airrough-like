@@ -454,7 +454,7 @@ export function stepSimulation(prev: Simulation): Simulation {
   };
   const now = prev.clock.minute;
   const rng = createRandom(mixSeed(prev.seed, Math.round(now / STEP_MINUTES)));
-  const closed = taxiwayClosures(prev.flights, now);
+  const closed = taxiwayClosures(prev, prev.flights, now);
   const flights = prev.flights.map((f) => stepFlight(sim, { ...f }, now, closed));
   rollTaxiIncident(sim, flights, now, rng);
   updateDirections(sim, flights, now);
@@ -729,54 +729,161 @@ function burnFuel(sim: MutableSim, f: Mutable<Flight>, now: number): void {
   }
 }
 
+interface Occupant {
+  readonly id: string;
+  /** The tile it stands on. */
+  readonly at: Tile;
+  /** How far round it others keep clear (tiles): 1, or 2 for Large aircraft. */
+  readonly clearance: number;
+  /** Its taxi direction, or null when it is standing still (holding short, stopped by an Incident). */
+  readonly heading: readonly [number, number] | null;
+  /** When it started waiting in line, if it is waiting. */
+  readonly waitingSince?: number;
+  /** Its route and where it is on it (taxiing aircraft only), to see who it will meet head-on. */
+  readonly route?: readonly Tile[];
+  readonly index?: number;
+}
+
 interface Closures {
   /** Taxiway tiles closed by aircraft stopped by an Incident (the whole Taxiway width round them). */
   readonly incident: ReadonlySet<string>;
-  /** Tiles held by aircraft waiting in line, with when they started waiting (to queue in order, never in a circle). */
-  readonly queue: ReadonlyMap<string, { readonly since: number; readonly id: string }>;
+  /** Every aircraft on the Taxiways (taxiing, waiting or holding short), for in-trail spacing. */
+  readonly occupants: readonly Occupant[];
 }
 
 const around = (t: Tile): string[] => [-1, 0, 1].flatMap((dx) => [-1, 0, 1].map((dy) => `${t.x + dx},${t.y + dy}`));
+const near = (a: Tile, b: Tile, r: number) => Math.abs(a.x - b.x) <= r && Math.abs(a.y - b.y) <= r;
 
-function taxiwayClosures(flights: readonly Flight[], now: number): Closures {
+function taxiwayClosures(sim: Simulation, flights: readonly Flight[], now: number): Closures {
   const incident = new Set<string>();
-  const queue = new Map<string, { since: number; id: string }>();
+  const occupants: Occupant[] = [];
   for (const f of flights) {
+    const clearance = AIRCRAFT_TYPES[f.type].size === 'large' ? 2 : 1;
+    // holding short, or taking off (a Rejected Takeoff comes back to the hold point, so it stays claimed until airborne)
+    if (f.phase === 'holdShort' || f.phase === 'takeoff') {
+      const access = sim.network.runways.find((a) => a.index === f.runway);
+      occupants.push({ id: f.id, at: access ? holdOf(sim, access) : f.route[f.route.length - 1]!, clearance, heading: null });
+      continue;
+    }
     if (f.phase !== 'taxiIn' && f.phase !== 'taxiOut') continue;
     const i = Math.min(Math.floor(f.routeProgress), f.route.length - 1);
+    const at = f.route[i]!;
     if (f.stoppedUntil > now) {
       for (let j = Math.max(0, i - 1); j <= Math.min(f.route.length - 1, i + 2); j++) for (const k of around(f.route[j]!)) incident.add(k);
-    } else if (f.waitingSince !== undefined) {
-      for (const k of around(f.route[i]!)) if (!queue.has(k)) queue.set(k, { since: f.waitingSince, id: f.id });
+      occupants.push({ id: f.id, at, clearance, heading: null });
+      continue;
     }
+    const next = f.route[Math.min(i + 1, f.route.length - 1)]!;
+    const heading = next.x === at.x && next.y === at.y ? null : [next.x - at.x, next.y - at.y] as const;
+    occupants.push({ id: f.id, at, clearance, heading, waitingSince: f.waitingSince, route: f.route, index: i });
   }
-  return { incident, queue };
+  return { incident, occupants };
 }
 
-/** How far a taxiing aircraft may move this step: it detours round a closed Taxiway, or stops and waits in line. */
+/** How many tiles ahead aircraft look for someone they would meet head-on. */
+const HEAD_ON_HORIZON = 40;
+/** Two aircraft crossing a tile less than this many tiles' worth of taxiing apart would meet there. */
+const MEET_MARGIN = 3;
+
+const stepAt = (route: readonly Tile[], j: number): [number, number] => {
+  const t = route[j]!;
+  const n = route[Math.min(j + 1, route.length - 1)]!;
+  const p = route[Math.max(j - 1, 0)]!;
+  return n.x !== t.x || n.y !== t.y ? [n.x - t.x, n.y - t.y] : [t.x - p.x, t.y - p.y];
+};
+
+/** Where an aircraft will be over the next tiles: tile → how many tiles from now it gets there, and its direction. */
+type Path = Map<string, { readonly d: number; readonly dir: readonly [number, number] }>;
+function pathAhead(route: readonly Tile[], from: number): Path {
+  const out: Path = new Map();
+  for (let j = from; j < Math.min(route.length, from + HEAD_ON_HORIZON); j++) {
+    const k = `${route[j]!.x},${route[j]!.y}`;
+    if (!out.has(k)) out.set(k, { d: j - from, dir: stepAt(route, j) });
+  }
+  return out;
+}
+
+/** Whether two aircraft on these paths would meet nose to nose: a tile both reach, in opposite directions, at about the same time. */
+function meets(a: Path, b: Path): boolean {
+  for (const [k, pa] of a) {
+    const pb = b.get(k);
+    if (pb && pa.dir[0] * pb.dir[0] + pa.dir[1] * pb.dir[1] < 0 && Math.abs(pa.d - pb.d) <= MEET_MARGIN) return true;
+  }
+  return false;
+}
+
+/** A detour for an aircraft on `route` (at index i) that keeps clear of `other` in time: a tile it crosses is fine when reached well before or after the other aircraft. */
+function detourAround(sim: Simulation, route: readonly Tile[], i: number, other: Path): Tile[] | null {
+  const from = Math.min(i + 1, route.length - 1);
+  return detour(sim.network, route, from, (k, steps) => {
+    const o = other.get(k);
+    return !!o && Math.abs(o.d - (steps + from - i)) <= MEET_MARGIN + 1;
+  });
+}
+
+/**
+ * How far a taxiing aircraft may move this step. It detours round a Taxiway closed by an Incident when it can, and
+ * keeps in-trail spacing: it stops short of any aircraft ahead of it on its route that stands still (holding short,
+ * stopped by an Incident), goes the same way, or waits in line and started waiting before it did (so lines never
+ * wait on each other in a circle).
+ *
+ * Oncoming aircraft never pass on the same Taxiway. When two would meet nose to nose, one gives way: the one not yet
+ * on the other's path, else the one that has another way round, else the one with the later id. It takes another
+ * Taxiway if it can (crossing the other's path only well before or after it); otherwise it waits short of the other's
+ * path until it has passed.
+ */
 function taxiAhead(sim: MutableSim, f: Mutable<Flight>, now: number, closed: Closures, wanted: number): number {
-  const i = Math.floor(f.routeProgress);
-  const ahead = (from: number) => f.route.slice(from).findIndex((t) => closed.incident.has(`${t.x},${t.y}`));
-  if (closed.incident.size && ahead(i + 1) >= 0) {
+  let i = Math.floor(f.routeProgress);
+  if (closed.incident.size && f.route.slice(i + 1).some((t) => closed.incident.has(`${t.x},${t.y}`))) {
     const round = detour(sim.network, f.route, Math.min(i + 1, f.route.length - 1), closed.incident);
     if (round) f.route = round;
   }
-  const mine = f.waitingSince ?? Infinity;
-  const blocks = (t: Tile): boolean => {
-    const k = `${t.x},${t.y}`;
-    if (closed.incident.has(k)) return true;
-    const w = closed.queue.get(k);
-    return !!w && w.id !== f.id && (w.since < mine || (w.since === mine && w.id < f.id));
-  };
-  const LOOK = 4;
-  for (let j = i + 1; j <= Math.min(f.route.length - 1, i + LOOK); j++) {
-    if (!blocks(f.route[j]!)) continue;
-    const stop = Math.max(f.routeProgress, j - 1);
-    if (wanted > stop) {
-      f.waitingSince ??= now;
-      return stop;
+  let stop = Infinity;
+  for (const o of closed.occupants) {
+    if (o.id === f.id || !o.route || o.index === undefined || o.waitingSince !== undefined) continue;
+    const mine = pathAhead(f.route, i);
+    const theirs = pathAhead(o.route, o.index);
+    if (!meets(mine, theirs)) continue;
+    const onTheir = (t: Tile) => around(t).some((k) => theirs.has(k));
+    const onMine = (t: Tile) => around(t).some((k) => mine.has(k));
+    const meOn = onTheir(f.route[i]!);
+    const themOn = onMine(o.at);
+    const myWay = detourAround(sim, f.route, i, theirs);
+    let iGiveWay: boolean;
+    if (meOn !== themOn) iGiveWay = !meOn;
+    else {
+      const theirWay = detourAround(sim, o.route, o.index, mine);
+      iGiveWay = !!myWay !== !!theirWay ? !!myWay : f.id > o.id;
     }
-    break;
+    if (!iGiveWay) continue;
+    if (myWay) {
+      f.route = myWay;
+      i = Math.floor(f.routeProgress);
+      continue;
+    }
+    if (meOn) continue; // stuck on its path with no way round: nothing better to do than carry on
+    const j = f.route.findIndex((t, n) => n > i && onTheir(t));
+    if (j > 0) stop = Math.min(stop, j - 1);
+  }
+  const mine = f.waitingSince ?? Infinity;
+  const blocking = (o: Occupant, j: number): boolean => {
+    if (o.id === f.id) return false;
+    if (o.waitingSince !== undefined) return o.waitingSince < mine || (o.waitingSince === mine && o.id < f.id);
+    if (!o.heading) return true;
+    const dir = stepAt(f.route, j);
+    return dir[0] * o.heading[0] + dir[1] * o.heading[1] > 0; // following it (meeting it is handled above)
+  };
+  const LOOK = 6;
+  for (let j = i + 1; j <= Math.min(f.route.length - 1, i + LOOK, stop); j++) {
+    const t = f.route[j]!;
+    if (closed.incident.has(`${t.x},${t.y}`)) { stop = Math.min(stop, j - 1); break; }
+    // an aircraft ahead: one on the route itself, or (standing still) right beside it
+    const o = closed.occupants.find((o) => near(t, o.at, o.clearance) && (o.heading === null || f.route.slice(i + 1).some((r) => r.x === o.at.x && r.y === o.at.y)) && blocking(o, j));
+    if (o) { stop = Math.min(stop, j - 1); break; }
+  }
+  if (wanted > stop) {
+    f.waitingSince ??= now;
+    return Math.max(f.routeProgress, stop);
   }
   delete f.waitingSince;
   return wanted;
