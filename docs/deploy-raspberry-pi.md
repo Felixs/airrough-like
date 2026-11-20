@@ -1,5 +1,14 @@
 # Deploy to a Raspberry Pi (home network)
 
+**Simplest:** the released images are public and multi-arch, so no GitLab setup is needed:
+
+```bash
+docker run -d -p 8080:80 --restart unless-stopped --name airport-auto-battler ghcr.io/felixs/airrough-like:latest
+```
+
+`latest` follows the newest release; pin a version with e.g. `:0.1.0`. The GitLab setup below is only for getting the
+newest build of every `main` push before it is released.
+
 Every push to `main` that passes CI builds a Docker image (nginx serving the built game, for `linux/arm64` and `linux/amd64`) and pushes it to a private GitLab Container Registry. The Pi pulls it from there and serves the game on port 8080.
 
 ## One-time setup
@@ -32,7 +41,7 @@ Create a second GitLab deploy token for the Pi with only `read_registry`. Then:
 ```bash
 mkdir -p ~/airport && cd ~/airport
 # copy deploy/docker-compose.yml from this repo into this folder, then:
-echo "GITLAB_IMAGE=registry.gitlab.com/<namespace>/airport-auto-battler" > .env
+echo "IMAGE=registry.gitlab.com/<namespace>/airport-auto-battler:latest" > .env
 docker login registry.gitlab.com -u <pi-token-username>   # paste the token as password
 docker compose up -d
 ```
