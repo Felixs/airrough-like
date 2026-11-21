@@ -159,7 +159,7 @@ The minimum time a landing or takeoff occupies a Runway before the next Movement
 _Avoid_: Spacing, interval, slot time
 
 **Routing Rule**:
-A Player-set constraint the ATC Tower follows (e.g. "Runway 2 is cargo only"); unlocked later, not available at the start.
+A Player-set constraint the ATC Tower would follow (e.g. "Runway 2 is cargo only"). Not in the game: an unlikely later idea (see `docs/later-ideas.md`).
 _Avoid_: Policy, setting
 
 **Land Plot**:
