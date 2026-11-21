@@ -152,7 +152,7 @@ export function lengthenRunway(s: BuildSession, maxPlots = 1): BuildSession | nu
  * parallel Taxiway to the new one. Buys the Land it needs (up to `maxPlots`). Built for layouts like the Starting
  * Airport (a horizontal Runway with its Taxiways above it); returns null for others.
  */
-export function buildParallelRunway(s: BuildSession, length: 'medium' | 'long', maxPlots = 4): BuildSession | null {
+export function buildParallelRunway(s: BuildSession, length: 'medium' | 'long' | 'grass', maxPlots = 4): BuildSession | null {
   const r1 = s.layout.runways[0];
   if (!r1 || r1.h > r1.w) return null;
   // the existing parallel Taxiway: the long horizontal one closest above the Runway
@@ -163,11 +163,11 @@ export function buildParallelRunway(s: BuildSession, length: 'medium' | 'long', 
   const row1 = t1.y + 1;
   const row2 = r1.y + r1.h + 2; // new parallel Taxiway: rows just below the old Runway, not touching it
   const r2y = row2 + 4; // the new Runway, with 2 rows of connector between
-  const tiles = { medium: 36, long: 48 }[length];
+  const tiles = { grass: 24, medium: 36, long: 48 }[length];
   for (const side of ['west', 'east'] as const) {
     const loopX = side === 'west' ? r1.x - 6 : r1.x + r1.w + 6;
     const r2x = side === 'west' ? r1.x : r1.x + r1.w - tiles;
-    const r2 = newRunway(s, { x: r2x, y: r2y }, length, false);
+    const r2 = length === 'grass' ? newRunway(s, { x: r2x, y: r2y }, 'short', false, true) : newRunway(s, { x: r2x, y: r2y }, length, false);
     const stubs = [r2.x + 1, r2.x + r2.w - 2].map((x) => taxiwayFromDrag({ x, y: row2 + 2 }, { x, y: r2y - 1 }));
     const farX = side === 'west' ? r2.x + r2.w - 2 : r2.x + 1;
     const changes: Change[] = [
@@ -185,3 +185,4 @@ export function buildParallelRunway(s: BuildSession, length: 'medium' | 'long', 
   }
   return null;
 }
+

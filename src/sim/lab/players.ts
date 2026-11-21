@@ -176,8 +176,11 @@ function planAhead(run: RunState, log: Purchase[], skips: ReadonlySet<PlannerSki
     }
     // 5. a second Runway once one can't carry the busiest Day ahead (about RUNWAY_QUOTA Movements); save up for it
     if (wantRunway) {
-      const s = buildParallelRunway(budgetSession(run, budget()), 'medium');
-      if (s) run = confirmWithin(run, s, log, 'second Runway');
+      // a paved Medium Runway if the money is there, else a Grass strip (cheap, Small aircraft only) to carry the Small traffic
+      const paved = buildParallelRunway(budgetSession(run, budget()), 'medium');
+      const grass = !paved && run.layout.runways.length === 1 ? buildParallelRunway(budgetSession(run, budget()), 'grass') : null;
+      if (paved) run = confirmWithin(run, paved, log, 'second Runway');
+      else if (grass) run = confirmWithin(run, grass, log, 'Grass strip');
     }
     // 4. ILS before an ILS-only storm in the next three Days
     const storm = [0, 1, 2].some((d) => {

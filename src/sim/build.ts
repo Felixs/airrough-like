@@ -29,7 +29,10 @@ export const BUILD_COSTS = {
   /** Demolish refunds this share of the price of building it again (100% while testing how layouts play). */
   refundShare: 1,
   /** Land Plot n (counting from the first bought) costs this × n. */
-  plotBase: 24_000,
+  /** Price of a Land Plot: flat, so a second Runway (which needs several plots) is reachable by Week 2. */
+  plotBase: 20_000,
+  /** 1: each plot costs plotBase × how many have been bought (the old rising price); 0: every plot costs plotBase. */
+  plotGrowth: 0,
   startingPlots: 6,
 } as const;
 
@@ -416,7 +419,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
       const { plot } = change;
       label = `Land Plot ${plot.px + 1}-${plot.py + 1}`;
       const bought = session.ownedPlots.length - session.base.startingPlots;
-      cost = Math.round(BUILD_COSTS.plotBase * (bought + 1) * run.modifiers.landCostFactor);
+      cost = Math.round(BUILD_COSTS.plotBase * (BUILD_COSTS.plotGrowth ? bought + 1 : 1) * run.modifiers.landCostFactor);
       const inWorld = plot.px * WORLD.plotW >= WORLD.x0 && plot.py * WORLD.plotH >= WORLD.y0 &&
         (plot.px + 1) * WORLD.plotW <= WORLD.x0 + WORLD.width && (plot.py + 1) * WORLD.plotH <= WORLD.y0 + WORLD.height;
       items.push({ label: 'Not owned yet', ok: !session.ownedPlots.some((o) => o.px === plot.px && o.py === plot.py) });
@@ -514,5 +517,6 @@ export function lengthened(r: Runway, side: 'start' | 'end' = 'end'): Runway | n
 
 /** Plot price for the next purchase in this session. */
 export function nextPlotPrice(session: BuildSession): number {
-  return Math.round(BUILD_COSTS.plotBase * (session.ownedPlots.length - session.base.startingPlots + 1) * session.base.modifiers.landCostFactor);
+  const bought = session.ownedPlots.length - session.base.startingPlots;
+  return Math.round(BUILD_COSTS.plotBase * (BUILD_COSTS.plotGrowth ? bought + 1 : 1) * session.base.modifiers.landCostFactor);
 }

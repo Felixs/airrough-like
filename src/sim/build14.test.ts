@@ -133,9 +133,9 @@ describe('Demolish', () => {
 describe('Land Plots', () => {
   it('cost 24k × plots bought so far + 1 and must border owned land', () => {
     let s = openBuild(rich());
-    expect(checkChange(s, { kind: 'buyPlot', plot: { px: 3, py: 0 } })).toMatchObject({ ok: true, cost: 24_000 });
+    expect(checkChange(s, { kind: 'buyPlot', plot: { px: 3, py: 0 } })).toMatchObject({ ok: true, cost: 20_000 });
     s = applyChange(s, { kind: 'buyPlot', plot: { px: 3, py: 0 } });
-    expect(checkChange(s, { kind: 'buyPlot', plot: { px: 3, py: 1 } }).cost).toBe(48_000);
+    expect(checkChange(s, { kind: 'buyPlot', plot: { px: 3, py: 1 } }).cost).toBe(20_000); // flat: every plot costs the same;
     expect(failing(checkChange(s, { kind: 'buyPlot', plot: { px: 4, py: 2 } }))).toContain('Borders owned land');
     expect(failing(checkChange(s, { kind: 'buyPlot', plot: { px: 0, py: 0 } }))).toContain('Not owned yet');
   });
@@ -147,7 +147,7 @@ describe('Land Plots', () => {
     const s = applyChange(s0, { kind: 'buyPlot', plot: { px: 3, py: 1 } });
     const built = confirmBuild(addPending(s, newStand(s, { x: 20, y: 15 }, 'medium', 'remote', 'terminal')));
     expect(built.ownedPlots).toContainEqual({ px: 3, py: 1 });
-    expect(pendingTotal(s).cost).toBe(24_000);
+    expect(pendingTotal(s).cost).toBe(20_000);
   });
 });
 

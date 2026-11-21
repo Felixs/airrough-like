@@ -2,13 +2,15 @@
  * Balance lab: the experiments. Each asks one question by playing every listed player in every variant over the
  * same seeds; a variant is a set of tuning overrides (see tuning.ts) and the meta-progression to start with.
  */
+import { BOOSTS, UNLOCKABLES } from '../meta';
+import type { MetaSpec } from './play';
 import type { Overrides } from './tuning';
 
 export interface Variant {
   readonly label: string;
   readonly overrides?: Overrides;
-  /** Meta-progression: none (a first Run) or every Unlockable and Boost at its top level. */
-  readonly meta?: 'none' | 'full';
+  /** Meta-progression: none (a first Run), every Unlockable and Boost at its top level, or a chosen set. */
+  readonly meta?: MetaSpec;
 }
 
 export interface Experiment {
@@ -46,6 +48,18 @@ export const EXPERIMENTS: readonly Experiment[] = [
     variants: [CURRENT, { label: 'all Unlockables & Boosts', meta: 'full' }],
   },
   {
+    id: 'meta-split',
+    title: 'Meta-progression, one item at a time',
+    question: 'What does each Unlockable and each Boost (at its top level) add on its own?',
+    players: ['planner'],
+    variants: [
+      CURRENT,
+      ...UNLOCKABLES.map((u): Variant => ({ label: `+ ${u.name}`, meta: { unlocks: [u.id] } })),
+      // Boosts that need a building come with it
+      ...BOOSTS.map((b): Variant => ({ label: `+ ${b.name} ×${b.maxLevel}`, meta: { boosts: { [b.id]: b.maxLevel }, unlocks: b.needs ? [b.needs] : [] } })),
+    ],
+  },
+  {
     id: 'upgrade-value',
     title: 'Upgrade value',
     question: 'How much winning does each thing the planner buys add (win rate lost without it, per $1,000 it costs)?',
@@ -66,12 +80,13 @@ export const EXPERIMENTS: readonly Experiment[] = [
   {
     id: 'land-price',
     title: 'Land Plot price',
-    question: 'Land gets dearer with every plot (24k × n); does that wall off the second Runway?',
-    players: ['planner'],
+    question: 'What should a Land Plot cost, so a second Runway is reachable by Week 2 without making Land trivial?',
+    players: ['reactive', 'planner'],
     variants: [
-      { label: 'plots 12k × n', overrides: { 'BUILD_COSTS.plotBase': 12_000 } },
+      { label: 'flat 16k', overrides: { 'BUILD_COSTS.plotBase': 16_000 } },
       CURRENT,
-      { label: 'plots 36k × n', overrides: { 'BUILD_COSTS.plotBase': 36_000 } },
+      { label: 'flat 24k', overrides: { 'BUILD_COSTS.plotBase': 24_000 } },
+      { label: 'rising 24k × n (old)', overrides: { 'BUILD_COSTS.plotGrowth': 1 } },
     ],
   },
   {

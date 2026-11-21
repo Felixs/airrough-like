@@ -60,9 +60,13 @@ export function playLiveDay(run: RunState): RunState {
   return endDay(run, sim);
 }
 
-/** Meta-progression for an experiment: none, or every Unlockable and every Boost at its top level. */
-export function metaFor(kind: 'none' | 'full'): MetaState {
+/** Meta-progression to start a Run with: none, everything, or a chosen set (one Unlockable or Boost to price it). */
+export type MetaSpec = 'none' | 'full' | { readonly unlocks?: readonly string[]; readonly boosts?: Readonly<Record<string, number>> };
+
+/** Meta-progression for an experiment: none, every Unlockable and every Boost at its top level, or a chosen set. */
+export function metaFor(kind: MetaSpec): MetaState {
   if (kind === 'none') return emptyMeta();
+  if (typeof kind === 'object') return { ...emptyMeta(), unlocks: [...(kind.unlocks ?? [])] as MetaState['unlocks'], boosts: { ...(kind.boosts ?? {}) } as MetaState['boosts'] };
   return {
     ...emptyMeta(),
     unlocks: UNLOCKABLES.map((u) => u.id),
@@ -83,7 +87,7 @@ export function lossCause(d: DayResult): LossCause {
 }
 
 /** Plays a Run of up to `WEEKS_TO_WIN` Weeks with the player's Plan Mode, under the tuning overrides. */
-export function playRun(player: Player, seed: number, opts: { overrides?: Overrides; meta?: 'none' | 'full'; variant?: string } = {}): RunResult {
+export function playRun(player: Player, seed: number, opts: { overrides?: Overrides; meta?: MetaSpec; variant?: string } = {}): RunResult {
   return withTuning(opts.overrides ?? {}, () => {
     let run: RunState = startRun(seed, metaFor(opts.meta ?? 'none'));
     const days: DayResult[] = [];
