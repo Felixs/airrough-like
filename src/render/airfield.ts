@@ -365,10 +365,28 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
     const p = pavedRect(tx, ty);
     g.rect(p.x - 0.6, p.y - 0.6, p.w + 1.2, p.h + 1.2).fill(COLOURS.asphaltEdge);
   }
+  // fillets: where a narrowed edge meets a junction, pave the corner so the inset doesn't leave a notch
+  const isPaved = (tx: number, ty: number) => paved.has(`${tx},${ty}`);
+  const fillets: Array<[number, number]> = [];
+  const I = TAXIWAY_INSET * T;
+  for (const [tx, ty] of tiles) {
+    for (const [sx, sy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+      if (!open(tx + sx, ty + sy)) continue;
+      // the two ends of that side: along it, a paved neighbour whose own tile on that side is paved too
+      for (const e of [-1, 1]) {
+        const [ex, ey] = sx === 0 ? [e, 0] : [0, e];
+        if (!isPaved(tx + ex, ty + ey) || !isPaved(tx + ex + sx, ty + ey + sy)) continue;
+        const cx = sx === 0 ? (ex > 0 ? (tx + 1) * T - I : tx * T) : (sx > 0 ? (tx + 1) * T - I : tx * T);
+        const cy = sy === 0 ? (ey > 0 ? (ty + 1) * T - I : ty * T) : (sy > 0 ? (ty + 1) * T - I : ty * T);
+        fillets.push([cx, cy]);
+      }
+    }
+  }
   for (const [tx, ty] of tiles) {
     const p = pavedRect(tx, ty);
     g.rect(p.x, p.y, p.w, p.h).fill(COLOURS.asphalt);
   }
+  for (const [cx, cy] of fillets) g.rect(cx, cy, I, I).fill(COLOURS.asphalt);
   for (const [tx, ty] of tiles) {
     const { x: px, y: py, w: pw, h: ph } = pavedRect(tx, ty);
     // slab tone varies a little; some slabs are patched
