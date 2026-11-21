@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { runwayNames, sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type RunwayName, type Facing, type Structure, type TileRect } from '../sim/layout';
-import { holdShortLines, taxiwayEdgeLights } from '../sim/markings';
+import { holdShortLines, TAXIWAY_INSET, taxiwayEdgeLights } from '../sim/markings';
 import { centreLine } from '../sim/taxi';
 import { drawCentreLines } from './taxiLines';
 
@@ -339,6 +339,9 @@ const noise = (x: number, y: number, salt = 0) => {
 /**
  * Taxiways as one paved surface, like the Runway: a darker edge round the outside, concrete slabs with joints,
  * weathered patches and rubber on the centre line, and paved shoulders with a faint edge line along the outer sides.
+ * A Taxiway is 3 tiles wide in the game, but along a side that faces open ground the paving is drawn half a tile in
+ * (TAXIWAY_INSET), so a plain Taxiway looks 2 tiles wide, half a Runway; sides that meet Stands, Holding Bays, Runways
+ * or other Taxiways are paved right up to them.
  */
 function drawTaxiways(g: Graphics, layout: AirportLayout): void {
   const strips = layout.structures.filter((s) => s.kind === 'taxiway');
@@ -348,30 +351,40 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
   for (const s of layout.structures) {
     if (s.kind === 'runway' || s.kind === 'stand' || s.kind === 'holdingBay') for (let x = s.x; x < s.x + s.w; x++) for (let y = s.y; y < s.y + s.h; y++) others.add(`${x},${y}`);
   }
-  for (const s of strips) g.rect(s.x * T - 0.6, s.y * T - 0.6, s.w * T + 1.2, s.h * T + 1.2).fill(COLOURS.asphaltEdge);
-  for (const s of strips) g.rect(s.x * T, s.y * T, s.w * T, s.h * T).fill(COLOURS.asphalt);
-  for (const k of paved) {
-    const [tx, ty] = k.split(',').map(Number) as [number, number];
-    const px = tx * T;
-    const py = ty * T;
+  const open = (tx: number, ty: number) => !paved.has(`${tx},${ty}`) && !others.has(`${tx},${ty}`);
+  /** The paved part of a tile: inset on its sides that face open ground. */
+  const pavedRect = (tx: number, ty: number) => {
+    const l = open(tx - 1, ty) ? TAXIWAY_INSET * T : 0;
+    const r = open(tx + 1, ty) ? TAXIWAY_INSET * T : 0;
+    const t = open(tx, ty - 1) ? TAXIWAY_INSET * T : 0;
+    const b = open(tx, ty + 1) ? TAXIWAY_INSET * T : 0;
+    return { x: tx * T + l, y: ty * T + t, w: T - l - r, h: T - t - b };
+  };
+  const tiles = [...paved].map((k) => k.split(',').map(Number) as [number, number]);
+  for (const [tx, ty] of tiles) {
+    const p = pavedRect(tx, ty);
+    g.rect(p.x - 0.6, p.y - 0.6, p.w + 1.2, p.h + 1.2).fill(COLOURS.asphaltEdge);
+  }
+  for (const [tx, ty] of tiles) {
+    const p = pavedRect(tx, ty);
+    g.rect(p.x, p.y, p.w, p.h).fill(COLOURS.asphalt);
+  }
+  for (const [tx, ty] of tiles) {
+    const { x: px, y: py, w: pw, h: ph } = pavedRect(tx, ty);
     // slab tone varies a little; some slabs are patched
     const n = noise(tx, ty);
-    g.rect(px, py, T, T).fill({ color: n > 0.5 ? 0x232a2e : 0x12171a, alpha: Math.abs(n - 0.5) * 0.5 });
-    if (noise(tx, ty, 1) > 0.88) g.rect(px + 1 + noise(tx, ty, 2) * 3, py + 1 + noise(tx, ty, 3) * 3, 2.5, 2).fill({ color: 0x0e1214, alpha: 0.5 });
-    for (let i = 0; i < 3; i++) g.circle(px + noise(tx, ty, 10 + i) * T, py + noise(tx, ty, 20 + i) * T, 0.25).fill({ color: 0x2c3438, alpha: 0.7 });
+    g.rect(px, py, pw, ph).fill({ color: n > 0.5 ? 0x232a2e : 0x12171a, alpha: Math.abs(n - 0.5) * 0.5 });
+    if (noise(tx, ty, 1) > 0.88) g.rect(px + 1 + noise(tx, ty, 2) * (pw - 4), py + 1 + noise(tx, ty, 3) * (ph - 4), 2.5, 2).fill({ color: 0x0e1214, alpha: 0.5 });
+    for (let i = 0; i < 3; i++) g.circle(px + noise(tx, ty, 10 + i) * pw, py + noise(tx, ty, 20 + i) * ph, 0.25).fill({ color: 0x2c3438, alpha: 0.7 });
     // slab joints on the tile grid
-    g.moveTo(px, py).lineTo(px + T, py).moveTo(px, py).lineTo(px, py + T).stroke({ width: 0.18, color: 0x0b0f11, alpha: 0.7 });
-    // shoulder and edge line on sides that face open ground
-    const side = (dx: number, dy: number) => {
-      const nk = `${tx + dx},${ty + dy}`;
-      return !paved.has(nk) && !others.has(nk);
-    };
-    const shoulder = 1.6;
+    g.moveTo(px, py).lineTo(px + pw, py).moveTo(px, py).lineTo(px, py + ph).stroke({ width: 0.18, color: 0x0b0f11, alpha: 0.7 });
+    // shoulder and edge line on sides that face open ground (at the edge of the drawn paving)
+    const shoulder = 1.2;
     const edgeLine = { width: 0.3, color: COLOURS.taxiLine, alpha: 0.35 };
-    if (side(0, -1)) { g.rect(px, py, T, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + shoulder).lineTo(px + T, py + shoulder).stroke(edgeLine); }
-    if (side(0, 1)) { g.rect(px, py + T - shoulder, T, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + T - shoulder).lineTo(px + T, py + T - shoulder).stroke(edgeLine); }
-    if (side(-1, 0)) { g.rect(px, py, shoulder, T).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + shoulder, py).lineTo(px + shoulder, py + T).stroke(edgeLine); }
-    if (side(1, 0)) { g.rect(px + T - shoulder, py, shoulder, T).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + T - shoulder, py).lineTo(px + T - shoulder, py + T).stroke(edgeLine); }
+    if (open(tx, ty - 1)) { g.rect(px, py, pw, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + shoulder).lineTo(px + pw, py + shoulder).stroke(edgeLine); }
+    if (open(tx, ty + 1)) { g.rect(px, py + ph - shoulder, pw, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + ph - shoulder).lineTo(px + pw, py + ph - shoulder).stroke(edgeLine); }
+    if (open(tx - 1, ty)) { g.rect(px, py, shoulder, ph).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + shoulder, py).lineTo(px + shoulder, py + ph).stroke(edgeLine); }
+    if (open(tx + 1, ty)) { g.rect(px + pw - shoulder, py, shoulder, ph).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + pw - shoulder, py).lineTo(px + pw - shoulder, py + ph).stroke(edgeLine); }
   }
   // tyre rubber along the centre line
   for (const k of centreLine(layout)) {
@@ -472,8 +485,9 @@ function drawTaxiMarkings(g: Graphics, layout: AirportLayout, labels: Container)
     const offsets = [1.6, 2.6, 4.2, 5.2].map((o) => base + towardRunway * o);
     offsets.forEach((o, i) => {
       const dashed = i >= 2;
-      const len = (across ? h.w : h.h) * T;
-      const start = (across ? h.x : h.y) * T;
+      // across the drawn paving only (a connector is drawn inset from open ground on both sides)
+      const len = ((across ? h.w : h.h) - 2 * TAXIWAY_INSET) * T;
+      const start = ((across ? h.x : h.y) + TAXIWAY_INSET) * T;
       for (let p = 0; p < len; p += dashed ? 2.4 : len) {
         const seg = dashed ? 1.4 : len;
         if (across) g.rect(start + p, o - 0.25, seg, 0.5).fill(COLOURS.taxiLine);

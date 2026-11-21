@@ -98,8 +98,9 @@ describe('Markings', () => {
   it('place blue edge lights along Taxiway edges but not across junction mouths', () => {
     const lights = taxiwayEdgeLights(startRun(1).layout);
     const key = (x: number, y: number) => lights.some((l) => Math.abs(l.x - x) < 1e-6 && Math.abs(l.y - y) < 1e-6);
-    // the parallel Taxiway's north edge (y = 18) has a light at x 20.5 but not at x 16.5, where the link from the apron joins
-    expect(key(20.5, 18)).toBe(true);
-    expect(key(16.5, 18)).toBe(false);
+    // the parallel Taxiway's north edge (y = 18, drawn half a tile in) has a light at x 20.5 but not at x 16.5, where
+    // the link from the apron joins
+    expect(key(20.5, 18.5)).toBe(true);
+    expect(key(16.5, 18.5)).toBe(false);
   });
 });
