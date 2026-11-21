@@ -44,7 +44,13 @@ const tilesOf = (r: TileRect) => {
   return out;
 };
 
-/** One light at the middle of every Taxiway tile edge that borders unpaved ground. */
+/**
+ * How far in from open ground a Taxiway's paving is drawn, in tiles: a 3-tile Taxiway looks 2 tiles wide (half a
+ * Runway) where nothing joins it. Only the look: aircraft and building still use the full 3 tiles.
+ */
+export const TAXIWAY_INSET = 0.5;
+
+/** One light at the middle of every Taxiway tile edge that borders unpaved ground, at the edge of the drawn paving. */
 export function taxiwayEdgeLights(layout: AirportLayout): EdgeLight[] {
   const paved = new Set<string>();
   const taxi = new Set<string>();
@@ -59,10 +65,10 @@ export function taxiwayEdgeLights(layout: AirportLayout): EdgeLight[] {
   const out: EdgeLight[] = [];
   for (const k of taxi) {
     const [x, y] = k.split(',').map(Number) as [number, number];
-    if (!paved.has(`${x},${y - 1}`)) out.push({ x: x + 0.5, y });
-    if (!paved.has(`${x},${y + 1}`)) out.push({ x: x + 0.5, y: y + 1 });
-    if (!paved.has(`${x - 1},${y}`)) out.push({ x, y: y + 0.5 });
-    if (!paved.has(`${x + 1},${y}`)) out.push({ x: x + 1, y: y + 0.5 });
+    if (!paved.has(`${x},${y - 1}`)) out.push({ x: x + 0.5, y: y + TAXIWAY_INSET });
+    if (!paved.has(`${x},${y + 1}`)) out.push({ x: x + 0.5, y: y + 1 - TAXIWAY_INSET });
+    if (!paved.has(`${x - 1},${y}`)) out.push({ x: x + TAXIWAY_INSET, y: y + 0.5 });
+    if (!paved.has(`${x + 1},${y}`)) out.push({ x: x + 1 - TAXIWAY_INSET, y: y + 0.5 });
   }
   return out;
 }

@@ -243,7 +243,9 @@ cooldown (`simulation.ts → ACTIONS`).
 - **View:** top-down, oblique 3D buildings with shadows to the south-east, dark muted palette, yellow Taxiway markings,
   blue Taxiway edge lights. Taxiways are paved like the Runway: a darker outer edge, concrete slabs with joints and
   weathered patches, darker tyre rubber along the centre line, and lighter shoulders with a faint edge line on sides
-  facing open ground. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
+  facing open ground. A Taxiway is 3 tiles wide for aircraft, but along a side facing open ground its paving (and its
+  blue edge lights) are drawn half a tile in, so a plain Taxiway looks 2 tiles wide, half a Runway; where it meets a
+  Stand, Holding Bay, Runway or another Taxiway it is paved right up to it. Hold-short lines span the drawn paving. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
   glass cab with mullions under an overhanging roof, radar dome and a mast with a red light. Names TERMINAL and CARGO are written on the roofs; Stands show their number and Holding
   Bays B1, B2… inside, in the corner away from the Taxiway; both have a curved yellow lead-in and a stop bar.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
