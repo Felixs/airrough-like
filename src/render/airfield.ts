@@ -370,7 +370,7 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
   const tiles = [...paved].map((k) => k.split(',').map(Number) as [number, number]);
   const isPaved = (tx: number, ty: number) => paved.has(`${tx},${ty}`) || others.has(`${tx},${ty}`);
   const I = TAXIWAY_INSET * T;
-  const ROUND = 4; // outer corners of turns and ends
+  const ROUND = 4; // outer corners of turns and ends: the whole drawn corner square
   const FILLET = T; // inner corners of junctions and turns
   /**
    * The outline of a tile's paving, clockwise: inset from open ground, with a corner square cut away where the tile
@@ -424,7 +424,8 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
     const { x: px, y: py, w: pw, h: ph } = pavedRect(tx, ty);
     // slab tone varies a little; some slabs are patched
     const n = noise(tx, ty);
-    g.rect(px, py, pw, ph).fill({ color: n > 0.5 ? 0x232a2e : 0x12171a, alpha: Math.abs(n - 0.5) * 0.5 });
+    trace(outline(tx, ty));
+    g.fill({ color: n > 0.5 ? 0x232a2e : 0x12171a, alpha: Math.abs(n - 0.5) * 0.5 });
     if (noise(tx, ty, 1) > 0.88) g.rect(px + 1 + noise(tx, ty, 2) * (pw - 4), py + 1 + noise(tx, ty, 3) * (ph - 4), 2.5, 2).fill({ color: 0x0e1214, alpha: 0.5 });
     for (let i = 0; i < 3; i++) g.circle(px + noise(tx, ty, 10 + i) * pw, py + noise(tx, ty, 20 + i) * ph, 0.25).fill({ color: 0x2c3438, alpha: 0.7 });
     // slab joints on the tile grid
@@ -432,10 +433,29 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
     // shoulder and edge line on sides that face open ground (at the edge of the drawn paving)
     const shoulder = 1.2;
     const edgeLine = { width: 0.3, color: COLOURS.taxiLine, alpha: 0.35 };
-    if (open(tx, ty - 1)) { g.rect(px, py, pw, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + shoulder).lineTo(px + pw, py + shoulder).stroke(edgeLine); }
-    if (open(tx, ty + 1)) { g.rect(px, py + ph - shoulder, pw, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + ph - shoulder).lineTo(px + pw, py + ph - shoulder).stroke(edgeLine); }
-    if (open(tx - 1, ty)) { g.rect(px, py, shoulder, ph).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + shoulder, py).lineTo(px + shoulder, py + ph).stroke(edgeLine); }
-    if (open(tx + 1, ty)) { g.rect(px + pw - shoulder, py, shoulder, ph).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + pw - shoulder, py).lineTo(px + pw - shoulder, py + ph).stroke(edgeLine); }
+    const shoulderFill = { color: 0x252c30, alpha: 0.8 };
+    const N = open(tx, ty - 1);
+    const S = open(tx, ty + 1);
+    const W = open(tx - 1, ty);
+    const E = open(tx + 1, ty);
+    // at a rounded outside corner the straight shoulders stop short and an arc joins them
+    const R = Math.min(ROUND, pw, ph);
+    const nw = N && W ? R : 0;
+    const ne = N && E ? R : 0;
+    const sw = S && W ? R : 0;
+    const se = S && E ? R : 0;
+    if (N) { g.rect(px + nw, py, pw - nw - ne, shoulder).fill(shoulderFill); g.moveTo(px + nw, py + shoulder).lineTo(px + pw - ne, py + shoulder).stroke(edgeLine); }
+    if (S) { g.rect(px + sw, py + ph - shoulder, pw - sw - se, shoulder).fill(shoulderFill); g.moveTo(px + sw, py + ph - shoulder).lineTo(px + pw - se, py + ph - shoulder).stroke(edgeLine); }
+    if (W) { g.rect(px, py + nw, shoulder, ph - nw - sw).fill(shoulderFill); g.moveTo(px + shoulder, py + nw).lineTo(px + shoulder, py + ph - sw).stroke(edgeLine); }
+    if (E) { g.rect(px + pw - shoulder, py + ne, shoulder, ph - ne - se).fill(shoulderFill); g.moveTo(px + pw - shoulder, py + ne).lineTo(px + pw - shoulder, py + ph - se).stroke(edgeLine); }
+    const cornerArc = (cx: number, cy: number, from: number) => {
+      g.arc(cx, cy, R - shoulder / 2, from, from + Math.PI / 2).stroke({ width: shoulder, color: shoulderFill.color, alpha: shoulderFill.alpha });
+      g.arc(cx, cy, R - shoulder, from, from + Math.PI / 2).stroke(edgeLine);
+    };
+    if (nw) cornerArc(px + R, py + R, Math.PI);
+    if (ne) cornerArc(px + pw - R, py + R, -Math.PI / 2);
+    if (se) cornerArc(px + pw - R, py + ph - R, 0);
+    if (sw) cornerArc(px + R, py + ph - R, Math.PI / 2);
   }
   // fillets (over the shoulders of the edges they join): a curved apron of paving in every inside corner, tangent to both edges
   for (const [tx, ty] of tiles) {
