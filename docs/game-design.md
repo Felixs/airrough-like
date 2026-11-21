@@ -37,7 +37,9 @@ Screen, which turns Score into Air Miles for the meta-progression.
 ## The map
 
 - A tile grid (`layout.ts → WORLD`): 96 × 64 tiles, cut into square Land Plots of 16 × 16. The Run starts owning
-  plots 0–2 × 0–1 (48 × 32 tiles); more plots are bought in Build Mode.
+  plots 0–2 × 0–1 (48 × 32 tiles); more plots are bought in Build Mode, each bordering owned land, at a flat 20,000
+  each (`BUILD_COSTS.plotBase`; Cheaper Land Boosts lower it). Plots used to cost 24,000 × how many had been bought,
+  which put a second Runway (about 4 plots) out of reach before Week 3.
 - **Starting Airport** (`layout.ts → startingAirport`), centred in the starting land: a Medium Asphalt Runway (x 6–41,
   rows 24–27) with a connector at each end, a parallel Taxiway (row 18–20), an apron lane (rows 11–13, x 15–37) joined
   to it by a link near each end, the Terminal (x 16–25) with 2 Small + 1 Medium Contact Stands, the Cargo Hub
