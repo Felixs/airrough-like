@@ -30,6 +30,12 @@ micromanagement sit at the end.
 - **Hard mode (Regional Field)**: starts with a Grass strip and 2 Small Stands, for bonus Air Miles. Needs its own
   traffic rule to be tough but beatable (e.g. the first Week mostly Small aircraft, fading to normal by Week 3).
   Undecided whether it is wanted.
+- **Realistic 3D renderer** (decided 2026-11-21, on hold): move from the PixiJS 2D view to a realistic 3D look (a
+  day–night cycle with real shadows, 3D landings and takeoffs, self-made aircraft from Blender as glTF, buildings
+  built in code sharing one material set). The game stays in the browser and keeps the pure TypeScript simulation;
+  only the renderer changes. Try Babylon.js first, three.js only if Babylon.js has serious problems or doesn't give
+  the expected look. (Narrower Taxiway paving, once part of this, is already in the 2D view.) Research, decision and
+  spike plan: `engine-research.md` in the claude.ai Project.
 
 ## Unlikely (kept as a reminder)
 
