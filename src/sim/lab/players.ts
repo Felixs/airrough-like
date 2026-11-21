@@ -17,7 +17,7 @@ import { buyUpgrade, moneyWarnings, upgradeOffers, type UpgradeId } from '../pla
 import { dayPlan, upkeep, type RunState } from '../run';
 import { SCHEDULE_RULES } from '../schedule';
 import { twistsFor } from '../twists';
-import { buildParallelRunway, buildPier, lengthenRunway, placeHoldingBay, placeStand } from './placer';
+import { buildParallelRunway, buildPier, lengthenRunway, placeHoldingBay, placeStand, placeWing } from './placer';
 
 /** About how many Movements a Day one Runway can carry with the planner's Tower (found with the lab). */
 export const RUNWAY_QUOTA = 130;
@@ -82,8 +82,14 @@ function needsLongerRunway(run: RunState, days: readonly number[]): boolean {
 function addStand(run: RunState, budget: number, size: SizeClass, purpose: Purpose, log: Purchase[]): RunState | null {
   const serves = purpose === 'passenger' ? 'terminal' : 'cargoHub';
   const s = budgetSession(run, budget);
-  const direct = placeStand(s, size, serves, run.modifiers.unlocks.includes('remoteStands'));
-  if (direct) return confirmWithin(run, direct, log, `${size} ${purpose} Stand`);
+  const contact = placeStand(s, size, serves, false);
+  if (contact) return confirmWithin(run, contact, log, `${size} ${purpose} Stand`);
+  // grow the building with a wing (when unlocked) and put the Stand under it, before Remote Stands or a pier
+  const wing = placeWing(s, serves);
+  const onWing = wing && placeStand(wing, size, serves, false);
+  if (onWing) return confirmWithin(run, onWing, log, `${serves === 'terminal' ? 'Terminal' : 'Cargo'} wing + ${size} Stand`);
+  const remote = run.modifiers.unlocks.includes('remoteStands') ? placeStand(s, size, serves, true) : null;
+  if (remote) return confirmWithin(run, remote, log, `${size} ${purpose} Remote Stand`);
   const pier = buildPier(s, serves);
   const onPier = pier && placeStand(pier, size, serves, false);
   if (onPier) return confirmWithin(run, onPier, log, `${serves === 'terminal' ? 'Terminal' : 'Cargo'} pier + ${size} Stand`);

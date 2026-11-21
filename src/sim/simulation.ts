@@ -22,7 +22,7 @@ export const TIMINGS = {
    */
   turnTileCost: { small: 1.3, medium: 1.6, large: 2 },
   turnaroundMinutes: { small: 25, medium: 40, large: 60 },
-  remoteStandFactor: 1.5,
+  remoteStandFactor: 2,
   /** Arrival Fee is paid when unloading finishes, this far into the Turnaround. */
   unloadShare: 0.4,
 } as const;
@@ -990,12 +990,19 @@ function meets(a: Path, b: Path): boolean {
   return false;
 }
 
-/** A detour for an aircraft on `route` (at index i) that keeps clear of `other` in time: a tile it crosses is fine when reached well before or after the other aircraft. */
+/**
+ * A detour for an aircraft on `route` (at index i) that keeps clear of `other` in time: a tile it crosses is fine when
+ * reached well before or after the other aircraft. Clear means the whole width of the Taxiway: a tile beside the
+ * other's path counts as on it, so a detour can't just sidestep into the next row of the same Taxiway and pass.
+ */
 function detourAround(sim: Simulation, route: readonly Tile[], i: number, other: Path): Tile[] | null {
   const from = Math.min(i + 1, route.length - 1);
   return detour(sim.network, route, from, (k, steps) => {
-    const o = other.get(k);
-    return !!o && Math.abs(o.d - (steps + from - i)) <= MEET_MARGIN + 1;
+    const [x, y] = k.split(',').map(Number) as [number, number];
+    return around({ x, y }).some((n) => {
+      const o = other.get(n);
+      return !!o && Math.abs(o.d - (steps + from - i)) <= MEET_MARGIN + 1;
+    });
   });
 }
 

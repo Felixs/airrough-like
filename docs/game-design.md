@@ -40,11 +40,15 @@ Screen, which turns Score into Air Miles for the meta-progression.
   plots 0–2 × 0–1 (48 × 32 tiles); more plots are bought in Build Mode, each bordering owned land, at a flat 20,000
   each (`BUILD_COSTS.plotBase`; Cheaper Land Boosts lower it). Plots used to cost 24,000 × how many had been bought,
   which put a second Runway (about 4 plots) out of reach before Week 3.
-- **Starting Airport** (`layout.ts → startingAirport`), centred in the starting land: a Medium Asphalt Runway (x 6–41,
-  rows 24–27) with a connector at each end, a parallel Taxiway (row 18–20), an apron lane (rows 11–13, x 15–37) joined
-  to it by a link near each end, the Terminal (x 16–25) with 2 Small + 1 Medium Contact Stands, the Cargo Hub
-  (x 28–34) with 1 Medium + 1 Small, a Small and a Medium Holding Bay right of the cargo Stands, and the ATC Tower left
-  of the Terminal.
+- **Starting Airport** (`layout.ts → startingAirport`), laid out to grow: a Medium Asphalt Runway (x 6–41, rows
+  24–27) with a connector at each end, a parallel Taxiway (rows 18–20, x 6–41), and an apron lane (rows 11–13,
+  x 7–43) joined to it by two links (x 15–17 and x 33–35). Along the apron, west to east: the ATC Tower (x 2–4),
+  **room for two Terminal wings** (x 8–13), the Terminal (x 14–23) with 2 Small + 1 Medium Contact Stands and room
+  under it for one more, the Cargo Hub (x 25–31) with 1 Medium + 1 Small, **room for two Cargo Hub wings**
+  (x 32–37), and a Small and a Medium Holding Bay (x 39–43). The apron lane already runs the whole frontage, so
+  growing the buildings needs only wings (3 × 4, free to build, no Unlockable) and the Contact Stands under them: the
+  first place to expand, before Remote Stands or a new pier. (The buildings sit near the middle so taxi routes to the
+  Runway stay short; a first version with them at the west end cost the balance lab's players several Days.)
 - Structures are axis-aligned tile rectangles: Runway, Taxiway, Terminal, Cargo Hub, Stand, Holding Bay, ATC Tower,
   Support Buildings (Ramp Agent Station, Admin Office, Airline Office, Fire & Rescue Station, Fuel Farm, De-icing Pad).
 - **Taxiways** are 3 tiles wide. Touching collinear Taxiway pieces merge into one; so do Terminal or Cargo Hub wings of
@@ -54,7 +58,9 @@ Screen, which turns Score into Air Miles for the meta-progression.
   of that side. On placement the facing is chosen automatically: the side with a Taxiway in front, preferring the side
   away from its building. The footprint turns with the facing.
 - A **Contact Stand** is attached when it shares at least one full tile of edge with its Terminal or Cargo Hub, on any
-  side. Remote Stands stand free (an Unlockable) and turn round 1.5× slower.
+  side. Remote Stands stand free (an Unlockable), cost 75% of a Contact Stand and turn aircraft round 2× slower: a
+  stopgap, worse than a Contact Stand (lowered from 50% and 1.5× after the balance lab found them the one item that
+  won Runs on its own).
 - Build Mode tools: Taxiway, Stands, Holding Bay, Runways, Buildings, Land, Move, Demolish. Tools with variants show
   them as small tiles under the tools, grouped (Stands: Terminal / Cargo × Contact / Remote, each Small / Medium /
   Large; Holding Bays by size; Runways: new 09-27 or 18-36, Medium or Long, Grass strips, Lengthen; Buildings: main
@@ -63,8 +69,9 @@ Screen, which turns Score into Air Miles for the meta-progression.
   After something is placed the cursor is free (nothing follows it) until the next tool or tile is picked; Demolish
   stays on so several things can be cleared in a row.
 - **Main buildings:** a whole Terminal (10 × 4 tiles) or Cargo Hub (7 × 4) can always be built, anywhere and as
-  many as wanted, standing alone and with no Unlockable (`build.ts → MAIN_BUILDING`). A wing (3 × 4, smaller) needs
-  its Unlockable and must touch a building of its kind. Price 1,500 per tile. (The Second Terminal Unlockable was
+  many as wanted, standing alone and with no Unlockable (`build.ts → MAIN_BUILDING`). A wing (3 × 4, smaller) must
+  touch a building of its kind; it needs no Unlockable (the Terminal wing and Cargo Hub wing Unlockables were retired
+  and their 400 Air Miles each refunded). Price 1,500 per tile. (The Second Terminal Unlockable was
   retired; owners get its 1,500 Air Miles back.)
 - **Runway end zones:** nothing (Taxiways included) may be built in the 4 tiles past each end of a Runway, across
   its full width (`layout.ts → RUNWAY_END_CLEAR_TILES`); a new or lengthened Runway also needs its own end zones
@@ -100,7 +107,9 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - **No passing head-on:** two aircraft that would reach the same tile in opposite directions within 3 tiles' worth of
   taxiing of each other, within the next 16 tiles, would meet. One gives way: the one not yet on the other's path, else the one that has another
   way round, else the one with the later id. It takes another Taxiway if there is one (crossing the other's path only
-  well before or after it), otherwise it waits short of the other's path until it has passed.
+  well before or after it), otherwise it waits short of the other's path until it has passed. The way round must
+  keep clear of the other's whole Taxiway: moving over into the next row of the same 3-wide Taxiway and passing
+  doesn't count.
 
 ## Runways, wind and direction
 

@@ -60,6 +60,17 @@ export const EXPERIMENTS: readonly Experiment[] = [
     ],
   },
   {
+    id: 'growth',
+    title: 'Remote Stands',
+    question: 'With free wings and room for two each, what do Remote Stands (75% price, 2× Turnaround) still add?',
+    players: ['planner'],
+    variants: [
+      CURRENT,
+      { label: '+ Remote Stands', meta: { unlocks: ['remoteStands'] } },
+      { label: '+ Remote Stands at the old 50% / 1.5×', meta: { unlocks: ['remoteStands'] }, overrides: { 'BUILD_COSTS.remoteStandFactor': 0.5, 'TIMINGS.remoteStandFactor': 1.5 } },
+    ],
+  },
+  {
     id: 'upgrade-value',
     title: 'Upgrade value',
     question: 'How much winning does each thing the planner buys add (win rate lost without it, per $1,000 it costs)?',

@@ -186,3 +186,14 @@ export function buildParallelRunway(s: BuildSession, length: 'medium' | 'long' |
   return null;
 }
 
+
+/** A wing (3 × 4) on a Terminal or Cargo Hub, where one fits beside its building (needs that wing's Unlockable). */
+export function placeWing(s: BuildSession, kind: 'terminal' | 'cargoHub'): BuildSession | null {
+  for (const b of s.layout.structures.filter((o) => o.kind === kind)) {
+    for (const x of [b.x + b.w, b.x - 3]) {
+      const next = tryChange(s, { kind: 'add', structure: { kind, x, y: b.y, w: 3, h: b.h } });
+      if (next) return next;
+    }
+  }
+  return null;
+}

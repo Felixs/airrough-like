@@ -26,10 +26,10 @@ describe('New Runways', () => {
 
   it('cost Grass strip 12k (no Unlockable) / 80k / 160k, however many Runways are built', () => {
     const s = openBuild(rich());
-    const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 43, y: 0 }, 'short', true, true) });
+    const c = checkChange(s, { kind: 'add', structure: newRunway(s, { x: 44, y: 0 }, 'short', true, true) });
     expect(c.ok).toBe(true);
     expect(c.cost).toBe(12_000);
-    expect(checkChange(openBuild(startRun(1)), { kind: 'add', structure: newRunway(s, { x: 43, y: 0 }, 'short', true, true) }).ok).toBe(true); // no Unlockable needed
+    expect(checkChange(openBuild(startRun(1)), { kind: 'add', structure: newRunway(s, { x: 44, y: 0 }, 'short', true, true) }).ok).toBe(true); // no Unlockable needed
   });
 
   it('can be lengthened for the price difference once there is room', () => {
@@ -69,15 +69,15 @@ describe('Runway connectors', () => {
 describe('Buildings', () => {
   it('Support Buildings cost 12k / 15k / 20k and enable their Emergency Action', () => {
     const s = openBuild(rich());
-    const c = checkChange(s, { kind: 'add', structure: newBuilding(s, { x: 2, y: 14 }, 'rampAgentStation') });
+    const c = checkChange(s, { kind: 'add', structure: newBuilding(s, { x: 30, y: 15 }, 'rampAgentStation') });
     expect(c).toMatchObject({ ok: true, cost: 12_000, upkeep: 200 });
-    expect(checkChange(s, { kind: 'add', structure: newBuilding(s, { x: 2, y: 14 }, 'airlineOffice') }).cost).toBe(20_000);
+    expect(checkChange(s, { kind: 'add', structure: newBuilding(s, { x: 30, y: 15 }, 'airlineOffice') }).cost).toBe(20_000);
   });
 
   it('Terminal and Cargo Hub wings must be attached to their building', () => {
     const r = rich();
     const s = openBuild(r);
-    const wing: Structure = { kind: 'terminal', x: 20, y: 0, w: 3, h: 4 }; // on top of the Terminal
+    const wing: Structure = { kind: 'terminal', x: 15, y: 0, w: 3, h: 4 }; // on top of the Terminal
     expect(checkChange(s, { kind: 'add', structure: wing })).toMatchObject({ ok: true, cost: 18_000 });
     expect(failing(checkChange(s, { kind: 'add', structure: { ...wing, x: 2, y: 14 } }))).toContain('Attached to the Terminal');
   });
@@ -87,18 +87,18 @@ describe('Move', () => {
   it('is free and validated like a new placement', () => {
     const s = openBuild(rich());
     const tower = find(s, (x) => x.kind === 'atcTower');
-    expect(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 2, y: 10 } })).toMatchObject({ ok: true, cost: 0 });
-    expect(failing(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 17, y: 2 } }))).toContain('Clear of other structures');
-    const moved = confirmBuild(applyChange(s, { kind: 'move', from: tower, to: { ...tower, x: 2, y: 10 } }));
-    expect(moved.layout.structures.find((x) => x.kind === 'atcTower')).toMatchObject({ x: 2, y: 10 });
+    expect(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 44, y: 0 } })).toMatchObject({ ok: true, cost: 0 });
+    expect(failing(checkChange(s, { kind: 'move', from: tower, to: { ...tower, x: 15, y: 2 } }))).toContain('Clear of other structures');
+    const moved = confirmBuild(applyChange(s, { kind: 'move', from: tower, to: { ...tower, x: 44, y: 0 } }));
+    expect(moved.layout.structures.find((x) => x.kind === 'atcTower')).toMatchObject({ x: 44, y: 0 });
   });
 
   it('works for anything; a Terminal takes its Contact Stands along', () => {
     const s = openBuild(rich());
     const terminal = find(s, (x) => x.kind === 'terminal');
     // one tile left: the Stands still open onto the apron taxilane
-    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 15 } });
-    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([15, 17, 19]);
+    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 13 } });
+    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([13, 15, 17]);
     const runway = s.layout.runways[0]!;
     expect(checkChange(s, { kind: 'move', from: runway, to: { ...runway, y: 30 } }).items.filter((i) => !i.ok).map((i) => i.label)).toEqual(['Inside owned land']);
     expect(failing(checkChange(s, { kind: 'move', from: terminal, to: { ...terminal, y: -10 } }))).toContain('Its Stands keep Taxiway access');
@@ -164,9 +164,10 @@ describe('Main buildings', () => {
     // a whole second Cargo Hub may stand anywhere too, with no Unlockable
     const second = failing(checkChange(openBuild(run), { kind: 'add', structure: hub }));
     expect(second.some((f) => f.includes('Unlockable') || f.includes('Attached'))).toBe(false);
-    // a smaller piece is a wing: locked and attached only
+    // a smaller piece is a wing: no Unlockable, but it must touch its building
     const wing = checkChange(openBuild(run), { kind: 'add', structure: { kind: 'cargoHub', x: 2, y: 2, w: 3, h: 4 } });
-    expect(failing(wing).some((f) => f.includes('Unlockable'))).toBe(true);
+    expect(failing(wing).some((f) => f.includes('Unlockable'))).toBe(false);
+    expect(failing(wing).some((f) => f.includes('Attached'))).toBe(true);
   });
 });
 
@@ -190,7 +191,7 @@ describe('Runway end zones', () => {
     const pastZone = newBuilding(s, { x: 46, y: 24 }, 'rampAgentStation');
     expect(failing(checkChange(s, { kind: 'add', structure: pastZone }))).not.toContain('Clear of the Runway ends (4 tiles)');
     // a vertical Runway whose south end zone would cover the parallel Taxiway
-    const blocked = newRunway(s, { x: 30, y: -10 }, 'short', true, true);
+    const blocked = newRunway(s, { x: 30, y: -10 }, 'short', true, true); // its south end zone covers the link at x 33–35
     expect(failing(checkChange(s, { kind: 'add', structure: blocked }))).toContain('Nothing built past its ends (4 tiles)');
   });
 });
