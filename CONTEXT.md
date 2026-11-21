@@ -173,7 +173,7 @@ The meta-currency awarded at the end of a Run. Spent in the Main Menu on Unlocka
 _Avoid_: Meta-currency, points, gems
 
 **Unlockable**:
-A building or feature bought once with Air Miles that is available in every later Run (e.g. Remote Stands, Terminal wings, Support Buildings, Fire & Rescue Station, Tower Modules level 4–5). What the airport needs to run at all (Runways, Taxiways, Contact Stands, Holding Bays, every Runway Surface) is never locked. Boosts for a locked building stay locked until it is unlocked.
+A building or feature bought once with Air Miles that is available in every later Run (e.g. Remote Stands, Support Buildings, Fire & Rescue Station, Tower Modules level 4–5). What the airport needs to run and grow (Runways, Taxiways, Contact Stands, Holding Bays, Terminals, Cargo Hubs and their wings, every Runway Surface) is never locked. Boosts for a locked building stay locked until it is unlocked.
 _Avoid_: Milestone, unlock, achievement
 
 **Boost**:
@@ -257,7 +257,7 @@ A Stand directly attached to a Terminal or Cargo Hub (touching it along at least
 _Avoid_: Gate, jet bridge
 
 **Remote Stand**:
-A Stand placed away from the building, served by bus or vehicle; slower Turnaround. An Unlockable.
+A Stand placed away from the building, served by bus or vehicle; a stopgap: cheaper than building out, but twice the Turnaround of a Contact Stand. An Unlockable.
 _Avoid_: Apron spot, overflow parking
 
 **Turnaround**:

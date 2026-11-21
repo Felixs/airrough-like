@@ -178,7 +178,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
           ...(['terminalWing', 'cargoWing', ...SUPPORT_ROLES] as const).map((b): Variant => ({
             id: b, group: b === 'terminalWing' || b === 'cargoWing' ? 'Wings' : 'Support', label: b === 'terminalWing' ? 'Terminal wing' : b === 'cargoWing' ? 'Cargo wing' : ROLE_NAME[b], icon: buildingIcon(b),
             price: b === 'terminalWing' || b === 'cargoWing' ? TERMINAL_WING.w * TERMINAL_WING.h * BUILD_COSTS.wingPerTile : BUILD_COSTS.supportBuilding[b],
-            unlock: b, set: { building: b },
+            unlock: b === 'terminalWing' || b === 'cargoWing' ? null : b, set: { building: b },
           })),
         ];
       default:

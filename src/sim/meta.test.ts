@@ -25,7 +25,7 @@ describe('Air Miles', () => {
 
 describe('Unlockables', () => {
   it('are bought once and cost 300 to 1,200 Air Miles', () => {
-    expect(UNLOCKABLES.length).toBeGreaterThanOrEqual(12);
+    expect(UNLOCKABLES.length).toBeGreaterThanOrEqual(10);
     expect(Math.min(...UNLOCKABLES.map((u) => u.cost))).toBe(300);
     let meta = rich();
     meta = buyUnlockable(meta, 'remoteStands');
@@ -39,8 +39,8 @@ describe('Unlockables', () => {
     const locked = openBuild({ ...startRun(1), money: 1_000_000 });
     const stand = newStand(locked, { x: 20, y: 15 }, 'medium', 'remote', 'terminal');
     expect(failing(checkChange(locked, { kind: 'add', structure: stand }))).toContain('🔒 Needs Unlockable: Remote Stands');
-    expect(failing(checkChange(locked, { kind: 'add', structure: newBuilding(locked, { x: 2, y: 14 }, 'adminOffice') }))).toContain('🔒 Needs Unlockable: Admin Office');
-    expect(failing(checkChange(locked, { kind: 'add', structure: { kind: 'terminal', x: 20, y: 0, w: 3, h: 4 } }))).toContain('🔒 Needs Unlockable: Terminal wing');
+    expect(failing(checkChange(locked, { kind: 'add', structure: newBuilding(locked, { x: 30, y: 15 }, 'adminOffice') }))).toContain('🔒 Needs Unlockable: Admin Office');
+    expect(failing(checkChange(locked, { kind: 'add', structure: { kind: 'terminal', x: 11, y: 4, w: 3, h: 4 } })).join()).not.toMatch(/🔒/); // wings are free
     // Long Runways and ILS are never locked
     expect(failing(checkChange(locked, { kind: 'add', structure: newRunway(locked, { x: 6, y: 30 }, 'long', false) })).join()).not.toMatch(/🔒/);
     const lit = { ...startRun(1), money: 1e6 };
@@ -48,7 +48,7 @@ describe('Unlockables', () => {
 
     const unlocked = openBuild({ ...startRun(1, { ...emptyMeta(), unlocks: ['remoteStands', 'adminOffice'] }), money: 1_000_000 });
     expect(checkChange(unlocked, { kind: 'add', structure: newStand(unlocked, { x: 20, y: 15 }, 'medium', 'remote', 'terminal') }).ok).toBe(true);
-    expect(checkChange(unlocked, { kind: 'add', structure: newBuilding(unlocked, { x: 2, y: 14 }, 'adminOffice') }).ok).toBe(true);
+    expect(checkChange(unlocked, { kind: 'add', structure: newBuilding(unlocked, { x: 30, y: 15 }, 'adminOffice') }).ok).toBe(true);
   });
 
   it('gate Tower Modules 4–5', () => {
@@ -61,8 +61,8 @@ describe('Unlockables', () => {
 
   it('Grass strips need no Unlockable: cheap, Short, Grass', () => {
     const s = openBuild({ ...startRun(1, emptyMeta()), money: 1e6 });
-    const grass = newRunway(s, { x: 44, y: 0 }, 'long', true, true);
-    expect(grass).toMatchObject({ length: 'short', surface: 'grass', h: 24 });
+    const grass = newRunway(s, { x: 14, y: 28 }, 'long', false, true);
+    expect(grass).toMatchObject({ length: 'short', surface: 'grass', w: 24 });
     expect(checkChange(s, { kind: 'add', structure: grass })).toMatchObject({ ok: true, cost: 12_000 });
   });
 });

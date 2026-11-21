@@ -15,7 +15,7 @@ export const BUILD_COSTS = {
   /** Taxiways have one width that fits every aircraft. */
   taxiwayWidth: 3,
   stand: { small: 8_000, medium: 16_000, large: 36_000 },
-  remoteStandFactor: 0.5,
+  remoteStandFactor: 0.75,
   holdingBay: { small: 4_000, medium: 8_000, large: 16_000 },
   runway: { short: 30_000, medium: 80_000, long: 160_000 },
   runwayTiles: { short: 24, medium: 36, long: 48 },
@@ -202,8 +202,6 @@ export const isMainBuilding = (s: Structure) =>
 export function unlockNeeded(s: Structure): UnlockableId | null {
   if (s.kind === 'stand' && s.placement === 'remote') return 'remoteStands';
   if (isMainBuilding(s)) return null;
-  if (s.kind === 'terminal') return 'terminalWing';
-  if (s.kind === 'cargoHub') return 'cargoWing';
   if (s.kind === 'supportBuilding') return s.role;
   return null;
 }

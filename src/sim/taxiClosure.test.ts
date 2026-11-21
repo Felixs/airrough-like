@@ -25,12 +25,13 @@ describe('A Taxiway closed by an Incident', () => {
   });
 
   it('has no way round on a dead end', () => {
-    const route = taxiRoute(network, { x: 30, y: 19 }, { x: 6, y: 19 }); // west along the parallel Taxiway, past the last link
-    expect(detour(network, route, 1, square(10, 19, 2))).toBeNull();
+    const route = taxiRoute(network, { x: 30, y: 19 }, { x: 7, y: 23 }); // west along the parallel Taxiway, down the Runway connector
+    expect(detour(network, route, 1, square(7, 22, 1))).toBeNull();
   });
 
   it('makes aircraft wait in line in front of it, and carry on once it is cleared', () => {
-    const lane = taxiRoute(network, { x: 30, y: 19 }, { x: 6, y: 19 }); // the west end of the parallel Taxiway is a dead end
+    const lane = taxiRoute(network, { x: 30, y: 19 }, { x: 7, y: 23 }); // the Runway connector is a dead end
+    const blockedAt = lane.findIndex((t) => t.x === 7 && t.y === 21);
     const base = createSimulation({
       layout, seed: 4, groundRadarLevel: 5,
       schedule: ['A', 'B', 'C'].map((id) => ({ id, type: 'A320' as const, arrivalMinute: 1200 })),
@@ -39,12 +40,12 @@ describe('A Taxiway closed by an Incident', () => {
     const at = (progress: number, stoppedUntil = 0): Partial<Flight> => ({
       phase: 'taxiIn', route: lane, routeProgress: progress, stoppedUntil, standId: null, bayId: 'B1', position: { x: 0, y: 0 }, runway: 0,
     });
-    const crafted: Partial<Record<string, Partial<Flight>>> = { A: at(18, now + 10), B: at(3), C: at(0) };
+    const crafted: Partial<Record<string, Partial<Flight>>> = { A: at(blockedAt, now + 10), B: at(3), C: at(0) };
     let sim: Simulation = { ...base, flights: base.flights.map((f) => ({ ...f, ...crafted[f.id] }) as Flight) };
     const get = (id: string) => sim.flights.find((f) => f.id === id)!;
     while (sim.clock.minute < now + 8) sim = stepSimulation(sim);
-    expect(get('A').routeProgress).toBe(18);
-    expect(get('B').routeProgress).toBeLessThan(17 - 1); // stopped short of the closed Taxiway (A's tiles ±1)
+    expect(get('A').routeProgress).toBe(blockedAt);
+    expect(get('B').routeProgress).toBeLessThan(blockedAt - 2); // stopped short of the closed Taxiway (A's tiles ±1)
     expect(get('B').waitingSince).toBeDefined();
     expect(get('C').routeProgress).toBeLessThan(get('B').routeProgress - 1); // in line behind B, not on top of it
     const waited = get('B').routeProgress;
@@ -89,7 +90,7 @@ describe('In-trail spacing', () => {
 });
 
 describe('Oncoming traffic', () => {
-  it('never passes on the same Taxiway: one of the two takes another', () => {
+  it('never passes on the same Taxiway: one of the two takes another or waits', () => {
     const east = taxiRoute(network, { x: 16, y: 12 }, { x: 34, y: 12 });
     const west = taxiRoute(network, { x: 34, y: 12 }, { x: 16, y: 12 });
     const base = createSimulation({ layout, seed: 4, schedule: ['A', 'B'].map((id) => ({ id, type: 'A320' as const, arrivalMinute: 1200 })) });
@@ -98,15 +99,18 @@ describe('Oncoming traffic', () => {
     let sim: Simulation = { ...base, flights: base.flights.map((f) => ({ ...f, ...crafted[f.id] }) as Flight) };
     let closest = Infinity;
     let tookOther = false;
+    let waited = false;
     const start = sim.clock.minute;
     while (sim.clock.minute < start + 10) {
       sim = stepSimulation(sim);
       const [a, b] = ['A', 'B'].map((id) => sim.flights.find((f) => f.id === id)!);
       tookOther ||= [a!, b!].some((f) => f.route.some((t) => t.y >= 18));
+      waited ||= [a!, b!].some((f) => f.waitingSince !== undefined);
       if (a!.phase === 'taxiIn' && b!.phase === 'taxiIn') closest = Math.min(closest, Math.hypot(a!.position!.x - b!.position!.x, a!.position!.y - b!.position!.y));
     }
     expect(closest).toBeGreaterThanOrEqual(16);
-    expect(tookOther).toBe(true); // one of them went round by the parallel Taxiway
+    // one of them went round by the parallel Taxiway, or (the way round being long) waited for the other to pass
+    expect(tookOther || waited).toBe(true);
   });
 });
 
@@ -196,7 +200,8 @@ describe('A Runway lengthened to the west', () => {
     // traffic the starting airport can take (its Stands are mostly Small)
     const schedule = Array.from({ length: 10 }, (_, k) => ({ id: `F${k}`, type: 'C208' as const, arrivalMinute: 6 * 60 + k * 8 }));
     for (const seed of [1, 2, 3]) {
-      let sim: Simulation = createSimulation({ layout: longer, schedule, seed, wind: { seed } });
+      // no random ATC/Pilot errors: this is about the exit logic, not luck
+      let sim: Simulation = createSimulation({ layout: longer, schedule, seed, wind: { seed }, riskMultiplier: 0 });
       while (sim.clock.minute < 10 * 60) {
         sim = stepSimulation(sim);
         if (sim.pendingAlert) sim = { ...sim, pendingAlert: null };

@@ -101,9 +101,9 @@ describe('Retired Unlockables', () => {
     const { emptyMeta } = await import('./meta');
     const { saveMeta, loadMeta } = await import('./save');
     const store = memoryStore();
-    saveMeta(store, { ...emptyMeta(), airMiles: 10, unlocks: ['secondTerminal', 'remoteStands'] as never });
+    saveMeta(store, { ...emptyMeta(), airMiles: 10, unlocks: ['secondTerminal', 'terminalWing', 'remoteStands'] as never });
     const meta = loadMeta(store);
-    expect(meta.airMiles).toBe(1_510);
+    expect(meta.airMiles).toBe(10 + 1_500 + 400);
     expect(meta.unlocks).toEqual(['remoteStands']);
   });
 });

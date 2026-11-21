@@ -7,7 +7,7 @@ import type { RunState } from './run';
 import { airMiles } from './run';
 
 export type UnlockableId =
-  | 'remoteStands' | 'adminOffice' | 'terminalWing' | 'cargoWing' | 'rampAgentStation' | 'cargoApronLighting'
+  | 'remoteStands' | 'adminOffice' | 'rampAgentStation' | 'cargoApronLighting'
   | 'airlineOffice' | 'fuelFarm' | 'fireRescueStation' | 'deIcingPad' | 'bonusTwists' | 'towerLevel45';
 
 export type BoostId =
@@ -26,8 +26,6 @@ export interface MetaState {
 export const UNLOCKABLES: ReadonlyArray<{ readonly id: UnlockableId; readonly name: string; readonly effect: string; readonly cost: number }> = [
   { id: 'remoteStands', name: 'Remote Stands', effect: 'Place Stands away from the buildings (slower Turnaround)', cost: 300 },
   { id: 'adminOffice', name: 'Admin Office', effect: 'Building that enables Manual Divert', cost: 300 },
-  { id: 'terminalWing', name: 'Terminal wing', effect: 'Extend the Terminal for more Contact Stands', cost: 400 },
-  { id: 'cargoWing', name: 'Cargo Hub wing', effect: 'Extend the Cargo Hub for more Contact Stands', cost: 400 },
   { id: 'rampAgentStation', name: 'Ramp Agent Station', effect: 'Building that enables Rush Turnaround', cost: 500 },
   { id: 'cargoApronLighting', name: 'Cargo apron lighting', effect: 'Cargo Turnarounds 20% faster after dusk', cost: 500 },
   { id: 'airlineOffice', name: 'Airline Office', effect: 'Building that enables Priority Landing', cost: 600 },

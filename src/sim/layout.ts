@@ -115,18 +115,21 @@ const stand = (id: string, x: number, size: 'small' | 'medium', serves: Stand['s
  */
 export function startingAirport(): AirportLayout {
   return createLayout(WORLD.width, WORLD.height, [
-    { kind: 'atcTower', x: 12, y: 4, w: 3, h: 4 },
-    { kind: 'terminal', x: 16, y: 4, w: 10, h: 4 },
-    { kind: 'cargoHub', x: 28, y: 4, w: 7, h: 4 },
-    stand('1', 16, 'small', 'terminal'),
-    stand('2', 18, 'small', 'terminal'),
-    stand('3', 20, 'medium', 'terminal'),
-    stand('C1', 28, 'medium', 'cargoHub'),
-    stand('C2', 31, 'small', 'cargoHub'),
-    { kind: 'holdingBay', id: 'B1', x: 33, y: 8, w: 2, h: 3, size: 'small' },
-    { kind: 'holdingBay', id: 'B2', x: 35, y: 8, w: 3, h: 3, size: 'medium' },
-    // apron lane along the Stands and Holding Bays, a link down at each end, the parallel Taxiway, Runway connectors
-    { kind: 'taxiway', x: 15, y: 11, w: 23, h: 3 },
+    // the Terminal leaves room west of it for two wings (x 8–13), the Cargo Hub east of it (x 32–37), each wing with
+    // Contact Stands below it on the apron lane
+    { kind: 'atcTower', x: 2, y: 4, w: 3, h: 4 },
+    { kind: 'terminal', x: 14, y: 4, w: 10, h: 4 },
+    { kind: 'cargoHub', x: 25, y: 4, w: 7, h: 4 },
+    stand('1', 14, 'small', 'terminal'),
+    stand('2', 16, 'small', 'terminal'),
+    stand('3', 18, 'medium', 'terminal'),
+    stand('C1', 25, 'medium', 'cargoHub'),
+    stand('C2', 28, 'small', 'cargoHub'),
+    { kind: 'holdingBay', id: 'B1', x: 39, y: 8, w: 2, h: 3, size: 'small' },
+    { kind: 'holdingBay', id: 'B2', x: 41, y: 8, w: 3, h: 3, size: 'medium' },
+    // apron lane along the whole frontage (room to grow included), two links down near the middle, the parallel
+    // Taxiway, Runway connectors
+    { kind: 'taxiway', x: 7, y: 11, w: 37, h: 3 },
     { kind: 'taxiway', x: 15, y: 14, w: 3, h: 4 },
     { kind: 'taxiway', x: 33, y: 14, w: 3, h: 4 },
     { kind: 'taxiway', x: 6, y: 18, w: 36, h: 3 },
