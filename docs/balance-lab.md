@@ -86,6 +86,22 @@ Current set: `baseline`, `meta`, `upgrade-value`, `stand-prices`, `land-price`, 
 - So the cost of **adding Stands** is the real wall, more than Land: Remote Stands at 300 Air Miles are by far the
   best buy, and a first Run without them gets stuck.
 
+### Third run (21 Nov 2026: room to grow, free wings, Remote Stands 75% / 2×, flat Land; 30 seeds)
+
+| Player | Win rate (95% CI) | Median Days survived | Lost most on |
+|---|---|---|---|
+| idle | 0% | 5 | W1 Sat |
+| reactive | 0% (0–11%) | 17 | W3 Sat |
+| planner | **13% (5–30%)** | **27** | W4 Sun |
+| planner + Remote Stands | 17% (7–34%) | 20 | W3 Sun |
+| planner, all Unlockables & Boosts | 23% (12–41%) | 27 | W4 Sun |
+
+- Growing the buildings with wings carries the planner to the last Boss Day: median from Day 13 to Day 27, wins 3% → 13%.
+- Remote Stands no longer decide Runs (+4 points, within the noise; at the old 50% / 1.5× the same).
+- Meta-progression now lifts the planner by about 10 points instead of 44: no single buy is a must-have.
+- Still below the targets (planner 70–80%): most losses are "holding" on the last Boss Days. Next: a smarter planner
+  (second Runway timing, Holding Bays, using Support Buildings) before judging the late-game difficulty.
+
 ## Next steps
 
 1. Decide how adding Stands should work on a first Run: cheaper Taxiways, Remote Stands always available (and the
