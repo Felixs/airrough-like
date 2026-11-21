@@ -11,10 +11,10 @@ describe('Taxi routing on the Starting Airport', () => {
   it('reaches Stand 3 from the Runway exit on the shortest path', () => {
     const stand = airport.stands.find((s) => s.id === '3')!;
     const route = routeToStand(network, network.runwayExit, stand);
-    // Exit (40,23) to the centre of Stand 3 (19,9): 21 tiles west + 14 tiles north, no detour needed.
-    expect(route.length - 1).toBe(35);
+    // Exit (40,23) to the centre of Stand 3 (13,9): 27 tiles west + 14 tiles north, no detour needed.
+    expect(route.length - 1).toBe(41);
     expect(route[0]).toEqual({ x: 40, y: 23 });
-    expect(route[route.length - 1]).toEqual({ x: 19, y: 9 });
+    expect(route[route.length - 1]).toEqual({ x: 13, y: 9 });
   });
 
   it('reaches every Stand from the Runway exit and back to the hold point using only Taxiway and that Stand', () => {

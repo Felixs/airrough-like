@@ -77,7 +77,7 @@ describe('Buildings', () => {
   it('Terminal and Cargo Hub wings must be attached to their building', () => {
     const r = rich();
     const s = openBuild(r);
-    const wing: Structure = { kind: 'terminal', x: 15, y: 0, w: 3, h: 4 }; // on top of the Terminal
+    const wing: Structure = { kind: 'terminal', x: 11, y: 0, w: 3, h: 4 }; // on top of the Terminal
     expect(checkChange(s, { kind: 'add', structure: wing })).toMatchObject({ ok: true, cost: 18_000 });
     expect(failing(checkChange(s, { kind: 'add', structure: { ...wing, x: 2, y: 14 } }))).toContain('Attached to the Terminal');
   });
@@ -97,8 +97,8 @@ describe('Move', () => {
     const s = openBuild(rich());
     const terminal = find(s, (x) => x.kind === 'terminal');
     // one tile left: the Stands still open onto the apron taxilane
-    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 13 } });
-    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([13, 15, 17]);
+    const moved = applyChange(s, { kind: 'move', from: terminal, to: { ...terminal, x: 7 } });
+    expect(moved.layout.stands.filter((st) => st.serves === 'terminal').map((st) => st.x)).toEqual([7, 9, 11]);
     const runway = s.layout.runways[0]!;
     expect(checkChange(s, { kind: 'move', from: runway, to: { ...runway, y: 30 } }).items.filter((i) => !i.ok).map((i) => i.label)).toEqual(['Inside owned land']);
     expect(failing(checkChange(s, { kind: 'move', from: terminal, to: { ...terminal, y: -10 } }))).toContain('Its Stands keep Taxiway access');
