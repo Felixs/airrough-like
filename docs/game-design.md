@@ -42,10 +42,10 @@ Screen, which turns Score into Air Miles for the meta-progression.
   which put a second Runway (about 4 plots) out of reach before Week 3.
 - **Starting Airport** (`layout.ts → startingAirport`), laid out to grow: a Medium Asphalt Runway (x 6–41, rows
   24–27) with a connector at each end, a parallel Taxiway (rows 18–20, x 6–41), and an apron lane (rows 11–13,
-  x 7–43) joined to it by two links (x 15–17 and x 33–35). Along the apron, west to east: the ATC Tower (x 2–4),
-  **room for two Terminal wings** (x 8–13), the Terminal (x 14–23) with 2 Small + 1 Medium Contact Stands and room
-  under it for one more, the Cargo Hub (x 25–31) with 1 Medium + 1 Small, **room for two Cargo Hub wings**
-  (x 32–37), and a Small and a Medium Holding Bay (x 39–43). The apron lane already runs the whole frontage, so
+  x 7–43) joined to it by two links (x 15–17 and x 33–35). Along the apron, west to east: the ATC Tower (x 2–4), the
+  Terminal (x 8–17) with 2 Small + 1 Medium Contact Stands and room under it for one more, then 12 tiles of **room to
+  grow between the two buildings**: two Terminal wings eastward (x 18–23) and two Cargo Hub wings westward
+  (x 24–29); then the Cargo Hub (x 30–36) with 1 Medium + 1 Small, and a Small and a Medium Holding Bay (x 39–43). The apron lane already runs the whole frontage, so
   growing the buildings needs only wings (3 × 4, free to build, no Unlockable) and the Contact Stands under them: the
   first place to expand, before Remote Stands or a new pier. (The buildings sit near the middle so taxi routes to the
   Runway stay short; a first version with them at the west end cost the balance lab's players several Days.)
@@ -245,9 +245,11 @@ cooldown (`simulation.ts → ACTIONS`).
   weathered patches, darker tyre rubber along the centre line, and lighter shoulders with a faint edge line on sides
   facing open ground. A Taxiway is 3 tiles wide for aircraft, but along a side facing open ground its paving (and its
   blue edge lights) are drawn half a tile in, so a plain Taxiway looks 2 tiles wide, half a Runway; where it meets a
-  Stand, Holding Bay, Runway or another Taxiway it is paved right up to it. Hold-short lines span the drawn paving. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
+  Stand, Holding Bay, Runway or another Taxiway it is paved right up to it. Hold-short lines span the drawn paving.
+  Like real taxiways seen from the air, every inside corner of a junction or turn has a curved fillet (a quarter
+  curve about one tile across, tangent to both edges) and every outside corner of a turn or dead end is rounded. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
   glass cab with mullions under an overhanging roof, radar dome and a mast with a red light. Names TERMINAL and CARGO are written on the roofs; Stands show their number and Holding
-  Bays B1, B2… inside, in the corner away from the Taxiway; both have a curved yellow lead-in and a stop bar.
+  Bays B1, B2… inside, at the open side left of the lead-in line (clear of the lead-in line, stop bar and jet bridge); both have a curved yellow lead-in and a stop bar.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).

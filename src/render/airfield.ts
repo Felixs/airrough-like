@@ -196,12 +196,19 @@ function leadIn(g: Graphics, f: ReturnType<typeof spotFrame>, stopAt: number): v
   g.moveTo(...p(c - 3.5, stopAt)).lineTo(...p(c + 3.5, stopAt)).stroke({ width: 0.9, color: COLOURS.taxiLine });
 }
 
-/** Small id (a Stand number or B1, B2…) inside a spot, in the corner away from the taxilane. */
+/**
+ * Small id (a Stand number or B1, B2…) inside a spot: at the open side, in the corner left of the lead-in line, so it
+ * clears the lead-in line and stop bar (which sit on the centre line and at the back) and the jet bridge (back right).
+ */
 function spotNumber(labels: Container, f: ReturnType<typeof spotFrame>, id: string): void {
-  const num = new Text({ text: id, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 3.2, fontWeight: '700', fill: COLOURS.taxiLine } });
+  const size = 2.8;
+  const num = new Text({ text: id, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: size, fontWeight: '700', fill: COLOURS.taxiLine } });
   num.resolution = 6;
-  const [ax, ay] = f.p(2.3, 1.6);
-  const [bx, by] = f.p(2.3 + 2.2 * id.length, 1.6 + 3.6);
+  const width = 1.75 * id.length;
+  const u = Math.max(1.6, Math.min(2, f.across / 2 - 0.8 - width)); // keep clear of the lead-in line
+  const v = f.depth - 1.4 - size;
+  const [ax, ay] = f.p(u, v);
+  const [bx, by] = f.p(u + width, v + size);
   num.position.set(Math.min(ax, bx), Math.min(ay, by));
   labels.addChild(num);
 }
@@ -361,32 +368,58 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
     return { x: tx * T + l, y: ty * T + t, w: T - l - r, h: T - t - b };
   };
   const tiles = [...paved].map((k) => k.split(',').map(Number) as [number, number]);
-  for (const [tx, ty] of tiles) {
-    const p = pavedRect(tx, ty);
-    g.rect(p.x - 0.6, p.y - 0.6, p.w + 1.2, p.h + 1.2).fill(COLOURS.asphaltEdge);
-  }
-  // fillets: where a narrowed edge meets a junction, pave the corner so the inset doesn't leave a notch
-  const isPaved = (tx: number, ty: number) => paved.has(`${tx},${ty}`);
-  const fillets: Array<[number, number]> = [];
+  const isPaved = (tx: number, ty: number) => paved.has(`${tx},${ty}`) || others.has(`${tx},${ty}`);
   const I = TAXIWAY_INSET * T;
-  for (const [tx, ty] of tiles) {
-    for (const [sx, sy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
-      if (!open(tx + sx, ty + sy)) continue;
-      // the two ends of that side: along it, a paved neighbour whose own tile on that side is paved too
-      for (const e of [-1, 1]) {
-        const [ex, ey] = sx === 0 ? [e, 0] : [0, e];
-        if (!isPaved(tx + ex, ty + ey) || !isPaved(tx + ex + sx, ty + ey + sy)) continue;
-        const cx = sx === 0 ? (ex > 0 ? (tx + 1) * T - I : tx * T) : (sx > 0 ? (tx + 1) * T - I : tx * T);
-        const cy = sy === 0 ? (ey > 0 ? (ty + 1) * T - I : ty * T) : (sy > 0 ? (ty + 1) * T - I : ty * T);
-        fillets.push([cx, cy]);
-      }
-    }
-  }
-  for (const [tx, ty] of tiles) {
+  const ROUND = 4; // outer corners of turns and ends
+  const FILLET = T; // inner corners of junctions and turns
+  /**
+   * The outline of a tile's paving, clockwise: inset from open ground, with a corner square cut away where the tile
+   * sits at an inside corner (both neighbours paved, the diagonal open: the neighbours are inset there), and rounded
+   * where two open sides meet (an outside corner).
+   */
+  const outline = (tx: number, ty: number) => {
     const p = pavedRect(tx, ty);
-    g.rect(p.x, p.y, p.w, p.h).fill(COLOURS.asphalt);
+    const pts: Array<{ x: number; y: number; round?: number }> = [];
+    const add = (cx: number, cy: number, dx: -1 | 1, dy: -1 | 1) => {
+      const sideX = open(tx + dx, ty);
+      const sideY = open(tx, ty + dy);
+      if (sideX && sideY) {
+        pts.push({ x: cx, y: cy, round: Math.min(ROUND, p.w, p.h) });
+      } else if (!sideX && !sideY && open(tx + dx, ty + dy)) {
+        // a notch I × I: walking clockwise, along the side before the corner, in, then out to the next side
+        const first = dx === dy ? { x: cx, y: cy - dy * I } : { x: cx - dx * I, y: cy };
+        const second = dx === dy ? { x: cx - dx * I, y: cy } : { x: cx, y: cy - dy * I };
+        pts.push(first, { x: cx - dx * I, y: cy - dy * I }, second);
+      } else pts.push({ x: cx, y: cy });
+    };
+    add(p.x, p.y, -1, -1);
+    add(p.x + p.w, p.y, 1, -1);
+    add(p.x + p.w, p.y + p.h, 1, 1);
+    add(p.x, p.y + p.h, -1, 1);
+    return pts;
+  };
+  const trace = (pts: ReadonlyArray<{ x: number; y: number; round?: number }>) => {
+    const n = pts.length;
+    const first = pts[0]!;
+    const last = pts[n - 1]!;
+    g.moveTo((first.x + last.x) / 2, (first.y + last.y) / 2);
+    for (let i = 0; i < n; i++) {
+      const c = pts[i]!;
+      const next = pts[(i + 1) % n]!;
+      if (c.round) g.arcTo(c.x, c.y, (c.x + next.x) / 2, (c.y + next.y) / 2, c.round);
+      else g.lineTo(c.x, c.y);
+    }
+    g.closePath();
+  };
+  // a dark edge round the paving, then the paving over it
+  for (const [tx, ty] of tiles) {
+    trace(outline(tx, ty));
+    g.stroke({ width: 1.2, color: COLOURS.asphaltEdge });
   }
-  for (const [cx, cy] of fillets) g.rect(cx, cy, I, I).fill(COLOURS.asphalt);
+  for (const [tx, ty] of tiles) {
+    trace(outline(tx, ty));
+    g.fill(COLOURS.asphalt);
+  }
   for (const [tx, ty] of tiles) {
     const { x: px, y: py, w: pw, h: ph } = pavedRect(tx, ty);
     // slab tone varies a little; some slabs are patched
@@ -403,6 +436,20 @@ function drawTaxiways(g: Graphics, layout: AirportLayout): void {
     if (open(tx, ty + 1)) { g.rect(px, py + ph - shoulder, pw, shoulder).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px, py + ph - shoulder).lineTo(px + pw, py + ph - shoulder).stroke(edgeLine); }
     if (open(tx - 1, ty)) { g.rect(px, py, shoulder, ph).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + shoulder, py).lineTo(px + shoulder, py + ph).stroke(edgeLine); }
     if (open(tx + 1, ty)) { g.rect(px + pw - shoulder, py, shoulder, ph).fill({ color: 0x252c30, alpha: 0.8 }); g.moveTo(px + pw - shoulder, py).lineTo(px + pw - shoulder, py + ph).stroke(edgeLine); }
+  }
+  // fillets (over the shoulders of the edges they join): a curved apron of paving in every inside corner, tangent to both edges
+  for (const [tx, ty] of tiles) {
+    for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      if (open(tx + dx, ty) || open(tx, ty + dy) || !open(tx + dx, ty + dy)) continue;
+      if (!isPaved(tx + dx, ty) || !isPaved(tx, ty + dy)) continue;
+      // the inner corner point, where the two neighbours' inset edges meet
+      const cx = (dx > 0 ? (tx + 1) * T : tx * T) - dx * I;
+      const cy = (dy > 0 ? (ty + 1) * T : ty * T) - dy * I;
+      const ax = cx + dx * FILLET;
+      const by = cy + dy * FILLET;
+      g.moveTo(ax, cy).lineTo(cx, cy).lineTo(cx, by).quadraticCurveTo(cx, cy, ax, cy).fill(COLOURS.asphalt);
+      g.moveTo(ax, cy).quadraticCurveTo(cx, cy, cx, by).stroke({ width: 0.3, color: COLOURS.taxiLine, alpha: 0.25 });
+    }
   }
   // tyre rubber along the centre line
   for (const k of centreLine(layout)) {

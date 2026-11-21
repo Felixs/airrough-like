@@ -45,7 +45,7 @@ describe('Drawing a Taxiway', () => {
     expect(reasons(taxiwayFromDrag({ x: 21, y: 21 }, { x: 21, y: 29 }))).toContain('Crosses no Runway');
     expect(reasons(taxiwayFromDrag({ x: 44, y: 17 }, { x: 60, y: 17 }))).toContain('Inside owned land');
     expect(reasons(taxiwayFromDrag({ x: -10, y: 17 }, { x: 4, y: 17 }))).toContain('Inside owned land');
-    expect(reasons(taxiwayFromDrag({ x: 19, y: 4 }, { x: 19, y: 10 }))).toContain('Clear of buildings and Stands');
+    expect(reasons(taxiwayFromDrag({ x: 12, y: 4 }, { x: 12, y: 10 }))).toContain('Clear of buildings and Stands');
   });
 });
 
