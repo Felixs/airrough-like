@@ -74,9 +74,21 @@ Current set: `baseline`, `meta`, `upgrade-value`, `stand-prices`, `land-price`, 
 - **Taxiway Incident spiral:** queues of waiting aircraft used to roll Taxiway Incidents too (62 on one Rush Day);
   now only aircraft on the move do.
 
+### Second run (21 Nov 2026, Land now flat 20k, 30 seeds)
+
+- Flat Land alone doesn't move the planner (3%; 16k flat 7%): its money goes to **piers** first. Each new pier is a
+  whole Terminal (60k) or Cargo Hub plus ~40k of Taxiway, because the Starting Airport has room for only 3 more
+  Contact Stands. It reaches its second Runway (≈ 280k with flat Land) only in Week 3.
+- **What each item adds on its own** (planner, from 3%): Remote Stands **23%** (cheap Stands without a pier), Higher
+  fees ×3 17%, Cheaper Taxiways ×3 17%, Starting Holding Bay 13%, Better starting Radar 13%, Starting Money ×3 10%,
+  Cheaper Land ×3 10%. Support Buildings, Fire & Rescue and Tower 4–5 show nothing because the planner doesn't
+  build or use them yet (a gap in the bot, not proof they're worthless).
+- So the cost of **adding Stands** is the real wall, more than Land: Remote Stands at 300 Air Miles are by far the
+  best buy, and a first Run without them gets stuck.
+
 ## Next steps
 
-1. Make the planner a real expert: plan a second Runway from Week 1 (reserve land early), compare layouts, use
-   Emergency Actions, then re-check the targets.
-2. Decide the Land price (and whether a second Runway should be reachable by Week 2's Boss Day).
-3. Split the meta-progression experiment by Unlockable and Boost to price them.
+1. Decide how adding Stands should work on a first Run: cheaper Taxiways, Remote Stands always available (and the
+   Unlockable replaced), or more room for Contact Stands in the Starting Airport. Then re-run.
+2. Make the planner build and use Support Buildings and Fire & Rescue, so those items can be priced too.
+3. Keep improving the planner towards a real expert (layouts, timing), then check the targets again.
