@@ -234,6 +234,9 @@ export class AirportView {
         y: ((this.view.z + this.view.h / 2) / this.view.h) * cssH,
         size: (T / viewW) * cssW,
       });
+      // the tile grid fades in as tiles get big enough to aim at (faint when the whole map shows)
+      const tilePx = (T / viewW) * cssW;
+      if (this.grid) this.grid.alpha = 0.05 + 0.25 * clamp((tilePx - 8) / 16, 0, 1);
     }
   }
 
@@ -332,6 +335,7 @@ export class AirportView {
   // ---- Build Mode overlay: grid, Land Plots, no-build zones, placement ghost
 
   private overlay: Array<{ dispose(): void }> = [];
+  private grid: LinesMesh | null = null;
   private ghost: Array<{ dispose(): void }> = [];
 
   private overlayMat(name: string, hex: string, alpha: number): StandardMaterial {
@@ -372,7 +376,8 @@ export class AirportView {
     const plots: Vector3[][] = [];
     for (let x = world.x; x <= world.x + world.w; x++) ((x - world.x) % plotSize.w ? grid : plots).push([new Vector3(x * T, y, -world.y * T), new Vector3(x * T, y, -(world.y + world.h) * T)]);
     for (let r = world.y; r <= world.y + world.h; r++) ((r - world.y) % plotSize.h ? grid : plots).push([new Vector3(world.x * T, y, -r * T), new Vector3((world.x + world.w) * T, y, -r * T)]);
-    this.lines('grid', grid, '#ffffff', 0.22, this.overlay);
+    this.grid = this.lines('grid', grid, '#ffffff', 0.22, this.overlay);
+    this.applyCamera();
     this.lines('plots', plots, '#ffc845', 0.6, this.overlay);
     const dim = this.overlayMat('unowned', '#000000', 0.55);
     for (const p of unowned) {
@@ -395,17 +400,21 @@ export class AirportView {
 
   private label(text: string, r: TileRect): Mesh {
     const tex = canvasTexture(this.scene, 'plot-label', 512, 64, (g) => {
-      g.fillStyle = '#c6d6d0';
-      g.font = '700 30px "JetBrains Mono", monospace';
+      g.fillStyle = 'rgba(11,18,16,0.75)';
+      g.fillRect(0, 0, 512, 64);
+      g.fillStyle = '#d6e2dd';
+      g.font = '700 32px "JetBrains Mono", monospace';
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(text, 256, 32);
+      g.fillText(text, 256, 34);
     }, { clamp: true, alpha: true });
     const mat = new StandardMaterial('plot-label', this.scene);
     mat.disableLighting = true;
+    mat.diffuseTexture = tex;
     mat.emissiveTexture = tex;
-    mat.opacityTexture = tex;
-    const w = Math.min(r.w * T * 0.8, 60);
+    mat.useAlphaFromDiffuseTexture = true;
+    mat.backFaceCulling = false;
+    const w = Math.min(r.w * T * 0.8, 64);
     const m = MeshBuilder.CreateGround('plot-label', { width: w, height: w / 8 }, this.scene);
     m.position.set((r.x + r.w / 2) * T, 1.4, -(r.y + r.h / 2) * T);
     m.material = mat;

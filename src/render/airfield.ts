@@ -410,7 +410,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
         unit.material = metal;
         ctx.caster(unit);
       }
-      if (s.w >= 5) decal(scene, s.kind === 'terminal' ? 'TERMINAL' : 'CARGO', b.cx, -b.cz, Math.min(b.w * 0.6, 30), 4, h + 0.62, '#e8eef0', null);
+      if (s.w >= 5) decal(scene, s.kind === 'terminal' ? 'TERMINAL' : 'CARGO', b.cx, -b.cz + b.d * 0.22, Math.min(b.w * 0.6, 30), 4, h + 0.62, '#1f262a', null);
     } else if (s.kind === 'atcTower') {
       tower(scene, b, { concrete: concreteWall, metal, dark, glass: towerGlass(scene, litGlass) }).forEach(ctx.caster);
       decal(scene, 'TWR', b.cx, -(b.z0) + 3, 8, 3, Y.apron, '#cfd8d4', null);
