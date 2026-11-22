@@ -62,6 +62,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     return m;
   };
   const yellow = paint('paint-yellow', '#e7b928');
+  const bridgeMat = pbr(scene, 'jet-bridge', '#c9ccd0', 0.4, 0.3);
   const red = paint('paint-red', '#c0392b');
 
   // ---- grass, trees, fence
@@ -333,16 +334,16 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
         tunnel.scaling.set(1, 1, lenB / 1.6);
         tunnel.position.set((ax + bx) / 2, 2.6, (az + bz) / 2);
         tunnel.rotation.y = Math.atan2(bx - ax, bz - az);
-        tunnel.material = bridgeMat(scene);
+        tunnel.material = bridgeMat;
         ctx.caster(tunnel);
         const [cx2, cz2] = f.p(c + 3.1, 4.8);
         const cab = MeshBuilder.CreateBox('jet-bridge-cab', { width: 2.2, height: 1.8, depth: 2.2 }, scene);
         cab.position.set(cx2, 2.6, cz2);
-        cab.material = bridgeMat(scene);
+        cab.material = bridgeMat;
         ctx.caster(cab);
         const legPost = MeshBuilder.CreateCylinder('jet-bridge-leg', { height: 2.2, diameter: 0.35 }, scene);
         legPost.position.set((ax + 3 * bx) / 4, 1.1, (az + 3 * bz) / 4);
-        legPost.material = bridgeMat(scene);
+        legPost.material = bridgeMat;
       }
     } else {
       const corners = [f.p(1, 1), f.p(f.across - 1, 1), f.p(f.across - 1, f.depth - 1), f.p(1, f.depth - 1)];
@@ -680,12 +681,6 @@ function fireStationMaterial(scene: Scene): PBRMaterial {
     }
   });
   return m;
-}
-
-let bridge: { scene: Scene; mat: PBRMaterial } | null = null;
-function bridgeMat(scene: Scene): PBRMaterial {
-  if (!bridge || bridge.scene !== scene || bridge.mat.isDisposed()) bridge = { scene, mat: pbr(scene, 'jet-bridge', '#c9ccd0', 0.4, 0.3) };
-  return bridge.mat;
 }
 
 /** The ATC Tower: base building, tapered concrete shaft, catwalk, glass cab, roof and antennas. */
