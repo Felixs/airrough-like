@@ -12,7 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "pixi.js": "^8.10.0"
+    "@babylonjs/core": ">=8.0.0 <10.0.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

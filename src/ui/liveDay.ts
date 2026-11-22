@@ -34,7 +34,7 @@ const ACTION_LABEL: Record<ActionId, [string, string]> = {
 };
 const BUILDING: Record<string, string> = ROLE_NAME;
 
-/** The Live Day screen panels around the map (ATC Console layout). The map itself is drawn by PixiJS. */
+/** The Live Day screen panels around the map (ATC Console layout). The map itself is drawn in 3D by Babylon.js (src/render/view.ts). */
 export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): LiveDayView {
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
   let selected: string | undefined;

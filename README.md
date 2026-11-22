@@ -28,7 +28,7 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 The screenshots are taken automatically from the real game by the [Screenshots workflow](.github/workflows/screenshots.yml) whenever the UI changes (`scripts/screenshots.mjs`).
 
 - Domain language: [`CONTEXT.md`](CONTEXT.md)
-- Decisions: [`docs/adr/`](docs/adr). PixiJS draws the game; all game logic lives in a pure TypeScript simulation.
+- Decisions: [`docs/adr/`](docs/adr). Babylon.js draws the airport in 3D; all game logic lives in a pure TypeScript simulation.
 - Design notes and prototype findings: [`docs/`](docs)
 - Work is tracked as GitHub issues labelled `ready-for-agent`
 
@@ -45,7 +45,7 @@ npm run build      # production build into dist/
 ## Layout
 
 - `src/sim/`: the simulation. No rendering or DOM imports; fixed 15-second steps; unit-tested.
-- `src/render/`: PixiJS views that draw the simulation's state.
+- `src/render/`: the Babylon.js 3D view (airfield, aircraft models, camera, lighting) that draws the simulation's state.
 - `src/ui/`: DOM panels (top bar etc.).
 
 ## Deploy and release

@@ -1,8 +1,7 @@
-import { Application, Graphics } from 'pixi.js';
 import './style.css';
-import { drawAirfield, fitToScreen } from './render/airfield';
-import { FlightLayer } from './render/flights';
-import { advance, daylight, formatClock, isDayOver, REAL_TIME, stepFraction, type Speed } from './sim/clock';
+import { airportBounds } from './render/bounds';
+import { AirportView } from './render/view';
+import { advance, formatClock, isDayOver, REAL_TIME, stepFraction, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
 import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
 import { acknowledgeAlert, daySettled, resolveFuel, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
@@ -18,7 +17,6 @@ import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
 import { showNotice } from './ui/resume';
 import { BUILD, copyText } from './ui/seed';
-import { TILE_SIZE, WORLD } from './sim/layout';
 
 // `?seed=123` makes every New Run use that seed (used for README screenshots and bug reports).
 const fixedSeed = Number(new URLSearchParams(location.search).get('seed'));
@@ -27,9 +25,8 @@ const newSeed = () => (Number.isFinite(fixedSeed) && fixedSeed > 0 ? fixedSeed :
 async function start(): Promise<void> {
   const appEl = document.querySelector<HTMLElement>('#app')!;
   const mapEl = document.querySelector<HTMLElement>('#map')!;
-  const app = new Application();
-  await app.init({ resizeTo: mapEl, background: '#0b1210', antialias: true, autoDensity: true, resolution: window.devicePixelRatio });
-  mapEl.appendChild(app.canvas);
+  // the airfield in 3D (Babylon.js): a fixed top-down view of the whole airport
+  const view = new AirportView(mapEl, 'live');
 
   const store = browserStore();
   let meta = loadMeta(store);
@@ -48,32 +45,12 @@ async function start(): Promise<void> {
   let quota = dayPlan(run).quota;
   let ended = true; // the Run opens in Plan Mode
 
-  const flightLayer = new FlightLayer();
-  // Daylight: a tint over the map (and the aircraft) that follows the Live Day's clock.
-  const light = new Graphics();
-  light.rect(WORLD.x0 * TILE_SIZE, WORLD.y0 * TILE_SIZE, WORLD.width * TILE_SIZE, WORLD.height * TILE_SIZE).fill(0xffffff);
-  light.eventMode = 'none';
-  const showDaylight = (minute: number | null): number => {
-    const { darkness, warmth } = minute === null ? { darkness: 0, warmth: 0 } : daylight(minute);
-    const mix = (a: number, b: number) => Math.round(a + (b - a) * warmth);
-    light.tint = (mix(0x04, 0x3a) << 16) | (mix(0x0a, 0x1c) << 8) | mix(0x1e, 0x08);
-    light.alpha = darkness;
-    return darkness;
-  };
-  let airfield = drawAirfield(run.layout);
-  const fit = () => fitToScreen(airfield, run.layout, app.screen.width, app.screen.height);
+  /** Shows the Run's layout (rebuilt only when it changed), framed to the whole airport. */
   const mountAirfield = () => {
-    airfield.removeChild(flightLayer.container, light, flightLayer.lights);
-    airfield.destroy({ children: true });
-    airfield = drawAirfield(run.layout);
-    airfield.addChild(flightLayer.container, light, flightLayer.lights);
-    app.stage.addChild(airfield);
-    fit();
+    view.setLayout(run.layout);
+    view.fit(airportBounds(run.layout));
   };
-  airfield.addChild(flightLayer.container, light, flightLayer.lights);
-  app.stage.addChild(airfield);
-  fit();
-  app.renderer.on('resize', fit);
+  mountAirfield();
 
   let speed: Speed = 1;
   let lastRunning: Speed = 1; // what Space resumes to
@@ -266,12 +243,16 @@ async function start(): Promise<void> {
     lastBackground = now;
     if (document.hidden && options.runInBackground) play(Math.min(elapsed, 5_000));
   }, 1_000);
-  app.ticker.add((ticker) => {
+  let frames = 0;
+  view.onFrame((ms) => {
     lastBackground = performance.now();
-    play(ticker.deltaMS);
-    flightLayer.calm = calmLights;
-    flightLayer.highlight = liveDay.highlighted();
-    flightLayer.update(sim.flights, showDaylight(ended ? null : sim.clock.minute), performance.now(), sim.clock.minute, stepFraction(sim.clock));
+    play(Math.min(ms, 100));
+    view.aircraft.calm = calmLights;
+    view.aircraft.highlight = liveDay.highlighted();
+    const darkness = view.setTime(ended ? null : sim.clock.minute);
+    view.aircraft.update(sim.flights, darkness, performance.now(), sim.clock.minute, stepFraction(sim.clock), view.cabinLight());
+    // between Days, build the aircraft models a Day may need, one at a time, so none stutters on first sight
+    if (ended && ++frames % 20 === 0) view.aircraft.prewarmStep();
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
     if (!ended && isDayOver(sim.clock)) {

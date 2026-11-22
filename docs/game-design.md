@@ -76,6 +76,9 @@ Screen, which turns Score into Air Miles for the meta-progression.
 - **Runway end zones:** nothing (Taxiways included) may be built in the 4 tiles past each end of a Runway, across
   its full width (`layout.ts → RUNWAY_END_CLEAR_TILES`); a new or lengthened Runway also needs its own end zones
   clear. The zones may reach into land not bought yet. Build Mode shows them as red hatching.
+- **Zoom and pan in Build Mode:** the wheel or a pinch zooms toward the cursor (from the whole map down to about 12
+  tiles across); the right or middle mouse button, Shift-drag or two fingers move the map; the left button (or one
+  finger) builds.
 - Build Mode: placements are checked (owned land, no overlap, Taxiway access, attachment, Runway end zones) and priced before they are
   confirmed; Demolish refunds what building the same thing again would cost (so removing and rebuilding is free); Move keeps a structure and re-checks it at the new place.
   Changes are pending until confirmed. Leaving Build Mode (switching to Overview or pressing Start Day) with pending
@@ -240,40 +243,59 @@ cooldown (`simulation.ts → ACTIONS`).
 
 ## Presentation
 
-- **View:** top-down, oblique 3D buildings with shadows to the south-east, dark muted palette, yellow Taxiway markings,
-  blue Taxiway edge lights. Taxiways are paved like the Runway: a darker outer edge, concrete slabs with joints and
-  weathered patches, darker tyre rubber along the centre line, and lighter shoulders with a faint edge line on sides
-  facing open ground. A Taxiway is 3 tiles wide for aircraft, but along a side facing open ground its paving (and its
-  blue edge lights) are drawn half a tile in, so a plain Taxiway looks 2 tiles wide, half a Runway; where it meets a
-  Stand, Holding Bay, Runway or another Taxiway it is paved right up to it. Hold-short lines span the drawn paving.
-  Like real taxiways seen from the air, every inside corner of a junction or turn has a curved fillet (a quarter
-  curve about one tile across, tangent to both edges) and every outside corner of a turn or dead end is rounded. The ATC Tower stands up in the same oblique 3D: base building, tapered two-tone shaft, catwalk,
-  glass cab with mullions under an overhanging roof, radar dome and a mast with a red light. Names TERMINAL and CARGO are written on the roofs; Stands show their number and Holding
-  Bays B1, B2… inside, at the open side left of the lead-in line (clear of the lead-in line, stop bar and jet bridge); both have a curved yellow lead-in and a stop bar.
+- **View:** the airfield in realistic 3D (ADR 0003), seen from a fixed camera above it with no perspective
+  (orthographic), so tiles stay square and sizes compare at a glance. A Live Day shows the whole airport (its
+  structures plus a 3-tile margin), tilted slightly so building walls and the tower show; Build Mode looks straight down
+  at the whole map and can zoom and pan (Controls). The camera never rotates. Scale: a tile is 16 m, so Medium
+  aircraft fit their 3-tile Stands at real size.
+- **Lighting:** physically based materials (painted metal with a clear coat, glass, concrete, grass), a sun that moves
+  from east to west through the Day and casts real shadows, sky reflections on paint and glass, tone mapping and a
+  soft glow round lights.
+- **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
+  side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
+  for the landing pilot. Taxiways are one paved surface with slab joints; a Taxiway is 3 tiles wide for aircraft, but
+  along a side facing open ground its paving (and its blue edge lights) are drawn half a tile in, so a plain Taxiway
+  looks 2 tiles wide, half a Runway; where it meets a Stand, Holding Bay, Runway or another Taxiway it is paved right up
+  to it, and every inside corner of a junction or turn has a curved fillet about one tile across. Yellow centre lines
+  join with curved corners and curved lead-offs at T-junctions and stop at the hold-short lines (two solid and two dashed
+  yellow lines across the drawn paving, with a red sign such as "09-27" beside them).
+- **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
+  their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
+  yellow one. Contact Stands at a Terminal get a jet bridge from the building.
+- **Buildings** stand up in 3D: Terminals with glass curtain walls (lit from inside at night) and TERMINAL on the roof,
+  Cargo Hubs with ribbed metal walls and CARGO on the roof, the ATC Tower (base building, tapered concrete shaft,
+  catwalk, glass cab, roof, mast and dome, TWR on the ground beside it), the Fire & Rescue Station with red bay doors and
+  two fire trucks, fuel tanks for the Fuel Farm, a painted De-icing Pad, and plain buildings for the other Support
+  Buildings, each with its name beside it.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
 - **Runway lights follow the surface:** none on Grass and Asphalt; white edge and green threshold lights when Lit;
   approach lights added with ILS.
-- **Day and night:** during the Live Day a tint follows the clock (`clock.ts → daylight`): dark until 05:30, a warm
-  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00.
-- **Aircraft** (`render/flights.ts`): each type has its own top-down silhouette, sized by its length (Caravan 8,
-  Q400 11, A320 12.5, B737 13.5, A350 17, B777 18.5, B747 19 world units; a tile is 8):
-  - Caravan: straight high wing, single nose propeller. Q400: straight high wing, two propellers, T-tail.
-  - A320: rounded nose, livery-painted sharklets. B737: pointed nose, split-scimitar winglets, engines further inboard.
-  - A350: curled wingtips and the dark cockpit "mask". B777: raked wingtips, very large engines, blade tail cone.
-  - B747-8F: upper-deck hump, four engines.
-  - Passenger aircraft show window lines; freighters have none. The tail colour is the livery.
-- **Aircraft lights** glow above the night tint and fade in as it gets dark: red (left) and green (right) wingtip
-  navigation lights and a white tail light whenever not parked on a Stand; a flashing red beacon while moving; white
-  strobes double-flashing and a landing-light beam on the Runway; a short taxi-light beam while taxiing.
+- **Day and night:** during the Live Day the light follows the clock (`clock.ts → daylight`): dark until 05:30, a warm
+  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. At night the sun gives
+  way to dim blue moonlight, and lights, lit windows and glass glow. Plan Mode and Build Mode are in daylight.
+- **Aircraft** (`render/aircraftModels.ts`) are 3D models built from each type's real dimensions, with a painted
+  livery: Caravan (high wing, nose propeller; the freighter with a belly pod), Q400 (high wing, two propellers,
+  T-tail), A320 (rounded nose, sharklets), B737 (pointed nose, split-scimitar winglets), A350 (curled wingtips, dark
+  cockpit mask), B777 (raked wingtips, very large engines, blade tail cone), B747-8F (upper-deck hump, four engines).
+  Passenger aircraft have rows of cabin windows that light up at night; freighters have none. Liveries are five
+  made-up airlines (one of two per passenger type, by the flight's airline; freighters all fly the cargo one), with
+  titles, a tail emblem and coloured winglets. Large aircraft are drawn at about 60% of their real size so they fit
+  their 4-tile Stands. The gear is down below a third of the climb.
+- **Aircraft lights:** red (left) and green (right) wingtip navigation lights and a white tail light at night whenever
+  not parked; a flashing red beacon while moving; white strobes double-flashing on the Runway; a landing-light beam
+  at night on the Runway and in the air.
 - Aircraft in Holding are not drawn; they appear only in the flight strips.
-- **Landings and takeoffs in 3D:** a landing comes in from 60 world units before the threshold, descending steadily
+- **Landings and takeoffs:** a landing comes in from 60 world units before the threshold, descending steadily
   to touchdown 2 tiles past it (the first eighth or so of the landing time), then brakes evenly to its exit. A takeoff
   accelerates from its hold point, lifts off after 80% of its takeoff run and climbs until it leaves 60 units past the
-  Runway end. Height shows as the aircraft drawn up to 45% larger (nearer the camera) while its shadow stays at true
-  size on the ground, falls up to 22 units further to the south-east and fades to 40%; airborne aircraft are drawn
-  above those on the ground. A Rejected Takeoff speeds up and brakes smoothly to its exit without lifting off.
+  Runway end. The aircraft really rises (up to 45 world units at the edge of the airfield), nose up when climbing,
+  with its shadow on the ground below. A Rejected Takeoff speeds up and brakes smoothly to its exit without lifting off.
+  Between the simulation's 15-second steps aircraft glide from where they were to where they are.
+- **Quality:** the view starts at High (sharp on high-density screens, detailed shadows, edge smoothing, glow) and
+  steps down by itself to Medium (normal resolution, coarser shadows, no glow) and then Low (lower resolution, no
+  shadows) when frames stay below 45 per second for two seconds.
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day
@@ -286,14 +308,14 @@ cooldown (`simulation.ts → ACTIONS`).
 
 - **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
   answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
-  confirms, Ctrl Z undoes, Esc frees the cursor. Buttons name their keys; the Main Menu lists them.
+  confirms, Ctrl Z undoes, Esc frees the cursor; the arrow keys move the map, + and − zoom, F shows the whole map. Buttons name their keys; the Main Menu lists them.
 - **Options while playing:** a ⚙ Options button in the Plan Mode header and the Live Day top bar (key O) opens the
   same Options as the Main Menu (speed, pop-ups, music, background running, reduce motion) as a dialog; a running Day
   pauses while it is open and resumes at its speed when it closes (Esc, Close or a click outside). Reset progress
   stays in the Main Menu.
 - **Finding an aircraft:** clicking a flight strip (Inbound, Holding or Ground) or an alert about an aircraft picks
   it: its strip is outlined in yellow (the rail opens and scrolls to it) and on the map it gets a gently pulsing yellow
-  ring with a pointer above it (steady with Reduce motion). Clicking it again drops it; it is dropped by itself when
+  ring round it (steady with Reduce motion). Clicking it again drops it; it is dropped by itself when
   the aircraft leaves. Picking a Holding aircraft also makes it the target of Manual Divert and Priority Landing.
   Enter or Space on a focused strip or alert does the same.
 - **Never colour alone:** Stands and Holding Bays in the side panel say their state in words and a symbol (○ free,
