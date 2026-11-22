@@ -236,7 +236,7 @@ export class AirportView {
       });
       // the tile grid fades in as tiles get big enough to aim at (faint when the whole map shows)
       const tilePx = (T / viewW) * cssW;
-      if (this.grid) this.grid.alpha = 0.05 + 0.25 * clamp((tilePx - 8) / 16, 0, 1);
+      if (this.grid) this.grid.color = Color3.Lerp(new Color3(0.3, 0.42, 0.2), new Color3(0.85, 0.9, 0.85), 0.15 + 0.6 * clamp((tilePx - 8) / 16, 0, 1));
     }
   }
 
@@ -376,7 +376,7 @@ export class AirportView {
     const plots: Vector3[][] = [];
     for (let x = world.x; x <= world.x + world.w; x++) ((x - world.x) % plotSize.w ? grid : plots).push([new Vector3(x * T, y, -world.y * T), new Vector3(x * T, y, -(world.y + world.h) * T)]);
     for (let r = world.y; r <= world.y + world.h; r++) ((r - world.y) % plotSize.h ? grid : plots).push([new Vector3(world.x * T, y, -r * T), new Vector3((world.x + world.w) * T, y, -r * T)]);
-    this.grid = this.lines('grid', grid, '#ffffff', 0.22, this.overlay);
+    this.grid = this.lines('grid', grid, '#ffffff', 1, this.overlay);
     this.applyCamera();
     this.lines('plots', plots, '#ffc845', 0.6, this.overlay);
     const dim = this.overlayMat('unowned', '#000000', 0.55);
@@ -400,13 +400,13 @@ export class AirportView {
 
   private label(text: string, r: TileRect): Mesh {
     const tex = canvasTexture(this.scene, 'plot-label', 512, 64, (g) => {
-      g.fillStyle = 'rgba(11,18,16,0.75)';
+      g.fillStyle = 'rgba(11,18,16,0.6)';
       g.fillRect(0, 0, 512, 64);
-      g.fillStyle = '#d6e2dd';
-      g.font = '700 32px "JetBrains Mono", monospace';
+      g.fillStyle = '#e6efeb';
+      g.font = '700 44px "JetBrains Mono", monospace';
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(text, 256, 34);
+      g.fillText(text, 256, 34, 500);
     }, { clamp: true, alpha: true });
     const mat = new StandardMaterial('plot-label', this.scene);
     mat.disableLighting = true;
@@ -414,7 +414,7 @@ export class AirportView {
     mat.emissiveTexture = tex;
     mat.useAlphaFromDiffuseTexture = true;
     mat.backFaceCulling = false;
-    const w = Math.min(r.w * T * 0.8, 64);
+    const w = r.w * T * 0.9;
     const m = MeshBuilder.CreateGround('plot-label', { width: w, height: w / 8 }, this.scene);
     m.position.set((r.x + r.w / 2) * T, 1.4, -(r.y + r.h / 2) * T);
     m.material = mat;
