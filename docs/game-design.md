@@ -267,24 +267,41 @@ cooldown (`simulation.ts → ACTIONS`).
   yellow lines across the drawn paving, with a red sign such as "09-27" beside them).
 - **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
   their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
-  yellow one. Contact Stands at a Terminal get a jet bridge: a rotunda by the building on the left of a parked aircraft,
-  a tunnel on a wheeled leg and a cab. At rest it points out along the Stand, angled away from it; once a Medium or
-  Large aircraft has stopped on the Stand it swings out until the cab meets the aircraft's front left door, and swings
-  back when the aircraft leaves (Small aircraft use stairs: the bridge stays at rest). While an aircraft is on its Stand, ground vehicles stand round it: a pushback tug at
-  the nose, belt loaders with a baggage tug and two to four container carts at its holds, often ground power, and for
-  Medium and Large aircraft often a fuel truck under the wing and a catering truck at the rear door.
+  yellow one. Contact Stands at a Terminal get a jet bridge (light grey): a round rotunda on a column by the building,
+  on the left of a parked aircraft, with a dark roof, a window band and a steel service stair down to the apron along
+  the building; from it two telescoping tunnel sections, each with a window strip (the outer one, towards the
+  aircraft, a little larger and sliding over the inner one, so the step between them shows), a drive bogie (two legs
+  down to a beam on four wheels) under the outer section, dark ribbed bellows and a cab with a window band and a dark
+  canopy. At rest it points out along the Stand, angled away from it; once a Medium or Large aircraft has stopped on
+  the Stand it swings out until the canopy meets the aircraft's front left door, the sections lengthening or
+  shortening to reach it, and swings back when the aircraft leaves (Small aircraft use stairs: the bridge stays at
+  rest). The windows glow warm at night. While an aircraft is on its Stand, ground vehicles stand round it, at real
+  size even when the aircraft is drawn smaller: a yellow towbar pushback tractor at the nose (long and low, cab at the
+  far end, towbar to the nose gear); per hold a white belt loader (cab beside the low end of a conveyor with yellow
+  rails rising towards the aircraft on struts), a yellow baggage tractor (bonnet, open cab with roof) and two to four
+  grey carts each carrying an aluminium container with a cut corner and a dark net door; often a white ground power
+  trailer with louvres; and for Medium and Large aircraft often a fuel truck under the wing (white cab, aluminium tank
+  with ribs and a rail, hose cabinet at the back) and a catering truck at the rear door (white cab, a white box with an
+  orange band raised on a scissor lift, a railed platform in front). Every vehicle has a window band round its cab,
+  dark tyres with grey hubs, and an orange beacon on the cab roof.
 - **Buildings** stand up in 3D at real size (inspired by Berlin Brandenburg Terminal 1, Frankfurt's cargo centres and
   the German standard control tower). Each is turned so its airside faces its Stands or Holding Bays (else a Taxiway,
   else south) and stays inside its footprint, apart from the Terminal's roof edge reaching 2 m over the airside.
   At night glass glows warm from inside and lamps light up.
+  Building names are clean sans-serif capitals with open letter spacing (not the UI's monospace font, which Stand
+  numbers keep): painted on the roof of a Terminal or Cargo Hub (dark grey, between two skylight bands, readable from
+  above) and on the ground in front of the Tower and Support Buildings (pale), always running along the building and
+  never upside down from the south (bottom to top on buildings facing east or west). Terminals and Cargo Hubs also
+  carry a name sign on their airside roof edge: white capitals on a dark plate, lit at night.
   - **Terminal** ("Deck"): gate lounges behind glass at apron level, a light stone floor band, a hall about 20 m tall
     glazed with horizontal bars, stone end walls with tall slot windows, and one flat roof deck over everything on
     slender steel columns (a row along the airside and one along the landside, where the deck shelters a drop-off
     kerb). On the roof: three skylight bands (glowing at night), roof plant and TERMINAL; downlights in the deck's
-    underside. Wings look the same and join it seamlessly.
+    underside; a TERMINAL sign on short posts along the airside roof edge. Wings look the same and join it seamlessly.
   - **Cargo Hub:** a 15 m hall in silver ribbed cladding with a teal band, a dark 30 m high-bay warehouse at the back
     of long hubs, a three-storey glass office head at one end, roller doors on the airside (open ones lit orange at
-    night) with yellow lintels and bollards under a canopy with sodium lights, skylights, roof plant and CARGO.
+    night) with yellow lintels and bollards under a canopy with sodium lights, skylights, roof plant and CARGO, and a
+    CARGO sign on the airside roof edge.
   - **ATC Tower:** a white two-storey base with ribbon windows, a slim round white shaft with a lit stair slit, flared
     equipment floors with a lit window band, a 12-sided cab of outward-sloping green-tinted glass (a faint green glow
     at night), a roof disc with antennas and a radar dome, red obstruction lights, and TWR on the ground.

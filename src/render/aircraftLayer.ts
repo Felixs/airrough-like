@@ -1,9 +1,10 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3, type InstancedMesh, type Mesh, type Scene } from '@babylonjs/core';
 import type { AircraftTypeId } from '../sim/aircraft';
 import type { Flight } from '../sim/simulation';
-import { aircraftMaterials, buildMaster, CARGO_LIVERY, frontDoor, MODELS, pbr, type AircraftMaterials, type Master } from './aircraftModels';
+import { aircraftMaterials, buildMaster, CARGO_LIVERY, frontDoor, MODELS, type AircraftMaterials, type Master } from './aircraftModels';
 import type { JetBridge } from './airfield';
 import { METRE, mapPoint } from './units';
+import { vehicleMasters, type VehicleKind } from './vehicles';
 
 /**
  * How much an aircraft is drawn at, so it fits the Stands of its size class (1 tile = 16 m): a Stand is 3 tiles deep
@@ -16,19 +17,6 @@ export function drawScale(type: AircraftTypeId): number {
   const give = m.size === 'large' ? 1.2 : 1;
   return Math.min(1, (3 * 16 * 0.95 * give) / m.L, (width * give) / m.span);
 }
-
-type VehicleMat = 'yellow' | 'white' | 'red' | 'grey' | 'uld' | 'dark' | 'glass';
-type VehicleKind = 'tug' | 'cart' | 'belt' | 'fuel' | 'cater' | 'push' | 'gpu';
-/** Ground vehicles as boxes: width (along the vehicle), height, depth, position, paint and an optional tilt (metres). */
-const VEHICLES: Record<VehicleKind, ReadonlyArray<readonly [number, number, number, number, number, number, VehicleMat, number?]>> = {
-  tug: [[2.8, 1.0, 1.7, 0, 0.75, 0, 'yellow'], [1.1, 0.9, 1.5, -0.6, 1.7, 0, 'glass'], [0.7, 0.55, 1.9, 0.9, 0.35, 0, 'dark'], [0.7, 0.55, 1.9, -0.9, 0.35, 0, 'dark']],
-  cart: [[3.0, 0.3, 1.6, 0, 0.55, 0, 'grey'], [2.6, 1.6, 1.5, 0, 1.5, 0, 'uld'], [0.6, 0.45, 1.7, 1, 0.25, 0, 'dark'], [0.6, 0.45, 1.7, -1, 0.25, 0, 'dark']],
-  belt: [[6.5, 0.9, 2.0, 0, 0.8, 0, 'white'], [8, 0.25, 0.9, 0.6, 2.3, 0, 'dark', 0.32], [1.4, 1.2, 1.7, -2.4, 1.8, 0, 'glass'], [0.8, 0.6, 2.1, 2, 0.3, 0, 'dark'], [0.8, 0.6, 2.1, -2, 0.3, 0, 'dark']],
-  fuel: [[2.6, 2.4, 2.5, 4.4, 1.7, 0, 'red'], [1.2, 0.9, 2.4, 4.9, 2.2, 0, 'glass'], [8, 2.4, 2.4, -1, 2.0, 0, 'white'], [12, 0.7, 2.4, 0, 0.6, 0, 'dark']],
-  cater: [[2.4, 2.4, 2.4, 3.4, 1.6, 0, 'white'], [1.0, 0.9, 2.3, 4.0, 2.1, 0, 'glass'], [6.5, 2.8, 2.5, -1, 4.2, 0, 'white'], [7, 0.8, 2.4, 0, 0.7, 0, 'dark'], [4, 2.2, 2.2, -1, 2.1, 0, 'grey']],
-  push: [[6, 1.3, 3.0, 0, 0.9, 0, 'yellow'], [1.3, 1.0, 1.6, -2.2, 2.0, 0, 'glass'], [6.2, 0.6, 3.1, 0, 0.35, 0, 'dark']],
-  gpu: [[2.2, 1.4, 1.4, 0, 1.0, 0, 'white'], [2.2, 0.4, 1.4, 0, 0.2, 0, 'dark']],
-};
 
 /** Highest point of a landing or takeoff on the map, in world units (altitude 1). */
 const CLIMB = 45;
@@ -130,7 +118,7 @@ export class AircraftLayer {
   private readonly visuals = new Map<string, Visual>();
   private readonly free = new Map<string, Visual[]>();
   private readonly ring: Mesh;
-  private readonly vehicleParts: Record<VehicleMat, Mesh>;
+  private readonly vehicles: Record<VehicleKind, Mesh[]>;
   private minute = -1;
   /** The airfield's jet bridges by Stand id; parked jets dock them. */
   bridges: ReadonlyMap<string, JetBridge> = new Map();
@@ -184,18 +172,7 @@ export class AircraftLayer {
     this.ring.isPickable = false;
     this.ring.setEnabled(false);
     glow(this.ring);
-    const paint = (name: string, hex: string, rough = 0.45, metal = 0) => {
-      const box = MeshBuilder.CreateBox(`vehicle-${name}`, { size: 1 }, scene);
-      box.material = pbr(scene, `vehicle-${name}`, hex, rough, metal, rough < 0.5);
-      box.isVisible = false;
-      box.isPickable = false;
-      caster(box);
-      return box;
-    };
-    this.vehicleParts = {
-      yellow: paint('yellow', '#f2b705'), white: paint('white', '#f1f2f3'), red: paint('red', '#c62828'), grey: paint('grey', '#8b9199', 0.5, 0.3),
-      uld: paint('uld', '#c4c8cc', 0.3, 0.75), dark: paint('dark', '#1a1c20', 0.7), glass: paint('glass', '#10161e', 0.08, 0.1),
-    };
+    this.vehicles = vehicleMasters(scene, caster);
   }
 
   /** Pushback tug, ground power, belt loaders with baggage trains, a fuel truck and a catering truck round an aircraft. */
@@ -211,13 +188,7 @@ export class AircraftLayer {
       v.parent = service;
       v.position.set(x, 0, z);
       v.rotation.y = yaw;
-      for (const [w, h, d, px, py, pz, mat, pitch] of VEHICLES[kind]) {
-        const part = this.vehicleParts[mat].createInstance('part');
-        part.parent = v;
-        part.scaling.set(w, h, d);
-        part.position.set(px, py, pz);
-        if (pitch) part.rotation.z = pitch;
-      }
+      for (const master of this.vehicles[kind]) master.createInstance(kind).parent = v;
     };
     const r = (k: number) => ((seed * 9301 + k * 49297) % 233280) / 233280;
     put('push', nose + 5.5, 0, Math.PI);

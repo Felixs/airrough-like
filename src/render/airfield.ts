@@ -3,12 +3,13 @@
  * Stands and Holding Bays with markings and numbers; Terminals, Cargo Hubs, the ATC Tower and Support Buildings.
  * Everything is built in code from the tile rectangles (1 tile = 16 m).
  */
-import { Color3, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, Vector3, type Scene, type Texture } from '@babylonjs/core';
+import { Color3, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, TransformNode, Vector3, type Scene, type Texture } from '@babylonjs/core';
 import { runwayNames, sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type RunwayName, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, TAXIWAY_INSET, taxiwayEdgeLights } from '../sim/markings';
 import { pbr } from './aircraftModels';
 import { buildCargoHub, buildSupport, buildTerminal, buildTower, type BuildingKit } from './buildings';
 import { groundLines, meshFrom, orient, thinInstances, type Place } from './geometry';
+import { paintName } from './lettering';
 import { centreLinePaths } from './taxiLines';
 import { blots, canvasTexture, rng, speckle } from './textures';
 
@@ -81,6 +82,13 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   const bridgeMat = pbr(scene, 'jet-bridge', '#c9ccd0', 0.4, 0.3);
   const metalMat = pbr(scene, 'bridge-metal', '#b9bec5', 0.32, 0.8);
   const darkMat = pbr(scene, 'bridge-dark', '#1a1c20', 0.65);
+  const bridgeGlass = pbr(scene, 'bridge-glass', '#1d2a36', 0.08, 0.4);
+  bridgeGlass.emissiveTexture = canvasTexture(scene, 'bridge-glass-lit', 4, 4, (g, W, H) => {
+    g.fillStyle = '#b89a70';
+    g.fillRect(0, 0, W, H);
+  });
+  bridgeGlass.emissiveColor = Color3.Black();
+  litGlass.push(bridgeGlass);
   const red = paint('paint-red', '#c0392b');
 
   // ---- grass, trees, fence
@@ -356,7 +364,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       dash(ou, ov, ou, ov + oh);
       // jet bridge from the Terminal to Contact Stands
       if (s.placement === 'contact' && layout.structures.some((o) => o.kind === 'terminal' && sharesEdge(o, s))) {
-        bridges.set(s.id, jetBridge(scene, s, ctx.caster, { bridge: bridgeMat, metal: metalMat, dark: darkMat }));
+        bridges.set(s.id, jetBridge(scene, s, ctx.caster, { bridge: bridgeMat, metal: metalMat, dark: darkMat, glass: bridgeGlass }));
       }
     } else {
       const corners = [f.p(1, 1), f.p(f.across - 1, 1), f.p(f.across - 1, f.depth - 1), f.p(1, f.depth - 1)];
@@ -383,7 +391,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     litGlass,
     lamp: lightMat,
     floods,
-    label: (text, x, y, w, h, height, colour) => void decal(scene, text, x, y, w, h, height, colour, null),
+    label: (text, x, y, w, h, height, colour, yaw) => void decal(scene, text, x, y, w, h, height, colour, null, true, yaw),
   };
   const metal = pbr(scene, 'metal', '#b9bec5', 0.32, 0.8);
   for (const s of layout.structures) {
@@ -404,10 +412,12 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
 
 
 /**
- * A jet bridge on a Contact Stand: a rotunda at the Terminal, on the left of an aircraft parked nose-in, a telescopic
- * tunnel on a wheeled leg, and a cab. At rest it points out along the Stand, angled away; docked, the cab meets the door.
+ * A jet bridge on a Contact Stand: a rotunda on a column by the Terminal (on the left of an aircraft parked nose-in)
+ * with a service stair down to the apron, two telescoping tunnel sections with a window strip (the outer one a little
+ * larger), a drive bogie on two legs under the outer section, ribbed bellows and a cab with a canopy. At rest it points
+ * out along the Stand, angled away; docked, the canopy meets the door. Sizes in world units (2 m each).
  */
-function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: Mesh) => void, mat: { bridge: PBRMaterial; metal: PBRMaterial; dark: PBRMaterial }): JetBridge {
+function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: Mesh) => void, mat: { bridge: PBRMaterial; metal: PBRMaterial; dark: PBRMaterial; glass: PBRMaterial }): JetBridge {
   // directions in sim coordinates (x east, y south): `back` from the open side to the Terminal, `left` of a parked aircraft
   const open = { south: [0, 1], north: [0, -1], east: [1, 0], west: [-1, 0] }[s.facing ?? 'south'] as [number, number];
   const back: [number, number] = [-open[0], -open[1]];
@@ -419,44 +429,145 @@ function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: 
   const side = Math.min(7, across / 2 - 1);
   const rx = cx + back[0] * (depth / 2 - 1.6) + left[0] * side;
   const ry = cy + back[1] * (depth / 2 - 1.6) + left[1] * side;
-  const H = 2.4; // tunnel height at the rotunda (world units, 2 m each)
+  const H = 2.4; // tunnel height at the rotunda
   const pivot = new Vector3(rx, H, -ry);
   // at rest it points out along the Stand and a little away from it, clear of an aircraft taxiing in
   const rest = new Vector3(rx + open[0] * 6 + left[0] * 4, H, -(ry + open[1] * 6 + left[1] * 4));
   const restOut = new Vector3(open[0] + left[0], 0, -(open[1] + left[1])).normalize();
 
-  const rot = MeshBuilder.CreateCylinder('jet-bridge-rotunda', { diameter: 2.4, height: H + 1, tessellation: 16 }, scene);
-  rot.position.set(rx, (H + 1) / 2, -ry);
-  rot.material = mat.bridge;
-  caster(rot);
-  const tunnel = MeshBuilder.CreateBox('jet-bridge', { width: 1.5, height: 1.5, depth: 1 }, scene);
-  tunnel.material = mat.bridge;
-  caster(tunnel);
-  const cab = MeshBuilder.CreateBox('jet-bridge-cab', { width: 2.1, height: 1.7, depth: 2.1 }, scene);
-  cab.material = mat.bridge;
-  caster(cab);
-  const leg = MeshBuilder.CreateCylinder('jet-bridge-leg', { height: 1, diameter: 0.35, tessellation: 8 }, scene);
-  leg.material = mat.metal;
-  const wheels = MeshBuilder.CreateBox('jet-bridge-wheels', { width: 1.6, height: 0.5, depth: 0.8 }, scene);
-  wheels.material = mat.dark;
+  const make = (m: Mesh, material: PBRMaterial, parent?: TransformNode | Mesh) => {
+    m.material = material;
+    m.isPickable = false;
+    if (parent) m.parent = parent;
+    return m;
+  };
+  const box = (w: number, h: number, d: number, material: PBRMaterial, parent?: TransformNode | Mesh) => make(MeshBuilder.CreateBox('jet-bridge', { width: w, height: h, depth: d }, scene), material, parent);
+  const cyl = (dia: number, h: number, material: PBRMaterial, tess = 16) => make(MeshBuilder.CreateCylinder('jet-bridge', { diameter: dia, height: h, tessellation: tess }, scene), material);
+  /** Merges parts built in place into one mesh per material. */
+  const merge = (parts: Mesh[], name: string) => {
+    const byMat = new Map<PBRMaterial, Mesh[]>();
+    for (const p of parts) byMat.set(p.material as PBRMaterial, [...(byMat.get(p.material as PBRMaterial) ?? []), p]);
+    return [...byMat.values()].map((g) => {
+      const m = g.length > 1 ? Mesh.MergeMeshes(g, true, true)! : g[0]!;
+      m.name = name;
+      m.isPickable = false;
+      caster(m);
+      return m;
+    });
+  };
+
+  // ---- fixed: rotunda on its column, roof cap, and a service stair along the Terminal down to the apron
+  const fixed: Mesh[] = [];
+  const column = cyl(0.7, H - 0.9, mat.metal, 12);
+  column.position.set(rx, (H - 0.9) / 2, -ry);
+  const drum = cyl(2.4, 1.9, mat.bridge);
+  drum.position.set(rx, H, -ry);
+  const band = cyl(2.44, 0.38, mat.glass);
+  band.position.set(rx, H + 0.25, -ry);
+  const cap = cyl(2.6, 0.16, mat.dark);
+  cap.position.set(rx, H + 1.03, -ry);
+  fixed.push(column, drum, band, cap);
+  const stair = new TransformNode('jet-bridge-stair', scene);
+  stair.position.set(rx + left[0] * 1.2, 0, -(ry + left[1] * 1.2));
+  stair.rotation.y = Math.atan2(left[1], left[0]); // local +x along `left` (world z = −y)
+  const top = H - 0.95;
+  const run = 1.9;
+  const landing = box(0.9, 0.08, 0.9, mat.metal, stair);
+  landing.position.set(0.45, top - 0.04, 0);
+  const flight = Math.hypot(run, top);
+  const tilt = -Math.atan2(top, run);
+  for (const [z, w] of [[-0.28, 0.06], [0.28, 0.06]] as const) {
+    const stringer = box(flight, 0.12, w, mat.metal, stair);
+    stringer.position.set(0.9 + run / 2, top / 2, z);
+    stringer.rotation.z = tilt;
+    const rail = box(flight, 0.04, 0.04, mat.metal, stair);
+    rail.position.set(0.9 + run / 2, top / 2 + 0.5, z);
+    rail.rotation.z = tilt;
+    const post = box(0.04, 0.5, 0.04, mat.metal, stair);
+    post.position.set(0.9, top + 0.25, z);
+    const newel = box(0.04, 0.5, 0.04, mat.metal, stair);
+    newel.position.set(0.9 + run, 0.25, z);
+    fixed.push(stringer, rail, post, newel);
+  }
+  for (let k = 1; k < 7; k++) {
+    const step = box(0.22, 0.04, 0.5, mat.metal, stair);
+    step.position.set(0.9 + (run * k) / 7, top * (1 - k / 7), 0);
+    fixed.push(step);
+  }
+  fixed.push(landing);
+  for (const m of fixed) m.computeWorldMatrix(true);
+  merge(fixed, 'jet-bridge-rotunda');
+  stair.dispose();
+
+  // ---- moving: everything hangs off `arm`, which sits at the rotunda and looks at the cab
+  const arm = new TransformNode('jet-bridge-arm', scene);
+  arm.position.copyFrom(pivot);
+  const inner = box(1.4, 1.4, 1, mat.bridge, arm);
+  box(1.44, 0.3, 0.96, mat.glass, inner).position.y = 0.2;
+  const outer = box(1.6, 1.6, 1, mat.bridge, arm);
+  box(1.64, 0.32, 0.96, mat.glass, outer).position.y = 0.22;
+  const ribs: Mesh[] = [];
+  for (let k = 0; k < 5; k++) {
+    const r = box(k % 2 ? 1.62 : 1.76, k % 2 ? 1.62 : 1.76, 0.1, mat.dark);
+    r.position.z = 0.05 + k * 0.12;
+    r.computeWorldMatrix(true);
+    ribs.push(r);
+  }
+  const bellows = Mesh.MergeMeshes(ribs, true, true)!;
+  make(bellows, mat.dark, arm);
+  const cab = box(2.1, 1.7, 2.1, mat.bridge);
+  box(2.14, 0.5, 2.14, mat.glass, cab).position.y = 0.32;
+  const canopy = box(1.5, 1.55, 0.2, mat.dark, cab);
+  canopy.position.z = 1.1; // the cab's +z faces the door
+  // drive bogie: two legs from the outer tunnel down to a beam on a wheeled bogie
+  const bogie = new TransformNode('jet-bridge-bogie', scene);
+  const wheelParts: Mesh[] = [box(1.0, 0.35, 0.9, mat.dark)];
+  wheelParts[0]!.position.y = 0.5;
+  for (const x of [-0.42, 0.42]) {
+    for (const z of [-0.26, 0.26]) {
+      const w = cyl(0.6, 0.22, mat.dark, 12);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(x, 0.3, z);
+      wheelParts.push(w);
+    }
+  }
+  for (const m of wheelParts) m.computeWorldMatrix(true);
+  make(Mesh.MergeMeshes(wheelParts, true, true)!, mat.dark, bogie);
+  const beam = box(1.4, 0.2, 0.4, mat.metal, bogie);
+  beam.position.y = 0.77;
+  const legs = [-0.5, 0.5].map((x) => {
+    const l = make(MeshBuilder.CreateCylinder('jet-bridge-leg', { height: 1, diameter: 0.26, tessellation: 8 }, scene), mat.metal, bogie);
+    l.position.x = x;
+    return l;
+  });
+  for (const m of [...arm.getChildMeshes(), ...cab.getChildMeshes(), cab, ...bogie.getChildMeshes()]) caster(m as Mesh);
 
   const end = rest.clone();
   const facing = restOut.clone();
   const place = () => {
-    // the cab stands just off the door, facing it; the tunnel runs from the rotunda to the back of the cab
+    // the cab stands just off the door, facing it; the tunnels and bellows run from the rotunda to the back of the cab
     const cabAt = end.add(facing.scale(1.15));
     cab.position.copyFrom(cabAt);
     cab.rotation.y = Math.atan2(-facing.x, -facing.z);
-    const len = Math.max(1, Vector3.Distance(pivot, cabAt) - 1);
-    tunnel.position.copyFrom(Vector3.Lerp(pivot, cabAt, 0.5));
-    tunnel.scaling.z = len;
-    tunnel.lookAt(cabAt);
-    const foot = Vector3.Lerp(pivot, cabAt, 0.7);
-    const legH = Math.max(0.3, foot.y - 0.75);
-    leg.position.set(foot.x, legH / 2, foot.z);
-    leg.scaling.y = legH;
-    wheels.position.set(foot.x, 0.25, foot.z);
-    wheels.rotation.y = Math.atan2(cabAt.x - pivot.x, cabAt.z - pivot.z); // (lookAt turns the tunnel by quaternion)
+    const dist = Vector3.Distance(pivot, cabAt);
+    const len = Math.max(1.2, dist - 1.05 - 0.6); // tunnel length, then 0.6 of bellows
+    arm.lookAt(cabAt);
+    // the inner section runs out of the rotunda, the outer one slides over it from the cab end
+    const a = len * 0.58;
+    const b = len * 0.5;
+    inner.position.z = a / 2;
+    inner.scaling.z = a;
+    outer.position.z = len - b / 2;
+    outer.scaling.z = b;
+    bellows.position.z = len;
+    const foot = Vector3.Lerp(pivot, cabAt, Math.min(0.75, (len - b * 0.35) / dist));
+    bogie.position.set(foot.x, 0, foot.z);
+    bogie.rotation.y = Math.atan2(cabAt.x - pivot.x, cabAt.z - pivot.z); // (lookAt turns the arm by quaternion)
+    const legH = Math.max(0.2, foot.y - 0.8 - 0.87);
+    for (const l of legs) {
+      l.position.y = 0.87 + legH / 2;
+      l.scaling.y = legH;
+    }
   };
   place();
   return {
@@ -586,15 +697,22 @@ function paintRunway(scene: Scene, name: string, len: number, wid: number, n: Ru
   }, { clamp: true });
 }
 
-/** Text painted flat on the ground or a roof (world units), optionally on a plate. */
-function decal(scene: Scene, text: string, x: number, y: number, w: number, h: number, height: number, colour: string, plate: string | null): Mesh {
-  const W = 256;
+/**
+ * Text painted flat on the ground or a roof (world units), optionally on a plate; `yaw` turns it about its centre.
+ * Stand numbers use the UI's monospace font; building names (`name`) spaced sans-serif capitals.
+ */
+function decal(scene: Scene, text: string, x: number, y: number, w: number, h: number, height: number, colour: string, plate: string | null, name = false, yaw = 0): Mesh {
+  const W = name ? 1024 : 256;
   const H = Math.max(32, Math.round((W * h) / w / 8) * 8);
   const tex = canvasTexture(scene, `decal-${text}`, W, H, (g) => {
     g.clearRect(0, 0, W, H);
     if (plate) {
       g.fillStyle = plate;
       g.fillRect(0, 0, W, H);
+    }
+    if (name) {
+      paintName(g, text, W, H, colour);
+      return;
     }
     g.fillStyle = colour;
     g.textAlign = 'center';
@@ -615,6 +733,7 @@ function decal(scene: Scene, text: string, x: number, y: number, w: number, h: n
   mat.zOffset = -3;
   const m = MeshBuilder.CreateGround(`decal-${text}`, { width: w, height: h }, scene);
   m.position.set(x, height, -y);
+  m.rotation.y = yaw;
   m.material = mat;
   m.receiveShadows = true;
   m.isPickable = false;
