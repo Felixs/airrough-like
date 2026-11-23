@@ -55,31 +55,35 @@ function frontPools(b: TileRect, layout: AirportLayout): Array<[number, number, 
 }
 
 export function buildLightPools(scene: Scene, layout: AirportLayout, floods: readonly Vector3[]): LightPools {
-  // a soft round pool: bright in the middle, fading smoothly to nothing at the rim
-  const tex = canvasTexture(scene, 'light-pool', 128, 128, (g, W, H) => {
-    g.fillStyle = '#000';
-    g.fillRect(0, 0, W, H);
-    const grd = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W / 2);
-    grd.addColorStop(0, 'rgb(255,255,255)');
-    grd.addColorStop(0.25, 'rgb(205,205,205)');
-    grd.addColorStop(0.55, 'rgb(105,105,105)');
-    grd.addColorStop(0.8, 'rgb(30,30,30)');
-    grd.addColorStop(1, 'rgb(0,0,0)');
-    g.fillStyle = grd;
-    g.fillRect(0, 0, W, H);
-  }, { clamp: true });
+  // a soft round pool in its colour: bright in the middle, fading smoothly to nothing at the rim (the colour is
+  // painted in, as a material's own emissive colour would be added evenly over the whole square)
+  const poolTexture = (name: string, hex: string) =>
+    canvasTexture(scene, `light-pool-${name}`, 128, 128, (g, W, H) => {
+      const c = Color3.FromHexString(hex);
+      const rgb = (k: number) => `rgb(${Math.round(c.r * 255 * k)},${Math.round(c.g * 255 * k)},${Math.round(c.b * 255 * k)})`;
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+      const grd = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W / 2 - 1);
+      grd.addColorStop(0, rgb(1));
+      grd.addColorStop(0.25, rgb(0.8));
+      grd.addColorStop(0.55, rgb(0.4));
+      grd.addColorStop(0.8, rgb(0.12));
+      grd.addColorStop(1, rgb(0));
+      g.fillStyle = grd;
+      g.fillRect(0, 0, W, H);
+    }, { clamp: true });
   const kinds: PoolKind[] = [
-    { name: 'flood', colour: '#ffe6bd', strength: 0.75, at: floods.map((p) => [p.x, p.z, 34] as const) },
+    { name: 'flood', colour: '#ffe6bd', strength: 0.55, at: floods.map((p) => [p.x, p.z, 28] as const) },
     {
       name: 'stand',
       colour: '#ffe9c8',
-      strength: 0.4,
+      strength: 0.3,
       at: layout.stands.map((s) => [(s.x + s.w / 2) * T, -(s.y + s.h / 2) * T, 0.6 * Math.max(s.w, s.h) * T] as const),
     },
     {
       name: 'front',
       colour: '#ffcf8f',
-      strength: 0.6,
+      strength: 0.45,
       at: layout.structures.filter((s) => BUILDINGS.has(s.kind)).flatMap((b) => frontPools(b, layout)),
     },
   ];
@@ -90,8 +94,8 @@ export function buildLightPools(scene: Scene, layout: AirportLayout, floods: rea
     mat.disableLighting = true;
     mat.diffuseColor = Color3.Black();
     mat.specularColor = Color3.Black();
-    mat.emissiveTexture = tex;
-    mat.emissiveColor = Color3.FromHexString(k.colour);
+    mat.emissiveTexture = poolTexture(k.name, k.colour);
+    mat.emissiveColor = Color3.Black();
     // added on top of what is already drawn (light, never a dark edge); fog would add its own colour
     mat.alphaMode = Engine.ALPHA_ADD;
     mat.transparencyMode = Material.MATERIAL_ALPHABLEND;

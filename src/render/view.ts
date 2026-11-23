@@ -240,7 +240,7 @@ export class AirportView {
       this.sun.direction = new Vector3(-Math.cos(az) * Math.cos(el), -Math.sin(el), Math.sin(az) * Math.cos(el)).normalize();
       this.sun.diffuse = sunCol;
       // a low sun stays strong (long, crisp shadows; golden light on the walls that face it)
-      this.sun.intensity = 3.5 * day ** 1.2 * (1 + 0.3 * golden);
+      this.sun.intensity = 3.5 * day ** 1.2 * (1 + 0.45 * golden);
     } else {
       this.sun.direction = new Vector3(0.33, -0.56, 0.46).normalize();
       this.sun.diffuse = new Color3(0.55, 0.65, 0.95);
@@ -266,14 +266,14 @@ export class AirportView {
     this.scene.fogDensity = 0.00035 * (1 - 0.25 * golden * day);
     for (const f of this.floods) f.intensity = 1.6 * aircraftGlow;
     this.pools?.setStrength(aircraftGlow);
-    const ground = Color3.Lerp(new Color3(0.02, 0.025, 0.03), new Color3(0.26, 0.29, 0.24), day);
+    const ground = Color3.Lerp(new Color3(0.02, 0.025, 0.03), new Color3(0.42, 0.46, 0.4), day);
     const pos = this.dome.getVerticesData('position');
     if (pos) {
       const col = new Float32Array((pos.length / 3) * 4);
       for (let i = 0; i < pos.length / 3; i++) {
         const y = pos[i * 3 + 1]! / 3500;
-        // below the horizon the dome is dull ground, so walls and glass reflect sky above and ground below
-        const c = y >= 0 ? Color3.Lerp(horizon, zenith, Math.pow(y, 0.45)) : Color3.Lerp(horizon, ground, clamp(-y / 0.25, 0, 1));
+        // below the horizon the dome turns part way to a dull ground colour (glass seen from above still reads as sky)
+        const c = y >= 0 ? Color3.Lerp(horizon, zenith, Math.pow(y, 0.45)) : Color3.Lerp(horizon, ground, 0.45 * clamp(-y / 0.3, 0, 1));
         col.set([c.r, c.g, c.b, 1], i * 4);
       }
       this.dome.updateVerticesData(VertexBuffer.ColorKind, col);
@@ -286,7 +286,7 @@ export class AirportView {
     for (const l of this.airfield?.lights ?? []) l.mat.emissiveColor = l.colour.scale(l.day + (1 - l.day) * aircraftGlow);
     for (const g of this.airfield?.litGlass ?? []) g.emissiveColor = Color3.White().scale(1.3 * aircraftGlow);
     this.glow.intensity = 0.35 + 0.9 * aircraftGlow;
-    this.pipeline.imageProcessing.exposure = 1 + 0.4 * aircraftGlow + 0.05 * golden * day;
+    this.pipeline.imageProcessing.exposure = 1 + 0.4 * aircraftGlow + 0.12 * golden * day;
     this.pipeline.imageProcessing.contrast = 1.12 + 0.08 * day;
     return darkness;
   }
