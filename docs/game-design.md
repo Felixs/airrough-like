@@ -262,7 +262,8 @@ cooldown (`simulation.ts → ACTIONS`).
   looks 2 tiles wide, half a Runway; where it meets a Stand, Holding Bay, Runway or another Taxiway it is paved right up
   to it. The outside corners of Taxiway ends and turns are rounded (radius half a tile), and every inside corner of a
   junction or turn has a curved fillet about one tile across. Yellow centre lines
-  join with curved corners and curved lead-offs at T-junctions and stop at the hold-short lines (two solid and two dashed
+  join with curved corners and curved lead-offs at T-junctions (a line never runs on past a corner or junction into
+  the end of the strip it meets) and stop at the hold-short lines (two solid and two dashed
   yellow lines across the drawn paving, with a red sign such as "09-27" beside them).
 - **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
   their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
