@@ -9,6 +9,7 @@ import { FAMILIES, describeTwist, simulationEffects, twistsFor, type Twist } fro
 import { createRandom } from './random';
 import { emptyMeta, modifiersFrom, type MetaState, type RunModifiers } from './meta';
 import { AIRCRAFT_TYPES } from './aircraft';
+import { CONTRACT_RULES, contractDef, contractEffects, feeBonus, offerContracts, turnaroundBonus, type ContractRef } from './contracts';
 import { HOURS, TIMINGS, acknowledgeAlert, type DiversionReason, carryOver, createSimulation, daySettled, finishDay, stepSimulation, type ScheduledFlight, type Simulation } from './simulation';
 
 export interface LandPlot {
@@ -57,6 +58,8 @@ export interface DayReport {
   readonly diversionsByReason: Readonly<Record<DiversionReason, number>>;
   /** Hour with the most Movements. */
   readonly busiestHour: number;
+  /** The part of the fees Airline Contracts added. */
+  readonly contractFees?: number;
   /** Crashes and Incidents, in order. */
   readonly highlights: readonly DayHighlight[];
 }
@@ -107,6 +110,12 @@ export interface RunState {
   readonly overnight: readonly ScheduledFlight[];
   readonly stats: RunStats;
   readonly history: readonly DayReport[];
+  /** Airline Contracts signed this Run, in order. */
+  readonly contracts?: readonly ContractRef[];
+  /** Contracts to pick from after winning a Week (the pick comes before the next Plan Mode). */
+  readonly contractOffer?: readonly ContractRef[] | null;
+  /** Land Plots the Player may still buy for free (Land Grant). */
+  readonly freePlots?: number;
 }
 
 /** Daily Upkeep *(first guess)*. */
@@ -229,6 +238,19 @@ export function dayTwist(run: RunState): Twist | null {
 export function dayPlan(run: RunState): DayPlan {
   return planDay({
     layout: run.layout, week: run.week, weekday: run.weekday, seed: run.seed, includeOvernight: run.dayIndex === 0, twist: dayTwists(run),
+    contracts: contractEffects(run.contracts),
+  });
+}
+
+/** Today's flights with the signed Contracts' fee and Turnaround bonuses. */
+function withContractBonuses(run: RunState, flights: readonly ScheduledFlight[]): ScheduledFlight[] {
+  if (!run.contracts?.length) return [...flights];
+  const e = contractEffects(run.contracts);
+  return flights.map((f) => {
+    const type = AIRCRAFT_TYPES[f.type];
+    const fb = feeBonus(e, type.purpose, type.size, f.overnight ? 0 : f.arrivalMinute, run.weekday);
+    const tb = turnaroundBonus(e, type.size);
+    return { ...f, ...(fb !== 1 ? { feeBonus: fb } : {}), ...(tb !== 1 ? { turnaroundBonus: tb } : {}) };
   });
 }
 
@@ -253,20 +275,20 @@ export interface DayEstimate {
  */
 export function estimateDay(run: RunState): DayEstimate {
   const plan = dayPlan(run);
-  const flights: readonly ScheduledFlight[] = [...run.overnight, ...plan.schedule];
+  const flights = withContractBonuses(run, [...run.overnight, ...plan.schedule]);
   const effects = simulationEffects(dayTwists(run), mixSeed(run.seed, run.dayIndex), run.towerModules.weatherStation, hasBuilding(run, 'deIcingPad'));
   const fits = { short: 1, medium: 2, long: 3 } as const;
   const size = { small: 1, medium: 2, large: 3 } as const;
   const nightRunway = (s: keyof typeof size) => !effects.noLights &&
     run.layout.runways.some((r) => (r.surface === 'lit' || r.surface === 'ils') && fits[r.length] >= size[s]);
-  const fee = (f: ScheduledFlight) => Math.round(AIRCRAFT_TYPES[f.type].fee * run.modifiers.feeFactor);
+  const fee = (f: ScheduledFlight) => Math.round(AIRCRAFT_TYPES[f.type].fee * run.modifiers.feeFactor * (f.feeBonus ?? 1));
   let arrivalFees = 0;
   let departureFees = 0;
   for (const f of flights) {
     const type = AIRCRAFT_TYPES[f.type];
     if (!f.overnight && f.arrivalMinute >= HOURS.dusk && !nightRunway(type.size)) continue; // diverts at dusk: no fees
     if (!(f.overnight && f.arrivalFeePaid !== false)) arrivalFees += fee(f);
-    const ready = (f.overnight ? HOURS.operationsStart : f.arrivalMinute) + TIMINGS.turnaroundMinutes[type.size] * run.modifiers.turnaroundFactor;
+    const ready = (f.overnight ? HOURS.operationsStart : f.arrivalMinute) + TIMINGS.turnaroundMinutes[type.size] * run.modifiers.turnaroundFactor * (f.turnaroundBonus ?? 1);
     if (ready < HOURS.dusk || nightRunway(type.size)) departureFees += fee(f);
   }
   const fees = arrivalFees + departureFees;
@@ -287,7 +309,7 @@ export function startLiveDay(run: RunState): Simulation {
     noLights: effects.noLights,
     taxiSpeedFactor: effects.taxiSpeedFactor,
     layout: run.layout,
-    schedule: [...run.overnight, ...today],
+    schedule: withContractBonuses(run, [...run.overnight, ...today]),
     seed: mixSeed(run.seed, run.dayIndex, 0x5eed),
     money: run.money,
     radarLevel: run.towerModules.radar,
@@ -327,8 +349,16 @@ export function endDay(run: RunState, sim: Simulation): RunState {
     week: run.week, weekday: run.weekday, quota, movements: sim.movements, fees: sim.fees, upkeep: cost, penalties,
     crashes: sim.crashes, diversions: sim.diversions, quotaMet, moneyAfter: money, net: sim.fees - cost - penalties,
     landed, diversionsByReason, busiestHour: sim.movementsByHour.indexOf(Math.max(...sim.movementsByHour)), highlights,
+    ...(sim.contractFees ? { contractFees: sim.contractFees } : {}),
   };
   const won = quotaMet && !run.endless && endOfWeek && run.week === WEEKS_TO_WIN;
+  // A won Week (but not the last of the four) earns a pick of Airline Contracts
+  const offer = quotaMet && endOfWeek && !won && (run.endless || run.week <= CONTRACT_RULES.lastRegularWeek)
+    ? offerContracts({
+      seed: run.seed, week: run.week, signed: run.contracts ?? [], unlocks: run.modifiers.unlocks,
+      hasLitRunway: run.layout.runways.some((r) => r.surface === 'lit' || r.surface === 'ils'),
+    })
+    : null;
   return {
     ...run,
     bonusTwist: false,
@@ -352,7 +382,27 @@ export function endDay(run: RunState, sim: Simulation): RunState {
         AIRCRAFT_TYPES[f.type].size === 'large' && f.landedSeq > 0 && f.phase !== 'holding' && f.phase !== 'landing' && f.phase !== 'crashed' && f.phase !== 'diverted').length,
     },
     history: [...run.history, report],
+    contractOffer: offer && offer.length ? offer : null,
   };
+}
+
+/** Signs one of the Contracts on offer: its one-off money or free Land Plot now, its traffic and fees from the next Day. */
+export function signContract(run: RunState, index: number): RunState {
+  const ref = run.contractOffer?.[index];
+  if (!ref) throw new Error('No such Contract on offer');
+  const def = contractDef(ref.id);
+  const money = run.money + (def.money?.(ref.tier) ?? 0);
+  return {
+    ...run, money, inDebt: money < 0, contractOffer: null, contracts: [...(run.contracts ?? []), ref],
+    freePlots: (run.freePlots ?? 0) + (def.freePlots ?? 0),
+  };
+}
+
+/** Turns the offer down for a little money. */
+export function skipContracts(run: RunState): RunState {
+  if (!run.contractOffer) return run;
+  const money = run.money + CONTRACT_RULES.skipMoney;
+  return { ...run, money, inDebt: money < 0, contractOffer: null };
 }
 
 /** After a win: keep playing into Endless Mode. */

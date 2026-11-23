@@ -24,6 +24,8 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 | **Main Menu** | **Unlockables & Boosts** bought with Air Miles |
 | ![Live Day at dawn: aircraft lights over the dark airfield](docs/screenshots/live-day-dawn.png) | ![Leaving Build Mode with unconfirmed changes](docs/screenshots/build-confirm.png) |
 | **Dawn**: the day–night cycle, with navigation, beacon and landing lights on the aircraft | **Build or discard**: leaving Build Mode or starting the Day with unconfirmed changes asks first |
+| ![Picking an Airline Contract after a won Week](docs/screenshots/contract-offer.png) | |
+| **Airline Contracts**: after a won Week, pick one of three (or skip for money); each steers the traffic for the rest of the Run | |
 
 ### The look
 

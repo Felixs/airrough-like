@@ -25,5 +25,5 @@ export function tasksFor(experimentId: string, seeds: number, firstSeed = 1): Ta
 export function runTask(task: Task): RunResult {
   const v = experimentById(task.experiment).variants.find((x) => x.label === task.variant);
   if (!v) throw new Error(`Unknown variant: ${task.variant}`);
-  return playRun(playerById(task.player), task.seed, { overrides: v.overrides ?? {}, meta: v.meta ?? 'none', variant: v.label });
+  return playRun(playerById(task.player), task.seed, { overrides: v.overrides ?? {}, meta: v.meta ?? 'none', variant: v.label, contracts: v.contracts ?? 'best' });
 }

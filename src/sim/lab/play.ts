@@ -2,9 +2,9 @@
  * Balance lab: plays one Run with a scripted player and records what happened, Day by Day.
  */
 import { BOOSTS, emptyMeta, UNLOCKABLES, type MetaState } from '../meta';
-import { dayPlan, dayTwists, endDay, startLiveDay, startRun, WEEKS_TO_WIN, type RunState } from '../run';
+import { dayPlan, dayTwists, endDay, estimateDay, signContract, skipContracts, startLiveDay, startRun, WEEKS_TO_WIN, type RunState } from '../run';
 import { acknowledgeAlert, daySettled, finishDay, resolveFuel, stepSimulation } from '../simulation';
-import type { Player, Purchase } from './players';
+import { daysAhead, type Player, type Purchase } from './players';
 import { withTuning, type Overrides } from './tuning';
 
 export interface DayResult {
@@ -43,6 +43,35 @@ export interface RunResult {
   readonly finalMoney: number;
   readonly stands: number;
   readonly runways: number;
+  /** Airline Contracts signed, in order. */
+  readonly contracts: readonly string[];
+}
+
+/**
+ * How a scripted player answers an Airline Contract offer: ignore it (as before Contracts existed), always skip,
+ * sign the first one, or sign the best fit (most money over the next Week at today's airport, against skipping).
+ */
+export type ContractPolicy = 'ignore' | 'skip' | 'first' | 'best';
+
+/** What signing (or skipping) is worth over the next Week, at the airport as it is. */
+function contractValue(run: RunState): number {
+  let fees = 0;
+  for (let d = 0; d < 7; d++) fees += estimateDay(daysAhead(run, d)).fees;
+  return run.money + fees + 20_000 * (run.freePlots ?? 0) * 0.5;
+}
+
+export function answerOffer(run: RunState, policy: ContractPolicy): RunState {
+  if (!run.contractOffer || policy === 'ignore') return { ...run, contractOffer: null };
+  if (policy === 'skip') return skipContracts(run);
+  if (policy === 'first') return signContract(run, 0);
+  let best = skipContracts(run);
+  let bestValue = contractValue(best);
+  run.contractOffer.forEach((_, i) => {
+    const signed = signContract(run, i);
+    const v = contractValue(signed);
+    if (v > bestValue) [best, bestValue] = [signed, v];
+  });
+  return best;
 }
 
 /**
@@ -87,13 +116,14 @@ export function lossCause(d: DayResult): LossCause {
 }
 
 /** Plays a Run of up to `WEEKS_TO_WIN` Weeks with the player's Plan Mode, under the tuning overrides. */
-export function playRun(player: Player, seed: number, opts: { overrides?: Overrides; meta?: MetaSpec; variant?: string } = {}): RunResult {
+export function playRun(player: Player, seed: number, opts: { overrides?: Overrides; meta?: MetaSpec; variant?: string; contracts?: ContractPolicy } = {}): RunResult {
   return withTuning(opts.overrides ?? {}, () => {
     let run: RunState = startRun(seed, metaFor(opts.meta ?? 'none'));
     const days: DayResult[] = [];
     const purchases: Purchase[] = [];
     const maxDays = WEEKS_TO_WIN * 7;
     while (run.status === 'planning' && days.length < maxDays) {
+      if (run.contractOffer) run = answerOffer(run, opts.contracts ?? 'best');
       run = player.plan(run, purchases);
       const forecast = dayPlan(run).forecast;
       const twists = dayTwists(run).map((t) => t.name);
@@ -112,6 +142,7 @@ export function playRun(player: Player, seed: number, opts: { overrides?: Overri
       lostOn: run.status === 'lost' && last ? last.day : null,
       lossCause: run.status === 'lost' && last ? lossCause(last) : null,
       days, purchases, finalMoney: run.money, stands: run.layout.stands.length, runways: run.layout.runways.length,
+      contracts: (run.contracts ?? []).map((c) => c.id),
     };
   });
 }

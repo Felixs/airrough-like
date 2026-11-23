@@ -106,6 +106,21 @@ if (!buildingsOnly) {
   }
   await settle();
   await page.screenshot({ path: out('day-report') });
+
+  // The Airline Contract pick after a won Week: give the saved Run an offer (as a won Boss Day would), then Continue
+  await page.click('.report button.primary');
+  await page.waitForSelector('.start');
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('aab.run'));
+    saved.data.contractOffer = [{ id: 'freightPartner', tier: 1 }, { id: 'widebodyDeal', tier: 1 }, { id: 'signingBonus', tier: 1 }];
+    localStorage.setItem('aab.run', JSON.stringify(saved));
+  });
+  await page.goto(`${url}?seed=7`);
+  await page.waitForSelector('.menu-card');
+  await page.click('[data-go="continue"]');
+  await page.waitForSelector('.contract-offer');
+  await settle();
+  await page.screenshot({ path: out('contract-offer') });
 }
 
 // ---- The look: the Live Day at five times of day, and close-ups, all at the best quality and 1.5x pixel density.

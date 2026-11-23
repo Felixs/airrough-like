@@ -163,7 +163,7 @@ A Player-set constraint the ATC Tower would follow (e.g. "Runway 2 is cargo only
 _Avoid_: Policy, setting
 
 **Airline Contract**:
-A reward picked after winning a Week's Boss Day (one of three, or skipped): for the rest of the Run it changes which flights come (more Cargo, more Large aircraft…) and pays a bonus; a Trade-off Contract also has a catch. Planned, not in the game yet.
+A reward picked after winning a Week's Boss Day (one of three, or skipped for money): for the rest of the Run it changes which flights come (more Cargo, more Large aircraft…) and pays a bonus, mostly higher fees; a Trade-off Contract also has a catch, a Growth Contract raises Demand and the Daily Quota.
 _Avoid_: Deal, perk, card
 
 **Land Plot**:
