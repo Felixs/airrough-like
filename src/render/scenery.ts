@@ -109,14 +109,16 @@ export function buildGrass(scene: Scene, ground: Area, airfield: Area, fields: F
     }
     g.globalAlpha = 1;
   }, { clamp: true });
-  // fine detail: grey around mid-grey (neutral), repeated every 10 world units over the map
+  // fine detail: a normal map of short grass blades leaning every way, repeated every 10 world units, so the light
+  // catches the grass unevenly close up while the colour comes from the map above
   const detail = canvasTexture(scene, 'grass-detail', 256, 256, (g, W, H) => {
-    g.fillStyle = 'rgb(128,128,128)';
+    g.fillStyle = 'rgb(128,128,255)';
     g.fillRect(0, 0, W, H);
     const r = rng(23);
     for (let i = 0; i < 9000; i++) {
-      const v = Math.round(128 + (r() - 0.5) * 70);
-      g.strokeStyle = `rgba(${v},${v},${v},0.6)`;
+      const nx = Math.round(128 + (r() - 0.5) * 110);
+      const ny = Math.round(128 + (r() - 0.5) * 110);
+      g.strokeStyle = `rgb(${nx},${ny},235)`;
       g.lineWidth = 1 + r();
       const x = r() * W;
       const y = r() * H;
@@ -136,11 +138,8 @@ export function buildGrass(scene: Scene, ground: Area, airfield: Area, fields: F
   mat.albedoTexture = map;
   map.wrapU = Texture.CLAMP_ADDRESSMODE;
   map.wrapV = Texture.CLAMP_ADDRESSMODE;
-  mat.detailMap.isEnabled = true;
-  mat.detailMap.texture = detail;
-  mat.detailMap.diffuseBlendLevel = 0.9;
-  mat.detailMap.roughnessBlendLevel = 0;
-  mat.detailMap.bumpLevel = 0;
+  mat.bumpTexture = detail;
+  detail.level = 0.6;
   grass.material = mat;
   grass.receiveShadows = true;
   grass.isPickable = false;
