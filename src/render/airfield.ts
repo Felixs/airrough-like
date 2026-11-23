@@ -497,7 +497,7 @@ function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: 
   }
   fixed.push(landing);
   for (const m of fixed) m.computeWorldMatrix(true);
-  merge(fixed, 'jet-bridge-rotunda');
+  merge(fixed, 'bridge-rotunda'); // static: may be frozen
   stair.dispose();
 
   // ---- moving: everything hangs off `arm`, which sits at the rotunda and looks at the cab
@@ -541,6 +541,12 @@ function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: 
     l.position.x = x;
     return l;
   });
+  // every moving part is named jet-bridge… and flagged, so static-mesh freezing leaves it alone
+  const moving = [arm, bogie, cab, ...arm.getChildMeshes(), ...cab.getChildMeshes(), ...bogie.getChildMeshes()];
+  for (const n of moving) {
+    if (!n.name.startsWith('jet-bridge')) n.name = `jet-bridge-${n.name}`;
+    n.metadata = { ...(n.metadata ?? {}), moves: true };
+  }
   for (const m of [...arm.getChildMeshes(), ...cab.getChildMeshes(), cab, ...bogie.getChildMeshes()]) caster(m as Mesh);
 
   const end = rest.clone();
