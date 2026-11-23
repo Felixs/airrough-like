@@ -38,10 +38,11 @@
           <section class="strips" data-group="ground"><h3><span class="icon" aria-hidden="true">▣</span><span class="label">Ground</span> <span class="count">0</span></h3><ol></ol></section>
         </aside>
         <main id="map" class="map" aria-label="Airfield">
-          <div class="chips"><span id="runway-chip" class="chip"></span><span id="wind-chip" class="chip"></span></div>
+          <div class="chips"><span id="runway-chip" class="chip"></span><span id="wind-chip" class="chip"></span><button type="button" id="view-reset" class="chip view-reset" aria-keyshortcuts="V" title="Back to the view over the whole airport (V). Drag to turn the camera, right-drag or two fingers to move it, scroll or pinch to zoom.">⌂ View <kbd>V</kbd></button></div>
           <div id="alert-banner" class="alert-banner" role="alertdialog" aria-live="assertive" hidden></div>
         </main>
-        <aside class="panel" aria-label="Tower">
+        <aside id="panel" class="panel" aria-label="Tower">
+          <button type="button" id="panel-toggle" class="panel-toggle" aria-expanded="true" aria-controls="panel" title="Collapse the Tower panel">⟩</button>
           <section class="actions"><h3>Emergency Actions</h3><div id="actions" class="action-list"></div><p id="action-msg" class="empty" role="status"></p></section>
           <section class="alerts"><h3>Alerts</h3><ol id="alerts"></ol></section>
           <section class="stands"><h3>Stands</h3><div id="stands" class="stand-grid"></div></section>

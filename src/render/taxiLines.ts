@@ -1,4 +1,3 @@
-import type { Graphics } from 'pixi.js';
 import { TILE_SIZE, type AirportLayout } from '../sim/layout';
 import { holdShortLines } from '../sim/markings';
 import { centreLine } from '../sim/taxi';
@@ -17,15 +16,18 @@ export function centreTiles(layout: AirportLayout): Set<string> {
   return out;
 }
 
-/** Draws connected centre lines with curved corners and curved lead-offs at T-junctions. */
-export function drawCentreLines(g: Graphics, layout: AirportLayout, color: number): void {
+export type Polyline = Array<[number, number]>;
+
+/**
+ * The yellow centre lines as polylines in world units (simulation x, y): straight half-segments between tile centres,
+ * curved corners, and curved lead-offs at T-junctions.
+ */
+export function centreLinePaths(layout: AirportLayout): Polyline[] {
   const tiles = centreTiles(layout);
   const has = (x: number, y: number) => tiles.has(key(x, y));
   const mid = (x: number, y: number): [number, number] => [(x + 0.5) * T, (y + 0.5) * T];
-  const stroke = { width: 0.6, color, cap: 'round' as const };
   const skip = new Set<string>(); // half-segments replaced by a corner curve: "x,y,dir"
-  const curves: Array<[[number, number], [number, number], [number, number]]> = [];
-
+  const out: Polyline[] = [];
   for (const k of tiles) {
     const [x, y] = k.split(',').map(Number) as [number, number];
     const arms = (['n', 's', 'e', 'w'] as Dir[]).filter((d) => has(x + STEP[d][0], y + STEP[d][1]));
@@ -34,13 +36,18 @@ export function drawCentreLines(g: Graphics, layout: AirportLayout, color: numbe
     if (vertical.length === 0 || horizontal.length === 0) continue;
     for (const v of vertical) {
       for (const h of horizontal) {
-        const a: [number, number] = [x + STEP[v][0], y + STEP[v][1]];
-        const b: [number, number] = [x + STEP[h][0], y + STEP[h][1]];
-        curves.push([mid(...a), mid(x, y), mid(...b)]);
+        const a = mid(x + STEP[v][0], y + STEP[v][1]);
+        const c = mid(x, y);
+        const b = mid(x + STEP[h][0], y + STEP[h][1]);
+        const curve: Polyline = [];
+        for (let i = 0; i <= 8; i++) {
+          const t = i / 8;
+          curve.push([(1 - t) ** 2 * a[0] + 2 * t * (1 - t) * c[0] + t * t * b[0], (1 - t) ** 2 * a[1] + 2 * t * (1 - t) * c[1] + t * t * b[1]]);
+        }
+        out.push(curve);
         if (arms.length === 2) {
-          // a plain corner: the curve replaces the straight lines through it
           skip.add(`${x},${y},${v}`).add(`${x},${y},${h}`);
-          skip.add(`${a[0]},${a[1]},${v === 'n' ? 's' : 'n'}`).add(`${b[0]},${b[1]},${h === 'e' ? 'w' : 'e'}`);
+          skip.add(`${x + STEP[v][0]},${y + STEP[v][1]},${v === 'n' ? 's' : 'n'}`).add(`${x + STEP[h][0]},${y + STEP[h][1]},${h === 'e' ? 'w' : 'e'}`);
         }
       }
     }
@@ -52,13 +59,12 @@ export function drawCentreLines(g: Graphics, layout: AirportLayout, color: numbe
       const ny = y + STEP[d][1];
       if (!has(nx, ny)) continue;
       const back: Dir = d === 'e' ? 'w' : 'n';
-      const [ax, ay] = mid(x, y);
-      const [bx, by] = mid(nx, ny);
-      const hx = (ax + bx) / 2;
-      const hy = (ay + by) / 2;
-      if (!skip.has(`${x},${y},${d}`)) g.moveTo(ax, ay).lineTo(hx, hy).stroke(stroke);
-      if (!skip.has(`${nx},${ny},${back}`)) g.moveTo(hx, hy).lineTo(bx, by).stroke(stroke);
+      const a = mid(x, y);
+      const b = mid(nx, ny);
+      const half: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (!skip.has(`${x},${y},${d}`)) out.push([a, half]);
+      if (!skip.has(`${nx},${ny},${back}`)) out.push([half, b]);
     }
   }
-  for (const [a, c, b] of curves) g.moveTo(...a).quadraticCurveTo(c[0], c[1], b[0], b[1]).stroke(stroke);
+  return out;
 }

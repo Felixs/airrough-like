@@ -1,15 +1,14 @@
-import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
-import { drawAirfield, fitToScreen, worldBounds } from '../render/airfield';
+import { worldBounds } from '../render/bounds';
+import { AirportView } from '../render/view';
 import {
   applyChange, BUILD_COSTS, MAIN_BUILDING, checkChange, confirmBuild, lengthened, newBuilding, newHoldingBay, newRunway, newStand, nextPlotPrice, openBuild, placeSpot,
   priceOf, ROLE_NAME, pendingTotal, structureAt, taxiwayFromDrag, undoPending, type BuildSession, type Change, type PlacementCheck,
 } from '../sim/build';
-import { runwayEndZones, spotEntry, TILE_SIZE, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
+import { runwayEndZones, spotEntry, WORLD, type RunwayLength, type SizeClass, type Stand, type Structure, type SupportRole, type TileRect } from '../sim/layout';
 import type { RunState } from '../sim/run';
 import type { UnlockableId } from '../sim/meta';
 import type { Tile } from '../sim/taxi';
 
-const T = TILE_SIZE;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 
@@ -196,7 +195,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
         <div class="card"><h3>Pending</h3><ol class="pending"></ol><dl class="totals"></dl>
           <div class="build-buttons"><button type="button" class="undo">Undo <kbd>Ctrl Z</kbd></button><button type="button" class="confirm">Confirm <kbd>Enter</kbd></button></div>
           <p class="msg" role="status"></p></div>
-        <p class="hint">Esc frees the cursor · tool keys T S B R U L M D · 1–9 pick a variant</p>
+        <p class="hint">Esc frees the cursor · tool keys T S B R U L M D · 1–9 pick a variant · scroll or pinch to zoom, right-drag or arrow keys to move the map, F shows it all</p>
       </aside>
     </div>`;
   const mapEl = root.querySelector<HTMLElement>('.build-map')!;
@@ -205,86 +204,50 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
   const variantsEl = palette.querySelector<HTMLElement>('.variants')!;
   const msg = side.querySelector<HTMLElement>('.msg')!;
 
-  const app = new Application();
-  await app.init({ resizeTo: mapEl, background: '#0b1210', antialias: true, autoDensity: true, resolution: window.devicePixelRatio });
-  mapEl.appendChild(app.canvas);
-
-  const world = new Container();
-  const overlay = new Graphics();
-  const plotLabels = new Container();
-  const ghost = new Graphics();
-  const ghostLabel = new Text({ text: '', style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 4, fontWeight: '700', fill: 0xffffff } });
-  ghostLabel.resolution = 4;
-  let airfield = drawAirfield(session.layout);
-  world.addChild(airfield, overlay, plotLabels, ghost, ghostLabel);
-  app.stage.addChild(world);
-  const fit = () => {
-    fitToScreen(world, session.layout, app.screen.width, app.screen.height, worldBounds);
-    // where tile (0, 0) is and how big a tile is on screen, for scripts that click on the map (README screenshots)
-    app.canvas.dataset.tiles = JSON.stringify({ x: world.position.x, y: world.position.y, size: world.scale.x * T });
-  };
-  fit();
-  app.renderer.on('resize', fit);
+  // the map in 3D, looking straight down; zoom and pan to reach small tiles on a big airport
+  const view = new AirportView(mapEl, 'build');
+  const ghostLabel = document.createElement('div');
+  ghostLabel.className = 'ghost-label';
+  mapEl.appendChild(ghostLabel);
+  view.setLayout(session.layout);
+  view.fit(worldBounds);
 
   const drawOverlay = () => {
-    overlay.clear();
-    for (const l of plotLabels.removeChildren()) l.destroy();
-    const x0 = WORLD.x0;
-    const y0 = WORLD.y0;
-    for (let x = x0; x <= x0 + WORLD.width; x++) overlay.moveTo(x * T, y0 * T).lineTo(x * T, (y0 + WORLD.height) * T).stroke({ width: 0.15, color: 0x2a3a35 });
-    for (let y = y0; y <= y0 + WORLD.height; y++) overlay.moveTo(x0 * T, y * T).lineTo((x0 + WORLD.width) * T, y * T).stroke({ width: 0.15, color: 0x2a3a35 });
-    // the no-build areas past each Runway end: red hatching
-    for (const z of session.layout.runways.flatMap(runwayEndZones)) {
-      overlay.rect(z.x * T, z.y * T, z.w * T, z.h * T).fill({ color: 0xff6b5e, alpha: 0.12 }).stroke({ width: 0.4, color: 0xff6b5e, alpha: 0.6 });
-      for (let d = 0; d < z.w + z.h; d += 1) {
-        const x0 = z.x + Math.min(d, z.w);
-        const y0 = z.y + Math.max(0, d - z.w);
-        const x1 = z.x + Math.max(0, d - z.h);
-        const y1 = z.y + Math.min(d, z.h);
-        overlay.moveTo(x0 * T, y0 * T).lineTo(x1 * T, y1 * T).stroke({ width: 0.3, color: 0xff6b5e, alpha: 0.45 });
-      }
-    }
-    const price = nextPlotPrice(session);
+    const unowned: TileRect[] = [];
     for (let px = WORLD.x0 / WORLD.plotW; px < (WORLD.x0 + WORLD.width) / WORLD.plotW; px++) {
       for (let py = WORLD.y0 / WORLD.plotH; py < (WORLD.y0 + WORLD.height) / WORLD.plotH; py++) {
         if (session.ownedPlots.some((p) => p.px === px && p.py === py)) continue;
-        overlay.rect(px * WORLD.plotW * T, py * WORLD.plotH * T, WORLD.plotW * T, WORLD.plotH * T).fill({ color: 0x000000, alpha: 0.55 });
-        const t = new Text({ text: `Land Plot · ${money(price)}`, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 7, fill: 0x8fa8a0 } });
-        t.resolution = 4;
-        t.anchor.set(0.5);
-        t.position.set((px + 0.5) * WORLD.plotW * T, (py + 0.5) * WORLD.plotH * T);
-        plotLabels.addChild(t);
+        unowned.push({ x: px * WORLD.plotW, y: py * WORLD.plotH, w: WORLD.plotW, h: WORLD.plotH });
       }
     }
+    view.setOverlay(worldBounds, { w: WORLD.plotW, h: WORLD.plotH }, unowned, `Land Plot · ${money(nextPlotPrice(session))}`, session.layout.runways.flatMap(runwayEndZones));
   };
   const redraw = () => {
-    world.removeChild(airfield);
-    airfield.destroy({ children: true });
-    airfield = drawAirfield(session.layout);
-    world.addChildAt(airfield, 0);
+    view.setLayout(session.layout);
     drawOverlay();
   };
   drawOverlay();
 
   const drawGhost = () => {
-    ghost.clear();
-    ghostLabel.text = '';
-    if (moving) ghost.rect(moving.x * T, moving.y * T, moving.w * T, moving.h * T).stroke({ width: 0.8, color: 0xf0b54a });
-    if (!candidate) return;
-    const color = candidate.change.kind === 'remove' ? 0xff6b5e : candidate.check.ok ? 0x6fd08c : 0xff6b5e;
-    for (const r of candidate.rects) ghost.rect(r.x * T, r.y * T, r.w * T, r.h * T).fill({ color, alpha: 0.32 }).stroke({ width: 0.6, color });
+    ghostLabel.textContent = '';
+    if (!candidate) {
+      view.setGhost([], true, null, moving);
+      return;
+    }
     // the lead-in a Stand or Holding Bay will get, from the Taxiway tile in front into its centre
     const spot = candidate.change.kind === 'add' ? candidate.change.structure : candidate.change.kind === 'move' ? candidate.change.to : null;
+    let leadIn: { from: [number, number]; to: [number, number] } | null = null;
     if (spot && (spot.kind === 'stand' || spot.kind === 'holdingBay')) {
       const e = spotEntry(spot);
-      ghost.moveTo((e.x + 0.5) * T, (e.y + 0.5) * T).lineTo((spot.x + spot.w / 2) * T, (spot.y + spot.h / 2) * T)
-        .stroke({ width: 0.8, color: 0xf0d24a, cap: 'round' });
-      ghost.circle((e.x + 0.5) * T, (e.y + 0.5) * T, 1.2).fill(0xf0d24a);
+      leadIn = { from: [e.x + 0.5, e.y + 0.5], to: [spot.x + spot.w / 2, spot.y + spot.h / 2] };
     }
+    view.setGhost(candidate.rects, candidate.change.kind !== 'remove' && candidate.check.ok, leadIn, moving);
     const c = candidate.check;
     const r0 = candidate.rects[0]!;
-    ghostLabel.text = `${c.label} · ${c.cost < 0 ? `refund ${money(-c.cost)}` : money(c.cost)}${c.upkeep ? ` · ${c.upkeep > 0 ? '+' : '−'}${money(Math.abs(c.upkeep))}/Day` : ''}`;
-    ghostLabel.position.set(r0.x * T, Math.max(0, r0.y * T - 6));
+    ghostLabel.textContent = `${c.label} · ${c.cost < 0 ? `refund ${money(-c.cost)}` : money(c.cost)}${c.upkeep ? ` · ${c.upkeep > 0 ? '+' : '−'}${money(Math.abs(c.upkeep))}/Day` : ''}`;
+    const at = view.screenOf(r0.x, r0.y);
+    ghostLabel.style.left = `${Math.max(0, at.x)}px`;
+    ghostLabel.style.top = `${Math.max(0, at.y - 18)}px`;
   };
 
   const renderSide = () => {
@@ -420,13 +383,31 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     selectTool(tool === 'demolish' ? 'demolish' : null);
   };
 
-  const toTile = (e: FederatedPointerEvent): Tile => {
-    const p = world.toLocal(e.global);
-    return { x: Math.floor(p.x / T), y: Math.floor(p.y / T) };
-  };
-  app.stage.eventMode = 'static';
-  app.stage.hitArea = app.screen;
-  app.stage.on('pointerdown', (e: FederatedPointerEvent) => {
+  const toTile = (e: PointerEvent): Tile => view.tileAt(e.offsetX, e.offsetY) ?? { x: 0, y: 0 };
+  const canvas = view.canvas;
+  // left button (or one finger) builds; right / middle button, Shift-drag or two fingers move the map; the wheel or a pinch zooms
+  const pointers = new Map<number, { x: number; y: number }>();
+  let panning: { x: number; y: number } | null = null;
+  let pinch: { d: number; x: number; y: number } | null = null;
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    view.zoomAt(e.offsetX, e.offsetY, Math.exp(e.deltaY * 0.0015));
+    drawGhost();
+  }, { passive: false });
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      dragFrom = null;
+      return;
+    }
+    if (e.button === 1 || e.button === 2 || e.shiftKey) {
+      panning = { x: e.offsetX, y: e.offsetY };
+      return;
+    }
     const t = toTile(e);
     if (tool === 'taxiway') {
       dragFrom = t;
@@ -442,16 +423,40 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
       commit();
     }
   });
-  app.stage.on('pointermove', (e: FederatedPointerEvent) => {
+  canvas.addEventListener('pointermove', (e) => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()] as [{ x: number; y: number }, { x: number; y: number }];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      view.pan(mx - pinch.x, my - pinch.y);
+      view.zoomAt(mx, my, pinch.d / Math.max(d, 1));
+      pinch = { d, x: mx, y: my };
+      drawGhost();
+      return;
+    }
+    if (panning) {
+      view.pan(e.offsetX - panning.x, e.offsetY - panning.y);
+      panning = { x: e.offsetX, y: e.offsetY };
+      drawGhost();
+      return;
+    }
     if (tool && (tool !== 'taxiway' || dragFrom)) update(toTile(e));
   });
-  const finish = () => {
+  const finish = (e: PointerEvent) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (panning) {
+      panning = null;
+      return;
+    }
     if (!dragFrom) return;
     dragFrom = null;
     commit();
   };
-  app.stage.on('pointerup', finish);
-  app.stage.on('pointerupoutside', finish);
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
 
   const undo = () => {
     session = undoPending(session);
@@ -486,6 +491,17 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
       const v = variantsOf(shown)[n - 1];
       const b = v && variantsEl.querySelector<HTMLButtonElement>(`[data-variant="${v.id}"]`);
       if (v && b && !b.disabled) pickVariant(v.id);
+    } else if (e.key.startsWith('Arrow')) {
+      e.preventDefault();
+      const step = 80;
+      view.pan(e.key === 'ArrowLeft' ? step : e.key === 'ArrowRight' ? -step : 0, e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0);
+      drawGhost();
+    } else if (e.key === '+' || e.key === '=' || e.key === '-') {
+      view.zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, e.key === '-' ? 1 / 0.75 : 0.75);
+      drawGhost();
+    } else if (e.key === 'f' || e.key === 'F') {
+      view.refit();
+      drawGhost();
     } else if (e.key === 'Escape') {
       selectTool(null);
     } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
@@ -506,7 +522,7 @@ export async function mountBuildMode(root: HTMLElement, run: RunState, handlers:
     },
     destroy() {
       window.removeEventListener('keydown', onKey);
-      app.destroy(true, { children: true });
+      view.dispose();
     },
   };
 }
