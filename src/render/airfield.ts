@@ -517,12 +517,8 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   return { lights, litGlass, floods };
 }
 
-let seams: { scene: Scene; w: number; mat: PBRMaterial }[] = [];
 /** Standing-seam metal for curved roofs, the seams about every 2 m. */
 function seamRoofFor(scene: Scene, w: number): PBRMaterial {
-  seams = seams.filter((x) => !x.mat.isDisposed());
-  const hit = seams.find((x) => x.scene === scene && x.w === w);
-  if (hit) return hit.mat;
   const m = pbr(scene, 'seam-roof', '#ffffff', 0.35, 0.6);
   m.albedoTexture = canvasTexture(scene, 'seam-roof', 256, 64, (g, W, H) => {
     g.fillStyle = '#a3a8ae';
@@ -536,7 +532,6 @@ function seamRoofFor(scene: Scene, w: number): PBRMaterial {
   }, { u: Math.max(1, w / 32) });
   m.backFaceCulling = false;
   m.twoSidedLighting = true;
-  seams.push({ scene, w, mat: m });
   return m;
 }
 
