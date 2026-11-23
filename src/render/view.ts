@@ -452,7 +452,7 @@ export class AirportView {
     this.moved = true;
     const c = this.camera;
     c.alpha = alpha;
-    c.beta = clamp(beta, c.lowerBetaLimit, c.upperBetaLimit);
+    c.beta = clamp(beta, c.lowerBetaLimit ?? 0, c.upperBetaLimit ?? Math.PI / 2);
     c.radius = Math.max(radius, c.lowerRadiusLimit ?? 0);
     c.setTarget(new Vector3(x, 0, -y));
   }
