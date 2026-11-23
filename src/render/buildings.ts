@@ -8,6 +8,7 @@
 import { Color3, Matrix, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, TransformNode, Vector3, type Scene } from '@babylonjs/core';
 import { TILE_SIZE, type Facing, type TileRect } from '../sim/layout';
 import { pbr } from './aircraftModels';
+import { nameAspect, paintName } from './lettering';
 import { canvasTexture, rng, speckle } from './textures';
 import { METRE } from './units';
 
@@ -25,8 +26,8 @@ export interface BuildingKit {
   readonly lamp: (name: string, hex: string, day?: number) => StandardMaterial;
   /** Flood masts (world units); the view turns the first few into real lights. */
   readonly floods: Vector3[];
-  /** A name painted flat at `height` (world units) over sim point (x, y). */
-  readonly label: (text: string, x: number, y: number, w: number, h: number, height: number, colour: string) => void;
+  /** A building name painted flat at `height` (world units) over sim point (x, y), turned by `yaw` (radians). */
+  readonly label: (text: string, x: number, y: number, w: number, h: number, height: number, colour: string, yaw?: number) => void;
 }
 
 /** Materials shared by every building of one airfield. */
@@ -320,10 +321,43 @@ class Frame {
   world(x: number, y: number, z: number): Vector3 {
     return Vector3.TransformCoordinates(new Vector3(x, y, z), this.root.computeWorldMatrix(true));
   }
-  /** Sim coordinates of a local point, for labels. */
+  /**
+   * A name painted flat along the building's length, centred on a local point. It reads left to right from the south
+   * (buildings facing north or south) or bottom to top (facing east or west), never upside down.
+   */
   label(text: string, x: number, y: number, z: number, w: number, h: number, colour = '#4a4f55'): void {
     const p = this.world(x, y, z);
-    this.kit.label(text, p.x, -p.z, w * METRE, h * METRE, p.y + 0.03, colour);
+    const yaw = this.side === 'east' || this.side === 'west' ? -Math.PI / 2 : 0;
+    this.kit.label(text, p.x, -p.z, w * METRE, h * METRE, p.y + 0.03, colour, yaw);
+  }
+  /**
+   * A name sign on short posts on a roof edge, facing the airside: white capitals on a dark plate `h` m tall (as wide
+   * as the name needs), centred over the local point on the roof; the letters glow at night.
+   */
+  sign(text: string, x: number, y: number, z: number, h: number, plateMat: PBRMaterial): void {
+    const style = { weight: 600, spacing: 0.18, fill: 0.62 };
+    const w = h * nameAspect(text, style, 0.45);
+    const name = `sign-${text}-${this.s.x}-${this.s.y}`;
+    const W = 1024;
+    const H = Math.max(32, Math.round((W * h) / w / 8) * 8);
+    const draw = (bg: string, fg: string) => (g: CanvasRenderingContext2D) => {
+      g.fillStyle = bg;
+      g.fillRect(0, 0, W, H);
+      paintName(g, text, W, H, fg, style);
+    };
+    const mat = pbr(this.kit.scene, name, '#ffffff', 0.35, 0.1);
+    mat.albedoTexture = canvasTexture(this.kit.scene, name, W, H, draw('#22272d', '#f4f5f2'), { clamp: true });
+    mat.emissiveTexture = canvasTexture(this.kit.scene, `${name}-lit`, W, H, draw('#000000', '#fff6e4'), { clamp: true });
+    mat.emissiveColor = Color3.Black();
+    this.kit.litGlass.push(mat);
+    const lift = 0.7;
+    for (const sx of [-w / 3, 0, w / 3]) this.box(0.3, lift + 0.2, 0.3, x + sx, y - 0.1, z + 0.25, plateMat);
+    this.box(w + 0.3, h + 0.3, 0.35, x, y + lift, z + 0.2, plateMat);
+    const face = MeshBuilder.CreatePlane('sign', { width: w, height: h }, this.kit.scene);
+    face.position.set(x, y + lift + 0.15 + h / 2, z - 0.02);
+    face.parent = this.root;
+    face.material = mat;
+    face.isPickable = false;
   }
   finish(): void {
     const groups = new Map<number, Mesh[]>();
@@ -396,7 +430,13 @@ export function buildTerminal(kit: BuildingKit, s: TileRect, airside: Facing): v
   }
   f.lamps(M.warmLamp, dl, 0.5);
   f.box(L, 0.25, 3, 0, 0, zN - 5, M.offWhite); // drop-off kerb
-  if (L >= 80) f.label('TERMINAL', 0, ry + 2.02, (zh + zl) / 2 + 2, Math.min(L * 0.55, 120), 14);
+  if (L >= 80) {
+    // the roof name between the middle and landside skylight bands, and a name sign on the airside roof edge
+    const za = (zh + zl) / 2 + 1.5;
+    const zb = zl - 7.5;
+    f.label('TERMINAL', 0, ry + 2.02, (za + zb) / 2, Math.min(L * 0.6, 110), Math.min(11, zb - za - 1));
+    f.sign('TERMINAL', 0, ry + 2, d0 + 1.2, 4.2, M.darkSteel);
+  }
   for (const x of [-L / 2 - 6, L / 2 + 6]) kit.floods.push(f.world(x, 28, zS - 6));
   f.finish();
 }
@@ -453,7 +493,13 @@ export function buildCargoHub(kit: BuildingKit, s: TileRect, airside: Facing): v
   f.lamps(M.sodium, wp, 0.8);
   if (hallL > 30) for (const z of [zf + 12, (zf + zN) / 2 + 4, zN - 8]) f.box(hallL - 14, 0.4, 2.4, hx - 3, hh, z, M.skylight);
   for (let k = 0; k < Math.floor(hallL / 30); k++) f.box(4, 1.6, 3, -L / 2 + 12 + k * 30, hh, zN - 4, M.hvac);
-  if (L >= 80) f.label('CARGO', hx, hh + 0.45, (zf + zN) / 2 + 2, Math.min(hallL * 0.5, 50), 12, '#3a3f45');
+  if (L >= 80) {
+    // the roof name between the first two skylight bands (clear of the high-bay), and a sign on the airside roof edge
+    const za = zf + 13.2;
+    const zb = (zf + zN) / 2 + 2.8;
+    f.label('CARGO', hx, hh + 0.45, (za + zb) / 2, Math.min(hallL * 0.55, 60), Math.min(11, zb - za - 1), '#3a3f45');
+    f.sign('CARGO', hx, hh + 0.2, zf + 0.6, 3.6, M.darkSteel);
+  }
   for (const x of [-L / 2 - 6, L / 2 + 6]) kit.floods.push(f.world(x, 28, zS - 6));
   f.finish();
 }

@@ -193,7 +193,10 @@ const takeBest = async (name, aim, clean) => {
       view.lookAt(c.target.x, -c.target.z, c.radius * aim.r, aim.a, aim.b);
       return true;
     }
-    const f = aim.what === 'parked' ? pick(['onStand']) : aim.what === 'moving' ? pick(['taxiIn', 'taxiOut', 'holdShort']) : null;
+    // parked: one that has stood a while (so its vehicles are out and a jet bridge docked), not a Small one if any
+    const small = (f) => (f.type.startsWith('C208') ? 1 : 0);
+    const settled = () => flights.filter((f) => f.phase === 'onStand').sort((a, b) => small(a) - small(b) || a.phaseStart - b.phaseStart || rank(a) - rank(b))[0];
+    const f = aim.what === 'parked' ? settled() : aim.what === 'moving' ? pick(['taxiIn', 'taxiOut', 'holdShort']) : null;
     const at = f ? f.position : terminal ? centre(terminal) : null;
     if (!at) return false;
     view.lookAt(at.x, at.y, aim.r, aim.a, aim.b);
