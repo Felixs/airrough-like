@@ -383,7 +383,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     litGlass,
     lamp: lightMat,
     floods,
-    label: (text, x, y, w, h, height, colour) => void decal(scene, text, x, y, w, h, height, colour, null),
+    label: (text, x, y, w, h, height, colour) => decal(scene, text, x, y, w, h, height, colour, null),
   };
   const metal = pbr(scene, 'metal', '#b9bec5', 0.32, 0.8);
   for (const s of layout.structures) {

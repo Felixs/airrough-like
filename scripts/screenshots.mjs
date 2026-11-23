@@ -244,7 +244,7 @@ const showRun = () => lp.evaluate(() => window.aab.showLayout());
 const builtByDay = async () => {
   await showBuilt();
   await best('wings-day', tile(24, 6, 120, -Math.PI / 2 + 0.45));
-  await best('support-day', tile(33, 35, 125, -Math.PI / 2 + 0.35, 1.0));
+  await best('support-day', tile(34.5, 35, 135, -Math.PI / 2 + 0.3, 1.0));
   await best('facing-north', tile(15, 33, 105, Math.PI / 2 - 0.45));
   await best('facing-east', tile(48, 3.5, 100, 0.35));
   await best('facing-west', tile(57, 8.5, 105, Math.PI - 0.35));
@@ -252,7 +252,7 @@ const builtByDay = async () => {
 };
 const builtByNight = async () => {
   await showBuilt();
-  await best('support-night', tile(33, 35, 125, -Math.PI / 2 + 0.35, 1.0));
+  await best('support-night', tile(34.5, 35, 135, -Math.PI / 2 + 0.3, 1.0));
   await best('wings-night', tile(24, 6, 120, -Math.PI / 2 + 0.45));
   await showRun();
 };
