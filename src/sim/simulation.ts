@@ -174,6 +174,10 @@ export interface ScheduledFlight {
   readonly fuelMinutes?: number;
   /** Overnight aircraft only: whether yesterday's unloading finished (default true). */
   readonly arrivalFeePaid?: boolean;
+  /** × its fees from Airline Contracts (default 1). */
+  readonly feeBonus?: number;
+  /** × its Turnaround from Airline Contracts (default 1). */
+  readonly turnaroundBonus?: number;
 }
 
 export type FlightPhase = 'scheduled' | 'holding' | 'landing' | 'taxiIn' | 'inBay' | 'onStand' | 'taxiOut' | 'holdShort' | 'takeoff' | 'departed' | 'crashed' | 'diverted';
@@ -235,6 +239,8 @@ export interface Simulation {
   readonly movements: number;
   /** Arrival and Departure Fees earned today. */
   readonly fees: number;
+  /** The part of today's fees that Airline Contracts added. */
+  readonly contractFees?: number;
   /** Movements by hour of the Day (index 0–23). */
   readonly movementsByHour: readonly number[];
   /** Crashes today. */
@@ -365,6 +371,7 @@ export function createSimulation(setup: SimulationSetup): Simulation {
     money: setup.money ?? 0,
     movements: 0,
     fees: 0,
+    contractFees: 0,
     movementsByHour: new Array<number>(24).fill(0),
     crashes: 0,
     diversions: 0,
@@ -445,7 +452,7 @@ function alongRoute(route: readonly Tile[], progress: number, fallbackHeading: n
 const accessOf = (sim: Simulation, f: Flight): RunwayAccess | undefined => sim.network.runways.find((a) => a.index === f.runway);
 
 function turnaroundMinutes(flight: Flight, stand: Stand, sim?: Simulation): number {
-  const base = TIMINGS.turnaroundMinutes[AIRCRAFT_TYPES[flight.type].size] * (sim?.turnaroundFactor ?? 1);
+  const base = TIMINGS.turnaroundMinutes[AIRCRAFT_TYPES[flight.type].size] * (sim?.turnaroundFactor ?? 1) * (flight.turnaroundBonus ?? 1);
   // Cargo apron lighting: cargo Turnarounds that start after dusk are quicker
   const night = sim && AIRCRAFT_TYPES[flight.type].purpose === 'cargo' && isDark(flight.phaseStart) ? sim.cargoNightTurnaroundFactor : 1;
   const placed = (stand.placement === 'remote' ? base * TIMINGS.remoteStandFactor : base) * night;
@@ -711,9 +718,11 @@ function countMovement(sim: MutableSim, now: number): void {
 }
 
 function earnFee(sim: MutableSim, f: Flight): void {
-  const fee = Math.round(AIRCRAFT_TYPES[f.type].fee * sim.feeFactor);
+  const plain = Math.round(AIRCRAFT_TYPES[f.type].fee * sim.feeFactor);
+  const fee = Math.round(AIRCRAFT_TYPES[f.type].fee * sim.feeFactor * (f.feeBonus ?? 1));
   sim.money += fee;
   sim.fees += fee;
+  sim.contractFees = (sim.contractFees ?? 0) + fee - plain;
 }
 
 function logEvent(sim: MutableSim, now: number, kind: SimEvent['kind'], f: Flight, blockedUntil?: number): void {
