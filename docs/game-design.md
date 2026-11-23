@@ -268,18 +268,18 @@ cooldown (`simulation.ts → ACTIONS`).
 - **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
   their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
   yellow one. Contact Stands at a Terminal get a jet bridge (light grey): a round rotunda on a column by the building,
-  on the left of a parked aircraft, with a dark roof, a window band and a steel service stair down to the apron along
+  on the left of a parked aircraft, with a steel roof cap, a window band and a steel service stair down to the apron along
   the building; from it two telescoping tunnel sections, each with a window strip (the outer one, towards the
   aircraft, a little larger and sliding over the inner one, so the step between them shows), a drive bogie (two legs
-  down to a beam on four wheels) under the outer section, dark ribbed bellows and a cab with a window band and a dark
-  canopy. At rest it points out along the Stand, angled away from it; once a Medium or Large aircraft has stopped on
+  down to a beam on four wheels) under the outer section, dark grey ribbed bellows and a cab with a window band and a
+  dark grey canopy. At rest it points out along the Stand, angled away from it; once a Medium or Large aircraft has stopped on
   the Stand it swings out until the canopy meets the aircraft's front left door, the sections lengthening or
   shortening to reach it, and swings back when the aircraft leaves (Small aircraft use stairs: the bridge stays at
   rest). The windows glow warm at night. While an aircraft is on its Stand, ground vehicles stand round it, at real
   size even when the aircraft is drawn smaller: a yellow towbar pushback tractor at the nose (long and low, cab at the
   far end, towbar to the nose gear); per hold a white belt loader (cab beside the low end of a conveyor with yellow
   rails rising towards the aircraft on struts), a yellow baggage tractor (bonnet, open cab with roof) and two to four
-  grey carts each carrying an aluminium container with a cut corner and a dark net door; often a white ground power
+  grey carts each carrying an aluminium container with a cut corner and a grey net door; often a white ground power
   trailer with louvres; and for Medium and Large aircraft often a fuel truck under the wing (white cab, aluminium tank
   with ribs and a rail, hose cabinet at the back) and a catering truck at the rear door (white cab, a white box with an
   orange band raised on a scissor lift, a railed platform in front). Every vehicle has a window band round its cab,

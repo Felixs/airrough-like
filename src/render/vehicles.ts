@@ -7,7 +7,7 @@ import { Mesh, MeshBuilder, TransformNode, type Scene } from '@babylonjs/core';
 import { pbr } from './aircraftModels';
 
 export type VehicleKind = 'tug' | 'cart' | 'belt' | 'fuel' | 'cater' | 'push' | 'gpu';
-type Paint = 'yellow' | 'orange' | 'white' | 'grey' | 'alu' | 'dark' | 'glass';
+type Paint = 'yellow' | 'orange' | 'white' | 'grey' | 'alu' | 'net' | 'dark' | 'glass';
 
 /** GSE paints: colour, roughness, metalness, clear coat. */
 const PAINTS: Record<Paint, readonly [string, number, number, boolean]> = {
@@ -15,9 +15,10 @@ const PAINTS: Record<Paint, readonly [string, number, number, boolean]> = {
   orange: ['#e8711c', 0.42, 0, true],
   white: ['#eef0f1', 0.42, 0, true],
   grey: ['#7d848c', 0.5, 0.35, false],
-  alu: ['#c6cacf', 0.3, 0.75, false],
+  alu: ['#d3d7dc', 0.38, 0.45, false],
+  net: ['#4b5560', 0.9, 0, false],
   dark: ['#1b1d21', 0.75, 0, false],
-  glass: ['#141c26', 0.06, 0.2, false],
+  glass: ['#33495d', 0.1, 0.3, false],
 };
 
 /** Collects a vehicle's parts by paint while it is built. */
@@ -108,7 +109,7 @@ function cart(p: Parts): void {
   p.box('alu', 2.3, 1.05, 1.5, 0, 1.15, 0);
   p.box('alu', 2.3, 0.55, 1.05, 0, 1.95, 0.22);
   p.box('alu', 2.3, 0.71, 0.05, 0, 1.95, -0.53, { rx: 0.68 }); // the cut corner
-  p.box('dark', 2.0, 1.25, 0.03, 0, 1.35, 0.76);
+  p.box('net', 2.0, 1.25, 0.03, 0, 1.35, 0.76);
   p.box('orange', 2.32, 0.08, 1.52, 0, 0.66, 0); // base rail
 }
 

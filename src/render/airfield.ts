@@ -82,7 +82,8 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   const bridgeMat = pbr(scene, 'jet-bridge', '#c9ccd0', 0.4, 0.3);
   const metalMat = pbr(scene, 'bridge-metal', '#b9bec5', 0.32, 0.8);
   const darkMat = pbr(scene, 'bridge-dark', '#1a1c20', 0.65);
-  const bridgeGlass = pbr(scene, 'bridge-glass', '#1d2a36', 0.08, 0.4);
+  const bridgeGlass = pbr(scene, 'bridge-glass', '#3a5165', 0.12, 0.35);
+  const bellowsMat = pbr(scene, 'bridge-bellows', '#454a51', 0.8);
   bridgeGlass.emissiveTexture = canvasTexture(scene, 'bridge-glass-lit', 4, 4, (g, W, H) => {
     g.fillStyle = '#b89a70';
     g.fillRect(0, 0, W, H);
@@ -364,7 +365,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       dash(ou, ov, ou, ov + oh);
       // jet bridge from the Terminal to Contact Stands
       if (s.placement === 'contact' && layout.structures.some((o) => o.kind === 'terminal' && sharesEdge(o, s))) {
-        bridges.set(s.id, jetBridge(scene, s, ctx.caster, { bridge: bridgeMat, metal: metalMat, dark: darkMat, glass: bridgeGlass }));
+        bridges.set(s.id, jetBridge(scene, s, ctx.caster, { bridge: bridgeMat, metal: metalMat, dark: darkMat, glass: bridgeGlass, bellows: bellowsMat }));
       }
     } else {
       const corners = [f.p(1, 1), f.p(f.across - 1, 1), f.p(f.across - 1, f.depth - 1), f.p(1, f.depth - 1)];
@@ -417,7 +418,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
  * larger), a drive bogie on two legs under the outer section, ribbed bellows and a cab with a canopy. At rest it points
  * out along the Stand, angled away; docked, the canopy meets the door. Sizes in world units (2 m each).
  */
-function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: Mesh) => void, mat: { bridge: PBRMaterial; metal: PBRMaterial; dark: PBRMaterial; glass: PBRMaterial }): JetBridge {
+function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: Mesh) => void, mat: { bridge: PBRMaterial; metal: PBRMaterial; dark: PBRMaterial; glass: PBRMaterial; bellows: PBRMaterial }): JetBridge {
   // directions in sim coordinates (x east, y south): `back` from the open side to the Terminal, `left` of a parked aircraft
   const open = { south: [0, 1], north: [0, -1], east: [1, 0], west: [-1, 0] }[s.facing ?? 'south'] as [number, number];
   const back: [number, number] = [-open[0], -open[1]];
@@ -464,7 +465,7 @@ function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: 
   drum.position.set(rx, H, -ry);
   const band = cyl(2.44, 0.38, mat.glass);
   band.position.set(rx, H + 0.25, -ry);
-  const cap = cyl(2.6, 0.16, mat.dark);
+  const cap = cyl(2.6, 0.16, mat.metal);
   cap.position.set(rx, H + 1.03, -ry);
   fixed.push(column, drum, band, cap);
   const stair = new TransformNode('jet-bridge-stair', scene);
@@ -508,16 +509,16 @@ function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: 
   box(1.64, 0.32, 0.96, mat.glass, outer).position.y = 0.22;
   const ribs: Mesh[] = [];
   for (let k = 0; k < 5; k++) {
-    const r = box(k % 2 ? 1.62 : 1.76, k % 2 ? 1.62 : 1.76, 0.1, mat.dark);
+    const r = box(k % 2 ? 1.62 : 1.72, k % 2 ? 1.62 : 1.72, 0.1, mat.bellows);
     r.position.z = 0.05 + k * 0.12;
     r.computeWorldMatrix(true);
     ribs.push(r);
   }
   const bellows = Mesh.MergeMeshes(ribs, true, true)!;
-  make(bellows, mat.dark, arm);
+  make(bellows, mat.bellows, arm);
   const cab = box(2.1, 1.7, 2.1, mat.bridge);
   box(2.14, 0.5, 2.14, mat.glass, cab).position.y = 0.32;
-  const canopy = box(1.5, 1.55, 0.2, mat.dark, cab);
+  const canopy = box(1.5, 1.55, 0.2, mat.bellows, cab);
   canopy.position.z = 1.1; // the cab's +z faces the door
   // drive bogie: two legs from the outer tunnel down to a beam on a wheeled bogie
   const bogie = new TransformNode('jet-bridge-bogie', scene);
