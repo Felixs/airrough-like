@@ -42,7 +42,8 @@ export class AirportView {
   private ssao: SSAO2RenderingPipeline | null = null;
   private floods: PointLight[] = [];
   /** Live Day: where "Reset view" goes back to; null until the first framing. */
-  private home: { target: Vector3; radius: number } | null = null;
+  private home: TileRect | null = null;
+  private moved = false;
   private airfield: Airfield | null = null;
   private airfieldItems: Array<{ dispose(): void }> = [];
   private layout: AirportLayout | null = null;
@@ -79,9 +80,11 @@ export class AirportView {
       cam.pinchDeltaPercentage = 0.004;
       cam.panningSensibility = 40;
       cam.attachControl(this.canvas, true);
+      // once the Player moves the camera, resizing the window no longer re-frames it
+      for (const ev of ['pointerdown', 'wheel'] as const) this.canvas.addEventListener(ev, () => (this.moved = true), { passive: true });
       cam.onViewMatrixChangedObservable.add(() => this.clampTarget());
       scene.fogMode = Scene.FOGMODE_EXP2;
-      scene.fogDensity = 0.0009;
+      scene.fogDensity = 0.00035;
       const csm = new CascadedShadowGenerator(2048, this.sun);
       csm.numCascades = 3;
       csm.lambda = 0.85;
@@ -186,15 +189,8 @@ export class AirportView {
   fit(area: TileRect): void {
     this.area = area;
     if (this.mode === 'live') {
-      const c = this.camera;
-      const aspect = this.aspect();
-      const half = Math.tan(c.fov / 2);
-      const w = area.w * T;
-      const d = area.h * T;
-      const radius = Math.max(w / 2 / (half * aspect), d / 2 / half) * 0.85;
       const first = !this.home;
-      this.home = { target: new Vector3((area.x + area.w / 2) * T, 0, -(area.y + area.h / 2) * T), radius };
-      c.upperRadiusLimit = radius * 3;
+      this.home = area;
       if (first) this.resetCamera();
       return;
     }
@@ -305,16 +301,24 @@ export class AirportView {
   private resize(): void {
     this.engine.resize();
     if (this.mode === 'build' && this.area) this.fit(this.area);
+    if (this.mode === 'live' && !this.moved) this.resetCamera();
   }
 
   /** Live Day: back to the starting view over the whole airport. */
   resetCamera(): void {
-    if (!this.home) return;
+    const a = this.home;
+    if (!a) return;
+    this.moved = false;
     const c = this.camera;
+    const aspect = Math.max(0.5, this.aspect());
+    const half = Math.tan(c.fov / 2);
+    // close enough that the airport fills the view (its edges may run off the sides)
+    const radius = Math.max((a.w * T) / 2 / (half * aspect), (a.h * T) / 2 / half) * 0.7;
+    c.upperRadiusLimit = radius * 3.5;
     c.alpha = -Math.PI / 2 - 0.35;
     c.beta = 0.95;
-    c.radius = this.home.radius;
-    c.setTarget(this.home.target.clone());
+    c.radius = radius;
+    c.setTarget(new Vector3((a.x + a.w / 2) * T, 0, -(a.y + a.h / 2) * T));
   }
 
   /** Keeps the free camera over the map. */
