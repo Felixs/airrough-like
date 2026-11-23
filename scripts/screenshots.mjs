@@ -120,18 +120,36 @@ await lp.click('.start');
 await lp.uncheck('#auto-slow');
 await lp.addStyleTag({ content: '.clean :is(#top-bar, .rail, .panel, .hours, .chips) { visibility: hidden !important; }' });
 const lookClock = () => lp.$eval('#clock', (el) => el.textContent ?? '');
+// speed buttons are pressed in the page itself: the Playwright click waits for frames, which are slow here
+const speedTo = async (s) => {
+  const cover = await lp.$eval(`[data-speed="${s}"]`, (b) => {
+    const r = b.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    b.click();
+    return top && top !== b && !b.contains(top) ? `${top.tagName}.${top.className}` : '';
+  });
+  if (cover) console.warn(`speed ${s}: the button is covered by ${cover}`);
+};
 const playTo = async (time) => {
-  await lp.click('[data-speed="8"]');
+  await speedTo('8');
   const start = Date.now();
   while ((await lookClock()) < time && Date.now() - start < 240_000) {
     const ack = await lp.$('#alert-banner:not([hidden]) button[data-ack]');
     if (ack) await ack.click();
     await lp.waitForTimeout(150);
   }
-  await lp.click('[data-speed="0"]');
+  await speedTo('0');
 };
 /** Aims the camera (null: the starting view over the whole airport) and saves a picture at High quality. */
-const best = async (name, aim = null, clean = true) => {
+const best = (name, aim = null, clean = true) =>
+  takeBest(name, aim, clean).catch(async (e) => {
+    console.error(`look/${name} failed: ${e.message}`);
+    await lp.evaluate(() => {
+      window.aab.view.setQuality('low');
+      document.documentElement.classList.remove('clean');
+    });
+  });
+const takeBest = async (name, aim, clean) => {
   const ok = await lp.evaluate(([aim, clean]) => {
     document.documentElement.classList.toggle('clean', clean);
     const { view, sim, layout } = window.aab;
@@ -183,9 +201,9 @@ await playTo('12:30');
 await best('3-midday', null, false);
 await best('terminal-midday', terminal(-Math.PI / 2 + 0.6));
 // wait at 1x for an aircraft on the move
-await lp.click('[data-speed="1"]');
+await speedTo('1');
 await lp.waitForFunction(() => window.aab.sim().flights.some((f) => f.position && ['taxiIn', 'taxiOut', 'holdShort'].includes(f.phase)), null, { timeout: 120_000, polling: 200 }).catch(() => {});
-await lp.click('[data-speed="0"]');
+await speedTo('0');
 await best('taxiing-midday', { what: 'moving', r: 40, a: -Math.PI / 2 + 0.9, b: 1.2 });
 await playTo('19:15');
 await best('4-evening', null, false);
