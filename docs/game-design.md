@@ -253,7 +253,12 @@ cooldown (`simulation.ts → ACTIONS`).
   (Controls). Scale: a tile is 16 m, so Medium aircraft fit their 3-tile Stands at real size.
 - **Lighting:** physically based materials (painted metal with a clear coat, glass, concrete, grass), a sun that moves
   from east to west through the Day and casts real shadows, sky reflections on paint and glass, tone mapping and a
-  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion).
+  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion). The sun
+  is the strong light and the sky only a weaker, cooler fill, so sunlit and shaded sides differ clearly. Glazing is
+  tinted mirror glass: by day it shows the sky (lighter towards the top of each pane, pale blue-grey on the façades,
+  pale green on the Tower cab) with its bars and floor slabs as matt paint; at night the lit interior shows through.
+  The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and dull ground
+  colour below the horizon.
 - **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
   for the landing pilot. Taxiways are one paved surface of light concrete slabs, the same as the aprons and Stands (only
@@ -295,15 +300,24 @@ cooldown (`simulation.ts → ACTIONS`).
     (white tanks with a blue band in a bund wall, a pipe rack and a pump house); De-icing Pad (blue-lined pad, two
     boom trucks, glycol tanks).
   - Flood masts stand at the front corners of Terminals and Cargo Hubs; at night their heads glow and the first four
-    light the apron round them.
+    light the apron round them (real lights, so aircraft and vehicles there are lit too).
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
 - **Runway lights follow the surface:** none on Grass and Asphalt; white edge and green threshold lights when Lit;
   approach lights added with ILS.
 - **Day and night:** during the Live Day the light follows the clock (`clock.ts → daylight`): dark until 05:30, a warm
-  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. At night the sun gives
-  way to dim blue moonlight, and lights, lit windows and glass glow. Plan Mode and Build Mode are in daylight.
+  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. The sun rises in the
+  east at 06:00 about 5° high, peaks near 58° at 13:00 and sets in the west at 20:00. Golden hour follows the sun's
+  height (strongest below about 12°, gone above about 34°, so roughly 06:00–08:00 and 18:00–20:00): the sunlight turns
+  gold and stays strong, so shadows are long and crisp and the walls facing the sun glow, while the sky overhead stays
+  blue (a cool fill in the shadows) and only the horizon turns gold. The haze in the distance is pale blue by day and a
+  light peach at golden hour (never brown), slightly thinner then; at night it is dark blue. Midday has a little more
+  contrast than the rest of the Day. At night the sun gives way to dim blue moonlight, and lights, lit windows and
+  glass glow, and pools of warm light lie on the ground: a wide one under every flood mast, a softer one on every
+  Stand and a row of small ones along each side of a building that meets paving. The pools are painted on the ground,
+  not real lights (aircraft over them are not lit by them, and anything standing on them hides them); they fade in
+  with the lit windows at dusk and out at dawn. Plan Mode and Build Mode are in daylight.
 - **Aircraft** (`render/aircraftModels.ts`) are 3D models built from each type's real dimensions, with a painted
   livery: Caravan (high wing, nose propeller; the freighter with a belly pod), Q400 (high wing, two propellers,
   T-tail), A320 (rounded nose, sharklets), B737 (pointed nose, split-scimitar winglets), A350 (curled wingtips, dark
