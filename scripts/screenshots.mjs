@@ -107,6 +107,7 @@ await page.screenshot({ path: out('day-report') });
 // The Day plays at Low quality (software rendering is slow); each picture switches to High and waits for it to draw.
 const look = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1.5 });
 const lp = await look.newPage();
+lp.setDefaultTimeout(180_000); // a frame at the best quality takes seconds with software rendering
 lp.on('pageerror', (e) => console.error('page error:', e.message));
 await lp.goto(`${url}?seed=7&debug&quality=low`);
 await lp.waitForSelector('.menu-card');
@@ -152,7 +153,7 @@ const best = async (name, aim = null, clean = true) => {
       view.lookAt(c.target.x, -c.target.z, c.radius * aim.r, aim.a, aim.b);
       return true;
     }
-    const f = aim.what === 'parked' ? pick(['onStand']) : aim.what === 'moving' ? pick(['taxiIn', 'taxiOut', 'holdShort', 'landing', 'takeoff']) : null;
+    const f = aim.what === 'parked' ? pick(['onStand']) : aim.what === 'moving' ? pick(['taxiIn', 'taxiOut', 'holdShort']) : null;
     const at = f ? f.position : terminal ? centre(terminal) : null;
     if (!at) return false;
     view.lookAt(at.x, at.y, aim.r, aim.a, aim.b);
@@ -181,6 +182,10 @@ await best('overhead', { what: 'airport', r: 1.1, a: -Math.PI / 2, b: 0.12 });
 await playTo('12:30');
 await best('3-midday', null, false);
 await best('terminal-midday', terminal(-Math.PI / 2 + 0.6));
+// wait at 1x for an aircraft on the move
+await lp.click('[data-speed="1"]');
+await lp.waitForFunction(() => window.aab.sim().flights.some((f) => f.position && ['taxiIn', 'taxiOut', 'holdShort'].includes(f.phase)), null, { timeout: 120_000, polling: 200 }).catch(() => {});
+await lp.click('[data-speed="0"]');
 await best('taxiing-midday', { what: 'moving', r: 40, a: -Math.PI / 2 + 0.9, b: 1.2 });
 await playTo('19:15');
 await best('4-evening', null, false);
