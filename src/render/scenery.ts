@@ -69,13 +69,13 @@ export function buildGrass(scene: Scene, ground: Area, airfield: Area, fields: F
     for (let i = 0; i < xs.length - 1; i++) {
       for (let j = 0; j < zs.length - 1; j++) {
         const [x0, x1, z0, z1] = [xs[i]!, xs[i + 1]!, zs[j]!, zs[j + 1]!];
-        g.globalAlpha = 0.75;
+        g.globalAlpha = 0.5;
         g.fillStyle = r() < 0.06 ? '#8f8c4e' : tones[Math.floor(r() * tones.length)]!;
         g.fillRect(px(x0), py(z1), px(x1) - px(x0), py(z0) - py(z1));
-        if (r() < 0.45) {
+        if (r() < 0.3) {
           const along = r() < 0.5;
           const step = 3 + r() * 3;
-          g.globalAlpha = 0.07;
+          g.globalAlpha = 0.025;
           for (let k = 0, v = along ? x0 : z0; v < (along ? x1 : z1); v += step, k++) {
             g.fillStyle = k % 2 ? '#ffffff' : '#000000';
             if (along) g.fillRect(px(v), py(z1), Math.max(1, px(v + step / 2) - px(v)), py(z0) - py(z1));
@@ -103,9 +103,9 @@ export function buildGrass(scene: Scene, ground: Area, airfield: Area, fields: F
     g.fillStyle = '#5e7c39';
     g.fillRect(px(airfield.x0), py(airfield.z1), px(airfield.x1) - px(airfield.x0), py(airfield.z0) - py(airfield.z1));
     g.globalAlpha = 1;
-    for (let k = 0, z = airfield.z0; z < airfield.z1; z += 7, k++) {
-      g.fillStyle = k % 2 ? 'rgba(255,255,230,0.06)' : 'rgba(0,20,0,0.06)';
-      g.fillRect(px(airfield.x0), py(Math.min(z + 7, airfield.z1)), px(airfield.x1) - px(airfield.x0), py(z) - py(Math.min(z + 7, airfield.z1)));
+    for (let k = 0, z = airfield.z0; z < airfield.z1; z += 10, k++) {
+      g.fillStyle = k % 2 ? 'rgba(255,255,230,0.025)' : 'rgba(0,20,0,0.025)';
+      g.fillRect(px(airfield.x0), py(Math.min(z + 10, airfield.z1)), px(airfield.x1) - px(airfield.x0), py(z) - py(Math.min(z + 10, airfield.z1)));
     }
     g.globalAlpha = 1;
   }, { clamp: true });
@@ -191,7 +191,7 @@ export function plantCountryside(ground: Area, fields: Fields, centre: readonly 
     for (let i = 0; i < xs.length - 1; i++) if (r() < 0.45) hedge(xs[i]!, zs[j]!, xs[i + 1]!, zs[j]!);
   }
   // copses: a dense middle and a ragged edge, broadleaves with some pines, bushes round the rim
-  for (let c = 0; c < 22; c++) {
+  for (let c = 0; c < 30; c++) {
     const cx = ground.x0 + r() * (ground.x1 - ground.x0);
     const cz = ground.z0 + r() * (ground.z1 - ground.z0);
     if (clear(cx, cz, 25)) continue;
@@ -206,7 +206,7 @@ export function plantCountryside(ground: Area, fields: Fields, centre: readonly 
     }
   }
   // single trees in the fields
-  for (let k = 0; k < 160; k++) {
+  for (let k = 0; k < 260; k++) {
     add(ground.x0 + r() * (ground.x1 - ground.x0), ground.z0 + r() * (ground.z1 - ground.z0), r() < 0.15 ? 'pine' : broadleaf(), 0.9 + r() * 0.6);
   }
   return out;
