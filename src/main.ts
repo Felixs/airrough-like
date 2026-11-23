@@ -275,9 +275,9 @@ async function start(): Promise<void> {
     const darkness = view.setTime(ended ? null : sim.clock.minute);
     view.aircraft.update(sim.flights, darkness, performance.now(), sim.clock.minute, stepFraction(sim.clock), view.cabinLight());
     // between Days the Day report and Plan Mode cover the map: keep its last picture instead of drawing, and build the
-    // aircraft models a Day may need, one at a time, so none stutters on first sight
+    // aircraft models a Day may need (and a spare aircraft of each), one every few frames, so none stutters on first sight
     view.paused = ended;
-    if (ended && ++frames % 20 === 0) view.aircraft.prewarmStep();
+    if (ended && ++frames % 5 === 0) view.aircraft.prewarmStep();
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
     if (!ended && isDayOver(sim.clock)) {

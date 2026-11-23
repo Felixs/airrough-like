@@ -24,8 +24,10 @@ export function mountTopBar(root: HTMLElement, initial: Speed, onSpeed: (speed: 
   return {
     setSpeed: select,
     showClock(text, dayOver) {
-      clock.textContent = text;
-      status.textContent = dayOver ? 'Day over' : '';
+      // called every frame: touch the page only when something changed
+      const now = dayOver ? 'Day over' : '';
+      if (clock.textContent !== text) clock.textContent = text;
+      if (status.textContent !== now) status.textContent = now;
     },
   };
 }
