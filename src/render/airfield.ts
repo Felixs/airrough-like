@@ -7,7 +7,8 @@ import { Color3, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, Vector3, type
 import { runwayNames, sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type RunwayName, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, TAXIWAY_INSET, taxiwayEdgeLights } from '../sim/markings';
 import { pbr } from './aircraftModels';
-import { groundLines, loft, meshFrom, orient, thinInstances, type Place } from './geometry';
+import { buildCargoHub, buildSupport, buildTerminal, buildTower, type BuildingKit } from './buildings';
+import { groundLines, meshFrom, orient, thinInstances, type Place } from './geometry';
 import { centreLinePaths } from './taxiLines';
 import { blots, canvasTexture, rng, speckle } from './textures';
 
@@ -374,122 +375,22 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   groundLines(scene, 'stand-lines', yellowLines, 0.6, Y.apron + Y.paint).material = yellow;
   groundLines(scene, 'stand-outlines', redDashes, 0.35, Y.apron + Y.paint).material = red;
 
-  // ---- buildings
-  const facade = facadeMaterial(scene, litGlass);
-  const ribbed = textured('ribbed', canvasTexture(scene, 'ribbed', 256, 64, (g, W, H) => {
-    g.fillStyle = '#b9c0c7';
-    g.fillRect(0, 0, W, H);
-    for (let x = 0; x < W; x += 6) {
-      g.fillStyle = 'rgba(0,0,0,0.13)';
-      g.fillRect(x, 0, 2, H);
-    }
-  }), 0.5, 0.4);
-  const roof = textured('roof', canvasTexture(scene, 'roof', 256, 256, (g, W, H) => {
-    g.fillStyle = '#8e9196';
-    g.fillRect(0, 0, W, H);
-    speckle(g, W, H, 4000, 0.15, 2, 9);
-    g.strokeStyle = 'rgba(0,0,0,0.15)';
-    for (let i = 0; i < W; i += 32) {
-      g.beginPath();
-      g.moveTo(i, 0);
-      g.lineTo(i, H);
-      g.stroke();
-    }
-  }), 0.8);
-  const concreteWall = pbr(scene, 'concrete-wall', '#b5b3ad', 0.85);
+  // ---- buildings (src/render/buildings.ts), each turned to face its Stands, else a Taxiway, else south
+  const kit: BuildingKit = {
+    scene,
+    caster: ctx.caster,
+    glow: ctx.glow,
+    litGlass,
+    lamp: lightMat,
+    floods,
+    label: (text, x, y, w, h, height, colour) => void decal(scene, text, x, y, w, h, height, colour, null),
+  };
   const metal = pbr(scene, 'metal', '#b9bec5', 0.32, 0.8);
-  const dark = pbr(scene, 'dark', '#1a1c20', 0.65);
-  const glass = pbr(scene, 'glass', '#10161e', 0.06, 0.1);
-
   for (const s of layout.structures) {
-    const b = box3(s);
-    if (s.kind === 'terminal' || s.kind === 'cargoHub') {
-      const h = s.kind === 'terminal' ? 7 : 9;
-      walls(scene, b, h, s.kind === 'terminal' ? facade : ribbed, 15).forEach(ctx.caster);
-      const top = MeshBuilder.CreateBox('roof', { width: b.w - 0.2, height: 0.6, depth: b.d - 0.2 }, scene);
-      top.position.set(b.cx, h + 0.3, b.cz);
-      top.material = roof;
-      top.receiveShadows = true;
-      ctx.caster(top);
-      if (s.kind === 'terminal') {
-        // a curved metal roof over the hall, overhanging the glass a little
-        const rings: Vector3[][] = [];
-        const us: number[] = [];
-        for (let i = 0; i <= 12; i++) {
-          const x = b.x0 - 1 + ((b.w + 2) * i) / 12;
-          const ring: Vector3[] = [];
-          for (let j = 0; j <= 12; j++) {
-            const a = (Math.PI * j) / 12;
-            ring.push(new Vector3(x, h + 0.6 + Math.sin(a) * Math.min(3, b.d * 0.12), b.cz - Math.cos(a) * (b.d / 2 + 2)));
-          }
-          rings.push(ring);
-          us.push(i / 12);
-        }
-        const arch = orient(loft(scene, 'terminal-roof', rings, us, null, false), (x, _y, z) => [x, 0, z]);
-        arch.material = seamRoofFor(scene, b.w);
-        arch.receiveShadows = true;
-        ctx.caster(arch);
-        for (let x = b.x0 + 2; x < b.x1 - 1; x += 6) {
-          for (const z of [b.z0 - 1.4, b.z1 + 1.4]) {
-            const col = MeshBuilder.CreateCylinder('canopy-column', { height: h + 1, diameter: 0.35, tessellation: 8 }, scene);
-            col.position.set(x, (h + 1) / 2, z);
-            col.material = metal;
-          }
-        }
-      }
-      for (const x of [b.x0 - 3, b.x1 + 3]) floods.push(new Vector3(x, 14, b.z0 - 3));
-      if (s.kind === 'cargoHub') {
-        const sky = MeshBuilder.CreateBox('skylight', { width: Math.max(1, b.w - 6), height: 0.2, depth: 1.4 }, scene);
-        sky.position.set(b.cx, h + 0.7, b.cz);
-        sky.material = glass;
-      }
-      for (let k = 0; k < Math.floor(b.w / 24); k++) {
-        const unit = MeshBuilder.CreateBox('hvac', { width: 3, height: 1.2, depth: 2 }, scene);
-        unit.position.set(b.x0 + 8 + k * 24, h + 1.2, b.z1 - 4);
-        unit.material = metal;
-        ctx.caster(unit);
-      }
-      if (s.w >= 5) decal(scene, s.kind === 'terminal' ? 'TERMINAL' : 'CARGO', b.cx, -b.cz + b.d * 0.22, Math.min(b.w * 0.6, 30), 4, h + 0.62, '#1f262a', null);
-    } else if (s.kind === 'atcTower') {
-      tower(scene, b, { concrete: concreteWall, metal, dark, glass: towerGlass(scene, litGlass) }).forEach(ctx.caster);
-      decal(scene, 'TWR', b.cx, -(b.z0) + 3, 8, 3, Y.apron, '#cfd8d4', null);
-    } else if (s.kind === 'supportBuilding') {
-      const label = { rampAgentStation: 'RAMP', adminOffice: 'ADMIN', airlineOffice: 'AIRLINE', fireRescueStation: 'FIRE & RESCUE', fuelFarm: 'FUEL', deIcingPad: 'DE-ICING' }[s.role];
-      if (s.role === 'fuelFarm') {
-        const n = Math.max(1, Math.floor(s.w / 1.2));
-        for (let k = 0; k < n; k++) {
-          const tank = MeshBuilder.CreateCylinder('tank', { diameter: Math.min(b.d * 0.7, (b.w / n) * 0.85), height: 4, tessellation: 24 }, scene);
-          tank.position.set(b.x0 + (k + 0.5) * (b.w / n), 2, b.cz);
-          tank.material = pbr(scene, 'tank', '#e9ebe8', 0.45, 0.2);
-          ctx.caster(tank);
-        }
-      } else if (s.role === 'deIcingPad') {
-        const pad = MeshBuilder.CreateGround('de-icing', { width: b.w, height: b.d }, scene);
-        pad.position.set(b.cx, Y.apron, b.cz);
-        pad.material = concrete;
-        pad.receiveShadows = true;
-        groundLines(scene, 'de-icing-lines', [[[b.x0 + 1, b.z0 + 1], [b.x1 - 1, b.z0 + 1], [b.x1 - 1, b.z1 - 1], [b.x0 + 1, b.z1 - 1], [b.x0 + 1, b.z0 + 1]]], 0.5, Y.apron + Y.paint).material = paint('paint-blue', '#7fc4ff');
-      } else {
-        const fire = s.role === 'fireRescueStation';
-        const depth = fire ? Math.max(T, b.d - 9) : b.d;
-        const body = MeshBuilder.CreateBox('support', { width: b.w, height: fire ? 4 : 3.5, depth }, scene);
-        body.position.set(b.cx, fire ? 2 : 1.75, b.z1 - depth / 2);
-        body.material = fire ? fireStationMaterial(scene) : concreteWall;
-        ctx.caster(body);
-        const lid = MeshBuilder.CreateBox('support-roof', { width: b.w + 0.3, height: 0.3, depth: depth + 0.3 }, scene);
-        lid.position.set(b.cx, (fire ? 4 : 3.5) + 0.15, b.z1 - depth / 2);
-        lid.material = fire ? pbr(scene, 'fire-roof', '#7a2a22', 0.7) : roof;
-        if (fire) {
-          for (const dx of [4, 11]) {
-            const truck = MeshBuilder.CreateBox('fire-truck', { width: 2.6, height: 1.6, depth: 5 }, scene);
-            truck.position.set(b.x0 + dx, 0.95, b.z0 + 4);
-            truck.material = pbr(scene, 'fire-truck', '#c62828', 0.4, 0, true);
-            ctx.caster(truck);
-          }
-        }
-      }
-      decal(scene, label, b.cx, -(b.z1) - 1.6, Math.min(b.w, 18), 2.4, Y.apron, '#cfd8d4', null);
-    }
+    if (s.kind === 'terminal') buildTerminal(kit, s, airsideOf(s, layout));
+    else if (s.kind === 'cargoHub') buildCargoHub(kit, s, airsideOf(s, layout));
+    else if (s.kind === 'atcTower') buildTower(kit, s, airsideOf(s, layout));
+    else if (s.kind === 'supportBuilding') buildSupport(kit, s, s.role, airsideOf(s, layout));
   }
   // flood masts (the heads glow at night; the view turns a few of them into real lights)
   if (floods.length) {
@@ -501,23 +402,6 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   return { lights, litGlass, floods, bridges };
 }
 
-/** Standing-seam metal for curved roofs, the seams about every 2 m. */
-function seamRoofFor(scene: Scene, w: number): PBRMaterial {
-  const m = pbr(scene, 'seam-roof', '#ffffff', 0.35, 0.6);
-  m.albedoTexture = canvasTexture(scene, 'seam-roof', 256, 64, (g, W, H) => {
-    g.fillStyle = '#a3a8ae';
-    g.fillRect(0, 0, W, H);
-    for (let x = 0; x < W; x += 8) {
-      g.fillStyle = 'rgba(0,0,0,0.18)';
-      g.fillRect(x, 0, 1, H);
-      g.fillStyle = 'rgba(255,255,255,0.15)';
-      g.fillRect(x + 1, 0, 1, H);
-    }
-  }, { u: Math.max(1, w / 32) });
-  m.backFaceCulling = false;
-  m.twoSidedLighting = true;
-  return m;
-}
 
 /**
  * A jet bridge on a Contact Stand: a rotunda at the Terminal, on the left of an aircraft parked nose-in, a telescopic
@@ -585,6 +469,28 @@ function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: 
       place();
     },
   };
+}
+
+/**
+ * Which side of a building faces the airside: the side with the most Stand or Holding Bay edge against it, else the
+ * most Taxiway edge, else south.
+ */
+function airsideOf(s: TileRect, layout: AirportLayout): Facing {
+  const score: Record<Facing, number> = { south: 0, north: 0, east: 0, west: 0 };
+  const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+  for (const o of layout.structures) {
+    const weight = o.kind === 'stand' || o.kind === 'holdingBay' ? 100 : o.kind === 'taxiway' ? 1 : 0;
+    if (!weight) continue;
+    const ox = overlap(s.x, s.x + s.w, o.x, o.x + o.w);
+    const oy = overlap(s.y, s.y + s.h, o.y, o.y + o.h);
+    if (o.y === s.y + s.h) score.south += weight * ox;
+    if (o.y + o.h === s.y) score.north += weight * ox;
+    if (o.x === s.x + s.w) score.east += weight * oy;
+    if (o.x + o.w === s.x) score.west += weight * oy;
+  }
+  let best: Facing = 'south';
+  for (const f of ['north', 'east', 'west'] as const) if (score[f] > score[best]) best = f;
+  return best;
 }
 
 /** Maps points in a Stand's own frame — u across its open side, v from the back (0) to the open side — onto the ground (x, z). */
@@ -715,132 +621,8 @@ function decal(scene: Scene, text: string, x: number, y: number, w: number, h: n
   return m;
 }
 
-/** Four walls round a rectangle, textured in `uEvery`-unit panels, facing outward. */
-function walls(scene: Scene, b: ReturnType<typeof box3>, height: number, mat: PBRMaterial, uEvery: number): Mesh[] {
-  const positions: number[] = [];
-  const indices: number[] = [];
-  const uvs: number[] = [];
-  const side = (ax: number, az: number, bx: number, bz: number) => {
-    const i = positions.length / 3;
-    const len = Math.hypot(bx - ax, bz - az);
-    positions.push(ax, 0, az, bx, 0, bz, bx, height, bz, ax, height, az);
-    uvs.push(0, 0, len / uEvery, 0, len / uEvery, 1, 0, 1);
-    indices.push(i, i + 1, i + 2, i, i + 2, i + 3);
-  };
-  side(b.x0, b.z0, b.x1, b.z0);
-  side(b.x1, b.z0, b.x1, b.z1);
-  side(b.x1, b.z1, b.x0, b.z1);
-  side(b.x0, b.z1, b.x0, b.z0);
-  // each wall faces away from the building's centre
-  const m = meshFrom(scene, 'walls', positions, indices, uvs);
-  orient(m, (x, y, z) => [b.cx + (x - b.cx) * 0.001, y, b.cz + (z - b.cz) * 0.001]);
-  m.material = mat;
-  m.receiveShadows = true;
-  m.isPickable = false;
-  return [m];
-}
 
-function facadeMaterial(scene: Scene, lit: PBRMaterial[]): PBRMaterial {
-  const draw = (glow: boolean) => (g: CanvasRenderingContext2D, W: number, H: number) => {
-    const r = rng(glow ? 21 : 20);
-    const mw = W / 12;
-    for (let i = 0; i < 12; i++) {
-      const x = i * mw;
-      if (glow) {
-        g.fillStyle = r() < 0.8 ? '#ffd9a0' : '#000';
-        g.fillRect(x + 2, 4, mw - 4, H * 0.5 - 8);
-        g.fillStyle = r() < 0.85 ? '#ffd9a0' : '#000';
-        g.fillRect(x + 2, H * 0.5 + 4, mw - 4, H * 0.5 - 8);
-      } else {
-        const gr = g.createLinearGradient(0, 0, 0, H);
-        gr.addColorStop(0, '#8fa6bd');
-        gr.addColorStop(0.45, '#3d566f');
-        gr.addColorStop(0.5, '#2a3340');
-        gr.addColorStop(0.55, '#2f4a63');
-        gr.addColorStop(1, '#1d2a38');
-        g.fillStyle = gr;
-        g.fillRect(x, 0, mw, H);
-      }
-    }
-    if (!glow) {
-      g.fillStyle = '#d9dcdf';
-      for (let i = 0; i <= 12; i++) g.fillRect(i * mw - 1.5, 0, 3, H);
-      g.fillRect(0, 0, W, 5);
-      g.fillRect(0, H * 0.5 - 3, W, 6);
-      g.fillRect(0, H - 4, W, 4);
-    }
-  };
-  const m = pbr(scene, 'facade', '#ffffff', 0.08, 0.25);
-  m.albedoTexture = canvasTexture(scene, 'facade', 512, 128, draw(false));
-  m.emissiveTexture = canvasTexture(scene, 'facade-lit', 512, 128, draw(true));
-  m.emissiveColor = Color3.Black();
-  lit.push(m);
-  return m;
-}
 
-function towerGlass(scene: Scene, lit: PBRMaterial[]): PBRMaterial {
-  const m = pbr(scene, 'tower-glass', '#ffffff', 0.05, 0.3);
-  m.albedoTexture = canvasTexture(scene, 'tower-glass', 256, 64, (g, W, H) => {
-    g.fillStyle = '#1d3346';
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = '#4a6d8a';
-    g.fillRect(0, 0, W, H * 0.35);
-    g.fillStyle = '#d7dadd';
-    for (let i = 0; i <= 8; i++) g.fillRect((i * W) / 8 - 2, 0, 4, H);
-  });
-  m.emissiveTexture = canvasTexture(scene, 'tower-lit', 16, 16, (g, W, H) => {
-    g.fillStyle = '#9fe0b0';
-    g.fillRect(0, 0, W, H);
-  });
-  m.emissiveColor = Color3.Black();
-  lit.push(m);
-  return m;
-}
 
-function fireStationMaterial(scene: Scene): PBRMaterial {
-  const m = pbr(scene, 'fire-station', '#ffffff', 0.6);
-  m.albedoTexture = canvasTexture(scene, 'fire-station', 512, 128, (g, W, H) => {
-    g.fillStyle = '#e7e3dc';
-    g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 4; i++) {
-      const x = 20 + i * 122;
-      g.fillStyle = '#c62828';
-      g.fillRect(x, 30, 100, H - 30);
-      for (let y = 34; y < H; y += 8) {
-        g.fillStyle = 'rgba(0,0,0,0.2)';
-        g.fillRect(x, y, 100, 1.5);
-      }
-    }
-  });
-  return m;
-}
 
-/** The ATC Tower: base building, tapered concrete shaft, catwalk, glass cab, roof and antennas. */
-function tower(scene: Scene, b: ReturnType<typeof box3>, m: { concrete: PBRMaterial; metal: PBRMaterial; dark: PBRMaterial; glass: PBRMaterial }): Mesh[] {
-  const out: Mesh[] = [];
-  const at = (mesh: Mesh, y: number, mat: PBRMaterial) => {
-    mesh.position.set(b.cx, y, b.cz);
-    mesh.material = mat;
-    out.push(mesh);
-    return mesh;
-  };
-  const base = MeshBuilder.CreateBox('tower-base', { width: b.w + 2, height: 4, depth: b.d * 0.6 }, scene);
-  base.position.set(b.cx, 2, b.z0 + b.d * 0.3);
-  base.material = m.concrete;
-  out.push(base);
-  at(MeshBuilder.CreateCylinder('tower-shaft', { diameterTop: 3, diameterBottom: 4.2, height: 22, tessellation: 20 }, scene), 11, m.concrete);
-  at(MeshBuilder.CreateCylinder('tower-floor', { diameterTop: 5.4, diameterBottom: 3.4, height: 1.5, tessellation: 16 }, scene), 22.6, m.concrete);
-  at(MeshBuilder.CreateCylinder('tower-catwalk', { diameter: 7.4, height: 0.25, tessellation: 8 }, scene), 23.5, m.metal);
-  at(MeshBuilder.CreateCylinder('tower-cab', { diameterTop: 6.7, diameterBottom: 6, height: 2.6, tessellation: 8 }, scene), 24.9, m.glass);
-  at(MeshBuilder.CreateCylinder('tower-roof', { diameter: 7.6, height: 0.5, tessellation: 8 }, scene), 26.45, m.metal);
-  const mast = MeshBuilder.CreateCylinder('tower-mast', { diameter: 0.15, height: 4, tessellation: 6 }, scene);
-  mast.position.set(b.cx + 1, 28.6, b.cz);
-  mast.material = m.metal;
-  out.push(mast);
-  const dome = MeshBuilder.CreateSphere('tower-dome', { diameter: 1.4, segments: 8 }, scene);
-  dome.position.set(b.cx - 1.2, 27.1, b.cz);
-  dome.material = m.concrete;
-  out.push(dome);
-  return out;
-}
 

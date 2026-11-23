@@ -273,13 +273,29 @@ cooldown (`simulation.ts → ACTIONS`).
   back when the aircraft leaves (Small aircraft use stairs: the bridge stays at rest). While an aircraft is on its Stand, ground vehicles stand round it: a pushback tug at
   the nose, belt loaders with a baggage tug and two to four container carts at its holds, often ground power, and for
   Medium and Large aircraft often a fuel truck under the wing and a catering truck at the rear door.
-- **Buildings** stand up in 3D: Terminals with glass curtain walls (lit from inside at night), a curved standing-seam
-  metal roof overhanging the glass on columns, and TERMINAL on the roof,
-  Cargo Hubs with ribbed metal walls and CARGO on the roof, the ATC Tower (base building, tapered concrete shaft,
-  catwalk, glass cab, roof, mast and dome, TWR on the ground beside it), the Fire & Rescue Station with red bay doors and
-  two fire trucks, fuel tanks for the Fuel Farm, a painted De-icing Pad, and plain buildings for the other Support
-  Buildings, each with its name beside it. Flood masts stand at the front corners of Terminals and Cargo Hubs; at
-  night their heads glow and the first four light the apron round them.
+- **Buildings** stand up in 3D at real size (inspired by Berlin Brandenburg Terminal 1, Frankfurt's cargo centres and
+  the German standard control tower). Each is turned so its airside faces its Stands or Holding Bays (else a Taxiway,
+  else south) and stays inside its footprint, apart from the Terminal's roof edge reaching 2 m over the airside.
+  At night glass glows warm from inside and lamps light up.
+  - **Terminal** ("Deck"): gate lounges behind glass at apron level, a light stone floor band, a hall about 20 m tall
+    glazed with horizontal bars, stone end walls with tall slot windows, and one flat roof deck over everything on
+    slender steel columns (a row along the airside and one along the landside, where the deck shelters a drop-off
+    kerb). On the roof: three skylight bands (glowing at night), roof plant and TERMINAL; downlights in the deck's
+    underside. Wings look the same and join it seamlessly.
+  - **Cargo Hub:** a 15 m hall in silver ribbed cladding with a teal band, a dark 30 m high-bay warehouse at the back
+    of long hubs, a three-storey glass office head at one end, roller doors on the airside (open ones lit orange at
+    night) with yellow lintels and bollards under a canopy with sodium lights, skylights, roof plant and CARGO.
+  - **ATC Tower:** a white two-storey base with ribbon windows, a slim round white shaft with a lit stair slit, flared
+    equipment floors with a lit window band, a 12-sided cab of outward-sloping green-tinted glass (a faint green glow
+    at night), a roof disc with antennas and a radar dome, red obstruction lights, and TWR on the ground.
+  - **Support Buildings**, each with its name on the ground in front: Fire & Rescue Station (white with a red band,
+    glazed bay doors lit white at night, a drill tower, two crash tenders on the forecourt, a blue beacon); Admin
+    Office (four glass storeys behind stone fins); Airline Office (three glass storeys under a bronze crown); Ramp
+    Agent Station (a low building with an orange roof edge and a vehicle shed with tugs and baggage carts); Fuel Farm
+    (white tanks with a blue band in a bund wall, a pipe rack and a pump house); De-icing Pad (blue-lined pad, two
+    boom trucks, glycol tanks).
+  - Flood masts stand at the front corners of Terminals and Cargo Hubs; at night their heads glow and the first four
+    light the apron round them.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
