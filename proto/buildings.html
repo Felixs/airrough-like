@@ -74,7 +74,7 @@ const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:true,a
 engine.setHardwareScalingLevel(1/Math.min(window.devicePixelRatio||1,1.5));
 const scene=new B.Scene(engine);
 scene.clearColor=new B.Color4(0.05,0.07,0.1,1);
-scene.fogMode=B.Scene.FOGMODE_EXP2;scene.fogDensity=0.00028;
+scene.fogMode=B.Scene.FOGMODE_EXP2;scene.fogDensity=0.00012;
 
 // ---------- camera ----------
 const cam=new B.ArcRotateCamera('cam',-Math.PI/2-0.35,0.95,700,new V3(330,0,-150),scene);
@@ -228,7 +228,7 @@ const BUILT=[]; // meshes to merge by material at the end
 function box(w,h,d,x,y,z,mat,o={}){const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d},scene);m.position.set(x,y+h/2,z);if(o.ry)m.rotation.y=o.ry;m.material=mat;if(o.keep)caster(m);else BUILT.push(m);return m;}
 function cyl(d,h,x,y,z,mat,o={}){const m=B.MeshBuilder.CreateCylinder('c',{diameter:d,diameterTop:o.top,diameterBottom:o.bottom,height:h,tessellation:o.tess||20},scene);m.position.set(x,(o.rx||o.rz)?y:y+h/2,z);if(o.rx)m.rotation.x=o.rx;if(o.rz)m.rotation.z=o.rz;if(o.ry)m.rotation.y=o.ry;m.material=mat;if(o.keep)caster(m);else BUILT.push(m);return m;}
 // a facade plane: centre x,z at bottom y, width w, height h, facing 's'|'n'|'e'|'w'
-const FACE={s:0,n:Math.PI,w:Math.PI/2,e:-Math.PI/2};
+const FACE={s:Math.PI,n:0,w:-Math.PI/2,e:Math.PI/2}; // a plane's front faces +z
 function face(w,h,x,y,z,dir,mat){const m=B.MeshBuilder.CreatePlane('f',{width:w,height:h},scene);m.position.set(x,y+h/2,z);m.rotation.y=FACE[dir];m.material=mat;BUILT.push(m);return m;}
 function label(text,x,y,z,w,h,ink='#3a3f45',rot=0){
   const t=tex('lbl-'+text,1024,256,(g,W,H)=>{g.clearRect(0,0,W,H);g.fillStyle=ink;g.font=`700 ${H*0.62}px "Segoe UI",Roboto,sans-serif`;g.textAlign='center';g.textBaseline='middle';g.fillText(text,W/2,H/2+4);},{clamp:true,alpha:true});
@@ -307,7 +307,7 @@ function under(root,from){for(let i=from;i<BUILT.length;i++)BUILT[i].parent=root
   box(W+2*ox,1.8,(zl+on)-(zS-os+3),cx,ry,((zl+on)+(zS-os+3))/2,M.fascia);
   const roofTop=box(W+2*ox-1.2,0.2,(zl+on)-(zS-os+3)-1.2,cx,ry+1.8,((zl+on)+(zS-os+3))/2,M.roof);
   // skylight bands in the roof, glowing at night
-  const sk=lit(pbr('skylight','#2b3a48',0.08,0.4),'#ffe2b8',0,1.4,'win');
+  const sk=lit(pbr('skylight','#2b3a48',0.08,0.4),'#ffcf96',0,0.75,'win');
   for(const zz of [zh+8,(zh+zl)/2,zl-8])box(W-24,0.3,3,cx,ry+1.85,zz,sk);
   // HVAC on the roof
   for(let k=0;k<5;k++)box(6,2,4,x0+20+k*(W-40)/4,ry+2,zl+6,M.hvac);
@@ -394,12 +394,12 @@ function aircraft(x,z,L,span,tail,o={}){
   const add=(m,mat)=>{m.material=mat;m.parent=root;caster(m);parts.push(m);return m;};
   const fus=add(B.MeshBuilder.CreateCylinder('fus',{diameter:2*R,height:L*0.62,tessellation:24},scene),acWhite);fus.rotation.x=Math.PI/2;fus.position.set(0,y0,0.02*L);
   const nose=add(B.MeshBuilder.CreateSphere('nose',{diameter:2*R,segments:16},scene),acWhite);nose.scaling.z=2.2;nose.position.set(0,y0,0.33*L);
-  const tc=add(B.MeshBuilder.CreateCylinder('tc',{diameterTop:2*R,diameterBottom:0.5,height:L*0.3,tessellation:24},scene),acWhite);tc.rotation.x=-Math.PI/2;tc.position.set(0,y0+0.4,-0.44*L);
+  const tc=add(B.MeshBuilder.CreateCylinder('tc',{diameterTop:2*R,diameterBottom:0.5,height:L*0.3,tessellation:24},scene),acWhite);tc.rotation.x=Math.PI/2;tc.position.set(0,y0+0.4,-0.44*L);
   const tailM=pbr('tail'+tail,tail,0.4,0.1,{clear:0.7});
-  for(const s of [-1,1]){const w=add(B.MeshBuilder.CreateBox('w',{width:span/2,height:0.45,depth:L*0.13},scene),acWhite);w.position.set(s*span/4,y0-R*0.55,-0.02*L);w.rotation.y=s*0.4;
+  for(const s of [-1,1]){const w=add(B.MeshBuilder.CreateBox('w',{width:span/2,height:0.45,depth:L*0.13},scene),acWhite);w.position.set(s*span/4,y0-R*0.55,-0.02*L);w.rotation.y=-s*0.4;
     const e=add(B.MeshBuilder.CreateCylinder('e',{diameter:o.prop?1.2:2.0,height:3.8,tessellation:16},scene),o.prop?acWhite:tailM);e.rotation.x=Math.PI/2;e.position.set(s*span*0.17,y0-R-0.6,0.06*L);
-    const hs=add(B.MeshBuilder.CreateBox('hs',{width:span*0.18,height:0.3,depth:L*0.07},scene),acWhite);hs.position.set(s*span*0.09,y0+0.8,-0.46*L);hs.rotation.y=s*0.45;}
-  const fin=add(B.MeshBuilder.CreateBox('fin',{width:0.35,height:L*0.18,depth:L*0.13},scene),tailM);fin.position.set(0,y0+R+L*0.08,-0.45*L);fin.rotation.x=-0.45;
+    const hs=add(B.MeshBuilder.CreateBox('hs',{width:span*0.18,height:0.3,depth:L*0.07},scene),acWhite);hs.position.set(s*span*0.09,y0+0.8,-0.46*L);hs.rotation.y=-s*0.45;}
+  const fin=add(B.MeshBuilder.CreateBox('fin',{width:0.35,height:L*0.18,depth:L*0.13},scene),tailM);fin.position.set(0,y0+R+L*0.08,-0.45*L);fin.rotation.x=0.45;
   const winM=lit(pbr('acWin','#1b2430',0.2,0.2),'#ffe1b0',0,1,'win');
   if(!o.cargo)for(const s of [-1,1]){const st=add(B.MeshBuilder.CreateBox('win',{width:0.05,height:0.35,depth:L*0.5},scene),winM);st.position.set(s*(R-0.02),y0+0.35,0.02*L);}
   const stripe=add(B.MeshBuilder.CreateBox('str',{width:2*R+0.06,height:0.25,depth:L*0.55},scene),tailM);stripe.position.set(0,y0-0.3,0);
@@ -483,7 +483,7 @@ for(const s of STANDS){const cx=TX(s.x+s.w/2);
   const x0=TX(22),x1=TX(25),zN=TZ(5),zS=TZ(7);const W=x1-x0,cx=(x0+x1)/2;
   box(W-8,9,zN-zS-4,cx-4,0,(zN+zS)/2+2,M.offWhite);
   // red band and 4 tall glazed bay doors (lit white inside at night)
-  box(W-7.6,1.4,zN-zS-3.6,cx-4,9,(zN+zS)/2+2,M.red);
+  box(W-7.6,1.4,zN-zS-3.6,cx-4,9,(zN+zS)/2+2,M.red);box(W-8.6,0.2,zN-zS-4.6,cx-4,10.3,(zN+zS)/2+2,M.roof);
   const bay=glassFacade('g-firebay',{bay:7,h:7,w:7,hstep:0.9,vstep:7,seed:41,top:'#56606a',bottom:'#2a3038',warm:[235,240,255]});
   for(let k=0;k<4;k++){const dx=x0+6+k*8.2;face(7,7,dx,0,zS+4-0.03,'s',bay);box(0.6,7.4,0.5,dx-3.8,0,zS+3.8,M.red);}
   // drill tower
@@ -563,7 +563,7 @@ const floods=[];
 for(const [x,z] of [[TX(8)-6,TZ(8)-4],[TX(21)+4,TZ(8)-4],[TX(30)-4,TZ(8)-4],[TX(37)+4,TZ(8)-4]]){
   cyl(0.7,26,x,0,z,M.steel,{tess:10,keep:true});box(4,1,1.6,x,26,z,M.darkSteel,{keep:true});
   const head=B.MeshBuilder.CreateBox('head',{width:3.6,height:0.2,depth:1.3},scene);head.position.set(x,25.95,z);head.material=bulbWhite;glow.addIncludedOnlyMesh(head);
-  const sp=new B.SpotLight('flood',new V3(x,25,z),new V3(0,-1,-0.55).normalize(),1.25,2,scene);sp.diffuse=C3.FromHexString('#ffe7c2');sp.specular=sp.diffuse.scale(0.3);sp.range=160;sp.intensity=0;floods.push(sp);
+  const sp=new B.SpotLight('flood',new V3(x,25,z),new V3(0,-1,-0.55).normalize(),1.25,2,scene);sp.diffuse=C3.FromHexString('#ffe7c2');sp.specular=sp.diffuse.scale(0.3);sp.range=260;sp.intensity=0;floods.push(sp);
 }
 
 // ---------- merge static meshes by material (fewer draw calls) ----------
@@ -614,7 +614,7 @@ function setTime(h){
   // lights: windows, lamps, beacons
   const winK=smooth(0.1,0.75,dark),lampK=smooth(0.25,0.8,dark);
   for(const L of LIT){const k=L.group==='lamp'?lampK:L.group==='beacon'?1:winK;L.m.emissiveColor=L.c.scale(lerp(L.day,L.night,k));}
-  for(const f of floods)f.intensity=lampK*2.6;
+  for(const f of floods)f.intensity=lampK*2600;
   glow.intensity=0.35+0.6*dark;
   pipe.imageProcessing.exposure=1.0+0.25*dark;
   document.getElementById('hourLbl').textContent=String(Math.floor(h)).padStart(2,'0')+':'+String(Math.round((h%1)*60)%60).padStart(2,'0');
