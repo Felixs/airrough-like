@@ -215,7 +215,7 @@ await best('taxiing-midday', { what: 'moving', r: 40, a: -Math.PI / 2 + 0.9, b: 
 await playTo('19:15');
 await best('4-evening', null, false);
 await best('parked-evening', parked(Math.PI / 2 + 0.6, 1.2, 40));
-await playTo('22:00');
+await playTo('21:15'); // on Day 1 a curfew ends traffic before 22:00, and the Day then skips to its end
 await best('5-night', null, false);
 await best('parked-night', parked(-Math.PI / 2 - 0.7));
 await best('terminal-night', terminal(-Math.PI / 2 + 0.6, 1.05));
