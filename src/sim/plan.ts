@@ -2,6 +2,7 @@
  * Plan Mode between Days: the Run Calendar, the Forecast, suggestions, and upgrades that need no placing
  * (Tower Modules, Runway Surface, Fire & Rescue levels).
  */
+import { contractEffects } from './contracts';
 import type { RunwaySurface, SizeClass, Structure } from './layout';
 import { airportSurface, createLayout } from './layout';
 import { dayPlan, hasBuilding, upkeep, type DayReport, type RunState, type TowerModules } from './run';
@@ -136,7 +137,7 @@ export function runCalendar(run: RunState): CalendarWeek[] {
     const days = [0, 1, 2, 3, 4, 5, 6].map((weekday): CalendarDay => {
       const twists = locked ? [] : twistsFor(run.seed, week, weekday);
       const twist = twists[0] ?? null;
-      const plan = planDay({ layout: run.layout, week, weekday, seed: run.seed, twist: twists });
+      const plan = planDay({ layout: run.layout, week, weekday, seed: run.seed, twist: twists, contracts: contractEffects(run.contracts) });
       const result = run.history.find((h) => h.week === week && h.weekday === weekday) ?? null;
       const state = locked ? 'locked' : result ? 'done' : week === run.week && weekday === run.weekday ? 'today' : week < run.week ? 'done' : 'upcoming';
       return { weekday, demand: plan.demand, quota: plan.quota, rush: weekday === RUSH_DAY, boss: weekday === BOSS_DAY, state, result, twist, twists };

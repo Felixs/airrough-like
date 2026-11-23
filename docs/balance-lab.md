@@ -30,13 +30,18 @@ loop round the old Runway's end), Holding Bays.
 | `planner-no-…` | the planner leaving something out (`lit`, `tower`, `secondRunway`, `holdingBays`, `ils`), to measure its value |
 | `random` | on half the Days, one random affordable thing |
 
+**Airline Contracts:** every player answers a Contract offer the same way, set per variant (default `best`):
+`ignore` (as before Contracts existed: no Contract, no money), `skip` (+$10,000), `first` (sign the first one) or
+`best` (sign whichever earns the most over the next Week at the airport as it is, counting one-off money and half a
+plot's price for a free Land Plot, against skipping).
+
 ## Experiments (`src/sim/lab/experiments.ts`)
 
 Each plays its players in every variant over the same seeds. A variant is a set of overrides of the tuning tables
 (`BUILD_COSTS`, `PRICES`, `UPKEEP`, `SCHEDULE_RULES`, `SAFETY`, `ATC`, `TIMINGS`, `AIRCRAFT_TYPES`, `SCORE`), by path,
 e.g. `"BUILD_COSTS.stand.medium": 20000`, and the meta-progression to start with (none, or everything bought).
-Current set: `baseline`, `meta`, `upgrade-value`, `stand-prices`, `land-price`, `boss-quota`, `taxi-incidents`,
-`traffic-growth`. Add one by adding an entry.
+Current set: `baseline`, `meta`, `meta-split`, `growth`, `upgrade-value`, `stand-prices`, `land-price`, `boss-quota`,
+`taxi-incidents`, `traffic-growth`, `contracts`. Add one by adding an entry.
 
 ## Targets (no meta-progression unless said)
 
@@ -101,6 +106,20 @@ Current set: `baseline`, `meta`, `upgrade-value`, `stand-prices`, `land-price`, 
 - Meta-progression now lifts the planner by about 10 points instead of 44: no single buy is a must-have.
 - Still below the targets (planner 70–80%): most losses are "holding" on the last Boss Days. Next: a smarter planner
   (second Runway timing, Holding Bays, using Support Buildings) before judging the late-game difficulty.
+
+## Airline Contracts (23 Nov 2026: `contracts` and `baseline`, 30 seeds)
+
+| Player | No Contracts | Always skip (+$10,000) | First offered | Best fit | Best fit, all Contracts unlocked |
+|---|---|---|---|---|---|
+| planner | 7% (2–21%), median Day 13 | 10% | 10% | **20% (10–37%), median Day 27** | 20% |
+| reactive | 0%, median Day 13 | 0% | 0% (median Day 19) | 0% | 0% |
+
+- **Picking well is worth about +13 points** for the planner (7% → 20%), a little over the +5–10 target, but within
+  the noise of 30 seeds (the two intervals overlap). Signing just the first one offered, or skipping, adds 3 points.
+  The best-fit pick also moves the planner's typical loss from the Week 2 Boss Day to the Week 4 Boss Day.
+- Unlocking Trade-off and Growth Contracts adds nothing on top for these players.
+- The reactive player can't use them: it still loses on the Week 2 Boss Day ("holding"), with or without.
+- With Contracts answered by best fit (the lab's default now), the baseline planner wins 20%.
 
 ## Next steps
 

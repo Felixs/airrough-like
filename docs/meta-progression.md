@@ -17,6 +17,8 @@ Runways (paved Medium and Long, and Short Grass strips), Taxiways, Contact Stand
 | Fire & Rescue Station | 700 | Building; its levels are bought in Plan Mode |
 | De-icing pad | 800 | Building; Weather Twists raise errors 30% less |
 | Bonus Twists | 1,000 | Plan Mode can add a Twist to a weekday for extra Score |
+| Trade-off Contracts | 600 | Airline Contracts with a big bonus and a catch can be offered (Hub Carrier, Heavy Freight, Low-cost Base) |
+| Growth Contracts | 800 | Airline Contracts that add Demand (and Quota) for a bigger bonus can be offered (Expansion Deal) |
 | Tower Modules 4–5 | 1,200 | Tower Module levels 4 and 5 |
 
 ## Boosts (levels, 500 Air Miles × next level)
