@@ -162,6 +162,10 @@ _Avoid_: Spacing, interval, slot time
 A Player-set constraint the ATC Tower would follow (e.g. "Runway 2 is cargo only"). Not in the game: an unlikely later idea (see `docs/later-ideas.md`).
 _Avoid_: Policy, setting
 
+**Airline Contract**:
+A reward picked after winning a Week's Boss Day (one of three, or skipped): for the rest of the Run it changes which flights come (more Cargo, more Large aircraft…) and pays a bonus; a Trade-off Contract also has a catch. Planned, not in the game yet.
+_Avoid_: Deal, perk, card
+
 **Land Plot**:
 A purchasable square of 16 × 16 grid tiles bordering owned land; the Run starts with 3 × 2 of them and more are bought in Build Mode.
 _Avoid_: Land, area, zone, expansion
