@@ -6,15 +6,18 @@
 import {
   ArcRotateCamera, CascadedShadowGenerator, Camera, Color3, Color4, DefaultRenderingPipeline, DirectionalLight, Engine, GlowLayer, HemisphericLight,
   ImageProcessingConfiguration, Matrix, Mesh, MeshBuilder, PointLight, ReflectionProbe, RenderTargetTexture, Scene, ShadowGenerator,
-  SSAO2RenderingPipeline, StandardMaterial, Vector3, VertexBuffer, type LinesMesh,
+  SSAO2RenderingPipeline, StandardMaterial, TransformNode, Vector3, VertexBuffer, type LinesMesh, type Node,
 } from '@babylonjs/core';
 import { daylight, NIGHT_DARKNESS } from '../sim/clock';
 import { TILE_SIZE, type AirportLayout, type TileRect } from '../sim/layout';
 import { AircraftLayer } from './aircraftLayer';
 import { buildAirfield, type Airfield } from './airfield';
 import { buildLightPools, type LightPools } from './lightPools';
+import { PerfOverlay } from './perfOverlay';
 import { canvasTexture } from './textures';
 
+const GROUND_NIGHT = new Color3(0.02, 0.025, 0.03);
+const GROUND_DAY = new Color3(0.42, 0.46, 0.4);
 const T = TILE_SIZE;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -24,6 +27,17 @@ const TIERS = [
   { name: 'medium', scale: 1, shadow: 1024, msaa: 1, bloom: false },
   { name: 'low', scale: 0.67, shadow: 0, msaa: 1, bloom: false },
 ] as const;
+
+/** The sky's reflections are drawn again once a sky colour has moved this much (0…1 per channel), at most every 300 ms. */
+const PROBE_CHANGE = 0.03;
+const PROBE_GAP_MS = 300;
+
+/**
+ * Airfield parts that move after they are built: everything else gets a fixed position (its world matrix is frozen, so
+ * it isn't worked out again every frame). Jet bridges swing out; a new moving part needs a name starting "jet-bridge"
+ * or `metadata.moves = true`.
+ */
+const moves = (n: Node): boolean => n.name.startsWith('jet-bridge') || !!(n.metadata as { moves?: boolean } | null)?.moves;
 
 export type ViewMode = 'live' | 'build';
 
@@ -52,8 +66,19 @@ export class AirportView {
   private view = { x: 0, z: 0, h: 400 };
   private area: TileRect | null = null;
   private light = { darkness: -1, warmth: -1, hour: -1 };
-  private probeDarkness = -1;
-  private probeGolden = -1;
+  /** The sky colours now and when the reflections were last drawn (−1: never). */
+  private readonly skyHorizon = new Color3(-1, -1, -1);
+  private readonly skyZenith = new Color3(-1, -1, -1);
+  private readonly skyGround = new Color3(0, 0, 0);
+  private readonly probeHorizon = new Color3(-1, -1, -1);
+  private readonly probeZenith = new Color3(-1, -1, -1);
+  private probeDue = false;
+  private probeAt = -Infinity;
+  /** The sky dome's vertex heights (0…1) and its colour buffer, reused for every repaint. */
+  private skyHeights: Float32Array | null = null;
+  private skyColours: Float32Array | null = null;
+  /** `?perf`: frame-time overlay. */
+  private readonly perf: PerfOverlay | null;
   private tier = 0;
   /** A quality level fixed by `?quality=` or setQuality(): no automatic stepping down. */
   private lockedTier: number | null = null;
@@ -68,7 +93,10 @@ export class AirportView {
     host.appendChild(this.canvas);
     this.engine = new Engine(this.canvas, true, { stencil: true, antialias: true, preserveDrawingBuffer: true }, false);
     const scene = (this.scene = new Scene(this.engine));
+    // nothing in the scene is clicked on (Build Mode works out tiles from the camera ray), so pointers never pick meshes
     scene.skipPointerMovePicking = true;
+    scene.skipPointerDownPicking = true;
+    scene.skipPointerUpPicking = true;
     scene.clearColor = new Color4(0.05, 0.07, 0.06, 1);
     const cam = (this.camera = new ArcRotateCamera('camera', -Math.PI / 2 - 0.35, mode === 'live' ? 0.95 : 0.0001, 3000, Vector3.Zero(), scene));
     this.hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
@@ -144,15 +172,19 @@ export class AirportView {
     if (asked >= 0) this.lockedTier = asked;
     this.setTier(asked >= 0 ? asked : 0);
     this.setTime(null);
+    this.perf = new URLSearchParams(location.search).has('perf') ? new PerfOverlay(host, scene) : null;
     let last = performance.now();
     this.engine.runRenderLoop(() => {
       const now = performance.now();
       const ms = now - last;
       last = now;
       for (const h of this.frameHandlers) h(ms);
+      this.perf?.setShown(!this.paused);
       if (this.paused) return;
       this.watchSpeed(ms);
+      this.refreshProbe(now);
       scene.render();
+      this.perf?.frame(ms, TIERS[this.tier]!.name);
     });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
@@ -177,6 +209,7 @@ export class AirportView {
     // painted pools of light on the ground at night (under every flood mast, on Stands, along building fronts)
     this.pools = this.mode === 'live' ? buildLightPools(s, layout, this.airfield.floods) : null;
     this.airfieldItems = [...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes].filter((x) => !before.has(x));
+    this.freezeStatic();
     this.aircraft.bridges = this.airfield.bridges;
     // floodlights over the aprons (a few real lights; the other masts only glow)
     for (const f of this.floods) f.dispose();
@@ -214,10 +247,18 @@ export class AirportView {
 
   private lastMinute: number | null = null;
 
-  /** Lights the scene for a minute of the Day (null: plain daylight, as in Plan Mode). Returns the darkness. */
+  private lastDarkness = 0;
+
+  /**
+   * Lights the scene for a minute of the Day (null: plain daylight, as in Plan Mode). Returns the darkness. The light
+   * changes once per whole minute: called every frame, it does nothing until the minute turns.
+   */
   setTime(minute: number | null): number {
-    this.lastMinute = minute;
-    return this.applyLight(minute);
+    const whole = minute === null ? null : Math.floor(minute);
+    if (whole === this.lastMinute && this.light.darkness >= 0) return this.lastDarkness;
+    this.lastMinute = whole;
+    this.lastDarkness = this.applyLight(whole);
+    return this.lastDarkness;
   }
 
   private applyLight(minute: number | null): number {
@@ -266,23 +307,8 @@ export class AirportView {
     this.scene.fogDensity = 0.00035 * (1 - 0.25 * golden * day);
     for (const f of this.floods) f.intensity = 1.6 * aircraftGlow;
     this.pools?.setStrength(aircraftGlow);
-    const ground = Color3.Lerp(new Color3(0.02, 0.025, 0.03), new Color3(0.42, 0.46, 0.4), day);
-    const pos = this.dome.getVerticesData('position');
-    if (pos) {
-      const col = new Float32Array((pos.length / 3) * 4);
-      for (let i = 0; i < pos.length / 3; i++) {
-        const y = pos[i * 3 + 1]! / 3500;
-        // below the horizon the dome turns part way to a dull ground colour (glass seen from above still reads as sky)
-        const c = y >= 0 ? Color3.Lerp(horizon, zenith, Math.pow(y, 0.45)) : Color3.Lerp(horizon, ground, 0.45 * clamp(-y / 0.3, 0, 1));
-        col.set([c.r, c.g, c.b, 1], i * 4);
-      }
-      this.dome.updateVerticesData(VertexBuffer.ColorKind, col);
-    }
-    if (this.probe && (Math.abs(darkness - this.probeDarkness) > 0.05 || Math.abs(golden - this.probeGolden) > 0.05)) {
-      this.probe.cubeTexture.resetRefreshCounter();
-      this.probeDarkness = darkness;
-      this.probeGolden = golden;
-    }
+    Color3.LerpToRef(GROUND_NIGHT, GROUND_DAY, day, this.skyGround);
+    this.paintSky(horizon, zenith, this.skyGround);
     for (const l of this.airfield?.lights ?? []) l.mat.emissiveColor = l.colour.scale(l.day + (1 - l.day) * aircraftGlow);
     for (const g of this.airfield?.litGlass ?? []) g.emissiveColor = Color3.White().scale(1.3 * aircraftGlow);
     this.glow.intensity = 0.35 + 0.9 * aircraftGlow;
@@ -294,6 +320,59 @@ export class AirportView {
   /** Windows in the aircraft cabins: how brightly they glow (0 by day). */
   cabinLight(): number {
     return 1.3 * clamp((this.light.darkness - 0.1) / 0.25, 0, 1);
+  }
+
+  /** Colours the sky dome from the horizon up to the zenith (reusing its buffers) and asks for new reflections if it changed enough. */
+  private paintSky(horizon: Color3, zenith: Color3, ground: Color3): void {
+    if (!this.skyHeights || !this.skyColours) {
+      const pos = this.dome.getVerticesData('position');
+      if (!pos) return;
+      const n = pos.length / 3;
+      // ≥ 0: how far towards the zenith colour; < 0: how far towards the ground colour (below the horizon the dome
+      // turns only part way to a dull ground colour, so glass seen from above still reads as sky)
+      this.skyHeights = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const y = pos[i * 3 + 1]! / 3500;
+        this.skyHeights[i] = y >= 0 ? Math.pow(Math.min(y, 1), 0.45) : -0.45 * clamp(-y / 0.3, 0, 1);
+      }
+      this.skyColours = new Float32Array(n * 4);
+    }
+    const k = this.skyHeights;
+    const col = this.skyColours;
+    for (let i = 0; i < k.length; i++) {
+      const t = k[i]!;
+      const to = t >= 0 ? zenith : ground;
+      const f = Math.abs(t);
+      col[i * 4] = horizon.r + (to.r - horizon.r) * f;
+      col[i * 4 + 1] = horizon.g + (to.g - horizon.g) * f;
+      col[i * 4 + 2] = horizon.b + (to.b - horizon.b) * f;
+      col[i * 4 + 3] = 1;
+    }
+    this.dome.updateVerticesData(VertexBuffer.ColorKind, col);
+    this.skyHorizon.copyFrom(horizon);
+    this.skyZenith.copyFrom(zenith);
+    const moved = (a: Color3, b: Color3) => Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b));
+    if (moved(horizon, this.probeHorizon) > PROBE_CHANGE || moved(zenith, this.probeZenith) > PROBE_CHANGE) this.probeDue = true;
+  }
+
+  /** Draws the sky's reflections again when they are due and the last time was long enough ago. */
+  private refreshProbe(now: number): void {
+    if (!this.probeDue || !this.probe || now - this.probeAt < PROBE_GAP_MS) return;
+    this.probe.cubeTexture.resetRefreshCounter();
+    this.probeHorizon.copyFrom(this.skyHorizon);
+    this.probeZenith.copyFrom(this.skyZenith);
+    this.probeDue = false;
+    this.probeAt = now;
+  }
+
+  /** Fixes the world matrices of the airfield parts that never move, so they aren't worked out again every frame. */
+  private freezeStatic(): void {
+    for (const item of this.airfieldItems) {
+      if (!(item instanceof TransformNode) || moves(item)) continue;
+      let parent = item.parent;
+      while (parent && !moves(parent)) parent = parent.parent;
+      if (!parent) item.freezeWorldMatrix();
+    }
   }
 
   private aspect(): number {

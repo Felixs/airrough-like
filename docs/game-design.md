@@ -385,7 +385,15 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
 - **Quality:** the view starts at High (sharp on high-density screens, detailed shadows, edge smoothing, glow) and
   steps down by itself to Medium (normal resolution, coarser shadows, no glow) and then Low (lower resolution, no
   shadows) when frames stay below 45 per second for two seconds. Adding `?quality=high` (or `medium`, `low`) to the
-  game's address fixes the level instead.
+  game's address fixes the level instead. Adding `?perf` shows a small box in the bottom-left corner (only then,
+  never in normal play) for measuring the view, e.g. full screen or on a weak computer: frames per second and
+  milliseconds per frame, the 1% low (the average of the slowest 1% of frames over the last five seconds, with the
+  slowest single frame), the time the computer spent preparing each frame, the quality level, draw calls, meshes drawn
+  and the size of the picture in pixels; it updates twice a second and hides while the view is covered (Plan Mode).
+  To keep frames even, the light, sky and reflections change once per game minute (the sky's reflections only once its
+  colours have moved noticeably, at most about three times a second), and the aircraft models of every type and
+  livery, with one spare aircraft of each, are built while the menus or Plan Mode are open, so an aircraft's first
+  appearance in a Day doesn't stutter.
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day
