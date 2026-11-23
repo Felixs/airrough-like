@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTYPE · Airport buildings</title>
+<style>
+  :root{--bg:#0e1217;--panel:rgba(14,18,23,.9);--line:#263040;--txt:#dfe6ee;--dim:#9fb0c2;--acc:#ffc845}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+  #panel{position:fixed;left:12px;top:12px;width:290px;max-height:calc(100% - 24px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:10px;backdrop-filter:blur(6px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  #panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+  #panel h1{font-size:14px;margin:0;flex:1}
+  .tag{font-size:10px;letter-spacing:.08em;background:var(--acc);color:#1a1300;padding:2px 6px;border-radius:3px;font-weight:700}
+  #collapse{background:none;border:1px solid var(--line);color:var(--txt);border-radius:5px;width:28px;height:26px;cursor:pointer;font-size:14px}
+  .body{overflow:auto;padding:4px 12px 12px}
+  #panel.closed .body{display:none}
+  section{padding:10px 0;border-bottom:1px solid #1c2531}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 7px;font-weight:600;display:flex;justify-content:space-between}
+  h2 span{color:var(--acc);letter-spacing:0;font-size:13px;text-transform:none}
+  button{background:#18202b;color:var(--txt);border:1px solid #2b3747;border-radius:6px;padding:6px 8px;font:inherit;cursor:pointer}
+  button:hover{border-color:#43556b}
+  button.on{border-color:var(--acc);background:#2a2412;color:#fff}
+  .seg{display:flex;flex-wrap:wrap;gap:5px}
+  .seg button{flex:1 1 auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .row{display:flex;gap:6px;margin-top:6px}.row>*{flex:1}
+  .note{color:var(--dim);font-size:12px;margin:6px 0 0}
+  .foot{color:#7f90a3;font-size:11px;margin:10px 0 0}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:5;color:var(--dim);text-align:center;padding:20px}
+  #loading.err{color:#ff8a80}
+  @media (max-width:700px){#panel{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:46%}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <header><span class="tag">PROTOTYPE</span><h1>Airport buildings</h1><button id="collapse" aria-label="Collapse panel">–</button></header>
+  <div class="body">
+    <section><h2>Time of day <span id="hourLbl"></span></h2>
+      <input type="range" id="hour" min="5" max="24" step="0.05" aria-label="Time of day">
+      <div class="seg" id="presets"></div>
+      <div class="row"><button id="clock">▶ Run the clock</button></div></section>
+    <section><h2>Terminal style</h2><div class="seg" id="styles"></div><p class="note" id="styleNote"></p></section>
+    <section><h2>Camera</h2><div class="grid2" id="views"></div></section>
+    <p class="foot">Inspired by Berlin Brandenburg (BER) Terminal 1 and Frankfurt (FRA) Terminal 3, its cargo centres and the German standard control tower; nothing is copied. Each building sits on its real footprint in the game (1 tile = 16 m). Aircraft are simple stand-ins for scale. Drag to orbit, scroll or pinch to zoom, right-drag or two fingers to pan.</p>
+  </div>
+</div>
+<div id="loading">Loading Babylon.js…</div>
+<script>
+const CDNS=['https://cdn.jsdelivr.net/npm/babylonjs@8/babylon.js','https://unpkg.com/babylonjs@8/babylon.js','https://cdn.jsdelivr.net/npm/babylonjs@7/babylon.js'];
+function loadNext(i){if(i>=CDNS.length){fail('Could not load Babylon.js from the CDN.');return;}const s=document.createElement('script');s.src=CDNS[i];s.onload=()=>window.BABYLON?boot():loadNext(i+1);s.onerror=()=>loadNext(i+1);document.head.appendChild(s);}
+function fail(msg){const l=document.getElementById('loading');l.style.display='flex';l.classList.add('err');l.textContent=msg;}
+window.protoErrors=[];
+window.addEventListener('error',e=>{window.protoErrors.push(e.message);if(!window.BABYLON)return;const d=document.createElement('div');d.style.cssText='color:#ff8a80;font:11px monospace;margin-top:6px';d.textContent='Error: '+e.message;document.querySelector('.body').prepend(d);});
+loadNext(0);
+
+// ================= helpers =================
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+function rng(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};}
+const T=16; // metres per tile
+// sim tiles (x east, y south) -> world metres (X east, Z north)
+const TX=x=>x*T, TZ=y=>-y*T;
+
+function boot(){
+const B=BABYLON, V3=B.Vector3, C3=B.Color3;
+document.getElementById('loading').style.display='none';
+const canvas=document.getElementById('c');
+const engine=new B.Engine(canvas,true,{preserveDrawingBuffer:true,stencil:true,antialias:true});
+engine.setHardwareScalingLevel(1/Math.min(window.devicePixelRatio||1,1.5));
+const scene=new B.Scene(engine);
+scene.clearColor=new B.Color4(0.05,0.07,0.1,1);
+scene.fogMode=B.Scene.FOGMODE_EXP2;scene.fogDensity=0.00028;
+
+// ---------- camera ----------
+const cam=new B.ArcRotateCamera('cam',-Math.PI/2-0.35,0.95,700,new V3(330,0,-150),scene);
+cam.fov=0.75;cam.minZ=1;cam.maxZ=8000;cam.lowerRadiusLimit=20;cam.upperRadiusLimit=2200;cam.upperBetaLimit=1.45;cam.lowerBetaLimit=0.05;
+cam.wheelDeltaPercentage=0.01;cam.panningSensibility=60;cam.attachControl(canvas,true);
+
+// ---------- lights ----------
+const hemi=new B.HemisphericLight('hemi',new V3(0,1,0),scene);
+const sun=new B.DirectionalLight('sun',new V3(-1,-2,1),scene);sun.position=new V3(600,500,-600);
+const moon=new B.DirectionalLight('moon',new V3(0.4,-1,0.6),scene);moon.diffuse=C3.FromHexString('#8fa8d8');moon.specular=moon.diffuse.scale(0.4);
+const csm=new B.CascadedShadowGenerator(2048,sun);
+csm.lambda=0.85;csm.shadowMaxZ=1600;csm.stabilizeCascades=true;csm.filteringQuality=B.ShadowGenerator.QUALITY_HIGH;csm.bias=0.0015;csm.normalBias=0.02;csm.numCascades=3;
+const caster=m=>{csm.addShadowCaster(m,false);m.receiveShadows=true;};
+const glow=new B.GlowLayer('glow',scene,{mainTextureSamples:4,blurKernelSize:48});glow.intensity=0.6;
+
+// ---------- post ----------
+const pipe=new B.DefaultRenderingPipeline('post',true,scene,[cam]);
+pipe.samples=4;pipe.fxaaEnabled=true;
+pipe.imageProcessingEnabled=true;pipe.imageProcessing.toneMappingEnabled=true;
+pipe.imageProcessing.toneMappingType=B.ImageProcessingConfiguration.TONEMAPPING_ACES;pipe.imageProcessing.contrast=1.12;
+pipe.bloomEnabled=true;pipe.bloomThreshold=0.8;pipe.bloomWeight=0.3;pipe.bloomKernel=64;pipe.bloomScale=0.5;
+
+// ---------- sky dome (vertex colours) + reflections ----------
+const sky=B.MeshBuilder.CreateSphere('sky',{diameter:7000,segments:24,sideOrientation:B.Mesh.BACKSIDE},scene);
+const skyMat=new B.StandardMaterial('skyMat',scene);skyMat.disableLighting=true;skyMat.emissiveColor=C3.White();skyMat.diffuseColor=C3.Black();skyMat.specularColor=C3.Black();skyMat.fogEnabled=false;skyMat.backFaceCulling=false;
+sky.material=skyMat;sky.infiniteDistance=true;sky.isPickable=false;
+const skyPos=sky.getVerticesData(B.VertexBuffer.PositionKind);
+const skyCol=new Float32Array(skyPos.length/3*4);
+function paintSky(top,hor,ground,sunDir,sunCol,sunAmt){
+  for(let i=0;i<skyPos.length/3;i++){
+    const x=skyPos[i*3],y=skyPos[i*3+1],z=skyPos[i*3+2];const l=Math.hypot(x,y,z)||1;const h=y/l;
+    let c;
+    if(h>=0){const t=Math.pow(h,0.45);c=C3.Lerp(hor,top,t);} else c=C3.Lerp(hor,ground,Math.min(1,-h*6));
+    // sun glow near the horizon
+    const d=(x*sunDir.x+y*sunDir.y+z*sunDir.z)/l;
+    const g=Math.pow(Math.max(0,d),24)*sunAmt+Math.pow(Math.max(0,d),4)*sunAmt*0.25;
+    c=c.add(sunCol.scale(g));
+    skyCol[i*4]=c.r;skyCol[i*4+1]=c.g;skyCol[i*4+2]=c.b;skyCol[i*4+3]=1;
+  }
+  sky.setVerticesData(B.VertexBuffer.ColorKind,skyCol,true);
+}
+const probe=new B.ReflectionProbe('probe',256,scene);probe.renderList.push(sky);probe.refreshRate=B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;probe.position=new V3(330,30,-150);
+scene.environmentTexture=probe.cubeTexture;
+
+// ---------- textures ----------
+function tex(name,w,h,paint,o={}){
+  const dt=new B.DynamicTexture(name,{width:w,height:h},scene,true);
+  const g=dt.getContext();paint(g,w,h);dt.update(true);
+  dt.wrapU=dt.wrapV=o.clamp?B.Texture.CLAMP_ADDRESSMODE:B.Texture.WRAP_ADDRESSMODE;
+  dt.uScale=o.u||1;dt.vScale=o.v||1;dt.anisotropicFilteringLevel=8;
+  if(o.alpha)dt.hasAlpha=true;
+  return dt;
+}
+function speckle(g,w,h,n,a,s,seed){const r=rng(seed);for(let i=0;i<n;i++){const v=r()<0.5?0:255;g.fillStyle=`rgba(${v},${v},${v},${a*r()})`;g.fillRect(r()*w,r()*h,s*r()+0.5,s*r()+0.5);}}
+function blots(g,w,h,n,a,s,seed){const r=rng(seed);for(let i=0;i<n;i++){g.fillStyle=`rgba(0,0,0,${a*r()})`;g.beginPath();g.ellipse(r()*w,r()*h,s*(0.4+r()),s*(0.3+r()*0.6),r()*3,0,7);g.fill();}}
+
+// ---------- materials ----------
+const MATS=[];
+function pbr(name,hex,rough=0.6,metal=0,o={}){
+  const m=new B.PBRMaterial(name,scene);m.albedoColor=C3.FromHexString(hex);m.roughness=rough;m.metallic=metal;m.maxSimultaneousLights=8;
+  if(o.clear){m.clearCoat.isEnabled=true;m.clearCoat.intensity=o.clear;m.clearCoat.roughness=0.15;}
+  if(o.tex)m.albedoTexture=o.tex;
+  if(o.bump){m.bumpTexture=o.bump;m.bumpTexture.level=o.bumpLevel||0.5;}
+  MATS.push(m);return m;
+}
+// night-lit emissive materials: emissiveColor = base * level, level follows the darkness
+const LIT=[];
+function lit(m,hex,day=0,night=1,group='win'){m.emissiveColor=C3.Black();LIT.push({m,c:C3.FromHexString(hex),day,night,group});return m;}
+
+// glass curtain wall: albedo = reflective dark glass with mullions; emissive = the lit interior behind it
+function glassFacade(name,o){
+  // o: bay (m), h (m), w (m, total), horiz: array of mullion heights (m) or step, vert step (m), interior style
+  const PX=8; // px per metre
+  const bw=Math.round(o.bay*PX),bh=Math.round(o.h*PX);
+  const r=rng(o.seed||7);
+  const mull=o.mullion||'#2b3138';
+  const albedo=tex(name+'-a',bw,bh,(g,W,H)=>{
+    const grd=g.createLinearGradient(0,0,0,H);grd.addColorStop(0,o.top||'#3b4c5c');grd.addColorStop(1,o.bottom||'#1d262f');
+    g.fillStyle=grd;g.fillRect(0,0,W,H);
+    g.fillStyle=mull;
+    const hs=o.hstep||1.5;for(let y=0;y<=o.h+0.01;y+=hs){g.fillRect(0,H-Math.round(y*PX)-1,W,o.hw||2);}
+    if(o.vstep){for(let x=0;x<=o.bay+0.01;x+=o.vstep)g.fillRect(Math.round(x*PX)-1,0,o.vw||2,H);}
+    if(o.floors)for(const f of o.floors){g.fillStyle=o.slab||'#c9c4b8';g.fillRect(0,H-Math.round(f*PX)-Math.round(0.9*PX),W,Math.round(0.9*PX));}
+  },{u:o.w/o.bay});
+  const em=tex(name+'-e',bw,bh,(g,W,H)=>{
+    g.fillStyle='#000';g.fillRect(0,0,W,H);
+    const warm=o.warm||[255,214,160];
+    // interior: soft warm glow, brighter near ceilings, columns and people/shop silhouettes as darker shapes
+    const levels=o.floors?[0,...o.floors]:[0];
+    for(let i=0;i<levels.length;i++){
+      const y0=levels[i],y1=(levels[i+1]??o.h)-(o.floors&&i<levels.length-1?0.9:0);
+      const k=0.55+0.45*r();
+      const grd=g.createLinearGradient(0,H-y1*PX,0,H-y0*PX);
+      grd.addColorStop(0,`rgba(${warm[0]},${warm[1]},${warm[2]},${0.95*k})`);grd.addColorStop(0.5,`rgba(${warm[0]},${warm[1]},${warm[2]},${0.55*k})`);grd.addColorStop(1,`rgba(${warm[0]*0.8},${warm[1]*0.7},${warm[2]*0.6},${0.7*k})`);
+      g.fillStyle=grd;g.fillRect(0,H-y1*PX,W,(y1-y0)*PX);
+      // ceiling light line
+      g.fillStyle=`rgba(255,240,215,${0.9*k})`;g.fillRect(0,H-y1*PX+2,W,2);
+      // silhouettes
+      for(let s=0;s<o.bay/3;s++){if(r()<0.5)continue;const sx=r()*W,sw=(0.4+r()*2.2)*PX,sh=(1+r()*(y1-y0)*0.35)*PX;g.fillStyle=`rgba(0,0,0,${0.25+r()*0.35})`;g.fillRect(sx,H-y0*PX-sh,sw,sh);}
+    }
+    g.fillStyle='#000';
+    const hs=o.hstep||1.5;for(let y=0;y<=o.h+0.01;y+=hs)g.fillRect(0,H-Math.round(y*PX)-1,W,o.hw||2);
+    if(o.vstep){for(let x=0;x<=o.bay+0.01;x+=o.vstep)g.fillRect(Math.round(x*PX)-1,0,o.vw||2,H);}
+    if(o.floors)for(const f of o.floors)g.fillRect(0,H-Math.round(f*PX)-Math.round(0.9*PX),W,Math.round(0.9*PX));
+  },{u:o.w/o.bay});
+  const m=pbr(name,'#ffffff',o.rough??0.06,o.metal??0.35,{tex:albedo});
+  m.emissiveTexture=em;
+  lit(m,'#ffffff',o.dayLit??0.05,1,'win');
+  return m;
+}
+// solid cladding textures
+const ribsH=(name,hex,w,o={})=>tex(name,256,256,(g,W,H)=>{g.fillStyle=hex;g.fillRect(0,0,W,H);for(let y=0;y<H;y+=16){g.fillStyle='rgba(255,255,255,0.10)';g.fillRect(0,y,W,3);g.fillStyle='rgba(0,0,0,0.16)';g.fillRect(0,y+9,W,4);}speckle(g,W,H,1500,0.05,2,3);},o);
+const ribsV=(name,hex,o={})=>tex(name,256,256,(g,W,H)=>{g.fillStyle=hex;g.fillRect(0,0,W,H);for(let x=0;x<W;x+=12){g.fillStyle='rgba(255,255,255,0.09)';g.fillRect(x,0,3,H);g.fillStyle='rgba(0,0,0,0.18)';g.fillRect(x+7,0,3,H);}speckle(g,W,H,1500,0.05,2,5);},o);
+const stoneTex=(name,hex,o={})=>tex(name,256,256,(g,W,H)=>{g.fillStyle=hex;g.fillRect(0,0,W,H);speckle(g,W,H,5000,0.08,2,9);g.strokeStyle='rgba(0,0,0,0.12)';g.lineWidth=1.5;for(let y=0;y<=H;y+=64){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();}for(let y=0;y<H;y+=64)for(let x=(y/64%2)*64;x<=W;x+=128){g.beginPath();g.moveTo(x,y);g.lineTo(x,y+64);g.stroke();}},o);
+const roofTex=(name,o={})=>tex(name,256,256,(g,W,H)=>{g.fillStyle='#b9bcbc';g.fillRect(0,0,W,H);speckle(g,W,H,6000,0.08,2,11);blots(g,W,H,10,0.05,30,12);g.strokeStyle='rgba(0,0,0,0.08)';for(let x=0;x<=W;x+=32){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}},o);
+const concreteTex=(name,o={})=>tex(name,512,512,(g,W,H)=>{g.fillStyle='#a6a7a2';g.fillRect(0,0,W,H);speckle(g,W,H,20000,0.12,1.5,9);blots(g,W,H,16,0.06,26,3);g.strokeStyle='rgba(40,40,40,0.3)';for(let i=0;i<=W;i+=128){g.beginPath();g.moveTo(i,0);g.lineTo(i,H);g.moveTo(0,i);g.lineTo(W,i);g.stroke();}},o);
+
+// shared materials
+const M={
+  concrete:pbr('concrete','#ffffff',0.9,0,{tex:concreteTex('concT',{u:40,v:12})}),
+  grass:pbr('grass','#ffffff',0.95,0,{tex:tex('grassT',512,512,(g,W,H)=>{g.fillStyle='#4d6b35';g.fillRect(0,0,W,H);speckle(g,W,H,40000,0.14,2,2);blots(g,W,H,60,0.06,40,4);for(let y=0;y<H;y+=128){g.fillStyle='rgba(255,255,255,0.035)';g.fillRect(0,y,W,64);}},{u:30,v:30})}),
+  asphalt:pbr('asphalt','#ffffff',0.85,0,{tex:tex('asphT',512,512,(g,W,H)=>{g.fillStyle='#2c2e31';g.fillRect(0,0,W,H);speckle(g,W,H,30000,0.15,2,3);},{u:30,v:4})}),
+  steel:pbr('steel','#c8ccd0',0.35,0.8),
+  darkSteel:pbr('darkSteel','#3a3f45',0.5,0.6),
+  white:pbr('white','#e9eaea',0.55,0),
+  offWhite:pbr('offWhite','#d8d6d0',0.7,0),
+  stone:pbr('stone','#ffffff',0.75,0,{tex:stoneTex('stoneT','#d9d2c3')}),
+  roof:pbr('roof','#ffffff',0.8,0,{tex:roofTex('roofT',{u:10,v:4})}),
+  fascia:pbr('fascia','#dfe2e2',0.3,0.6),
+  bronze:pbr('bronze','#6b5641',0.45,0.7),
+  terracotta:pbr('terracotta','#b06a48',0.7,0),
+  rubber:pbr('rubber','#16181b',0.8,0),
+  red:pbr('red','#b3261e',0.4,0.1,{clear:0.6}),
+  yellow:pbr('yellow','#f2c230',0.6,0),
+  paintWhite:pbr('paintW','#f2f2f2',0.6,0),
+  orange:pbr('orange','#e07b1f',0.5,0.1,{clear:0.5}),
+  cladSilver:pbr('cladS','#ffffff',0.45,0.55,{tex:ribsH('cladST','#b9bec4',0,{u:20,v:4})}),
+  cladBlue:pbr('cladB','#ffffff',0.5,0.45,{tex:ribsV('cladBT','#3e4c5e',{u:12,v:4})}),
+  hvac:pbr('hvac','#9aa0a4',0.5,0.4),
+  glassDark:(()=>{const m=pbr('glassDark','#16202a',0.05,0.5);m.backFaceCulling=false;return m;})(),
+};
+// light sources seen as glowing bits
+const bulbWarm=lit(pbr('bulbW','#222222',0.4,0),'#ffd9a0',0,2.4,'lamp');
+const bulbWhite=lit(pbr('bulbC','#222222',0.4,0),'#eef4ff',0,2.4,'lamp');
+const bulbSodium=lit(pbr('bulbS','#222222',0.4,0),'#ffb050',0,2.4,'lamp');
+const redLight=lit(pbr('redL','#330000',0.4,0),'#ff2a1a',0.6,3,'beacon');
+const cabGlow=lit(pbr('cabG','#0b1512',0.05,0.4),'#2a6e5c',0.0,0.55,'win');
+
+// ---------- geometry helpers ----------
+const BUILT=[]; // meshes to merge by material at the end
+function box(w,h,d,x,y,z,mat,o={}){const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d},scene);m.position.set(x,y+h/2,z);if(o.ry)m.rotation.y=o.ry;m.material=mat;if(o.keep)caster(m);else BUILT.push(m);return m;}
+function cyl(d,h,x,y,z,mat,o={}){const m=B.MeshBuilder.CreateCylinder('c',{diameter:d,diameterTop:o.top,diameterBottom:o.bottom,height:h,tessellation:o.tess||20},scene);m.position.set(x,(o.rx||o.rz)?y:y+h/2,z);if(o.rx)m.rotation.x=o.rx;if(o.rz)m.rotation.z=o.rz;if(o.ry)m.rotation.y=o.ry;m.material=mat;if(o.keep)caster(m);else BUILT.push(m);return m;}
+// a facade plane: centre x,z at bottom y, width w, height h, facing 's'|'n'|'e'|'w'
+const FACE={s:0,n:Math.PI,w:Math.PI/2,e:-Math.PI/2};
+function face(w,h,x,y,z,dir,mat){const m=B.MeshBuilder.CreatePlane('f',{width:w,height:h},scene);m.position.set(x,y+h/2,z);m.rotation.y=FACE[dir];m.material=mat;BUILT.push(m);return m;}
+function label(text,x,y,z,w,h,ink='#3a3f45',rot=0){
+  const t=tex('lbl-'+text,1024,256,(g,W,H)=>{g.clearRect(0,0,W,H);g.fillStyle=ink;g.font=`700 ${H*0.62}px "Segoe UI",Roboto,sans-serif`;g.textAlign='center';g.textBaseline='middle';g.fillText(text,W/2,H/2+4);},{clamp:true,alpha:true});
+  const m=new B.StandardMaterial('lblm-'+text,scene);m.diffuseTexture=t;m.useAlphaFromDiffuseTexture=true;m.specularColor=C3.Black();m.zOffset=-2;
+  const p=B.MeshBuilder.CreateGround('lbl',{width:w,height:h},scene);p.position.set(x,y,z);p.rotation.y=rot;p.material=m;p.receiveShadows=true;return p;
+}
+function points(name,mat,list,size){const m=B.MeshBuilder.CreateSphere(name,{diameter:size,segments:6},scene);m.material=mat;const mats=list.map(([x,y,z])=>B.Matrix.Translation(x,y,z));m.thinInstanceAdd(mats);glow.addIncludedOnlyMesh(m);return m;}
+function discs(name,mat,list,size){const m=B.MeshBuilder.CreateDisc(name,{radius:size,tessellation:10,sideOrientation:B.Mesh.DOUBLESIDE},scene);m.material=mat;m.thinInstanceAdd(list.map(([x,y,z])=>B.Matrix.RotationX(-Math.PI/2).multiply(B.Matrix.Translation(x,y,z))));glow.addIncludedOnlyMesh(m);return m;}
+// custom mesh from positions/indices (normals computed)
+function meshFrom(name,pos,idx,uv,mat,both=false){const m=new B.Mesh(name,scene);const vd=new B.VertexData();vd.positions=pos;vd.indices=idx;if(uv)vd.uvs=uv;const n=[];B.VertexData.ComputeNormals(pos,idx,n);vd.normals=n;vd.applyToMesh(m);m.material=mat;if(both){mat.backFaceCulling=false;}caster(m);return m;}
+
+// =====================================================================
+// GROUND: grass, apron, taxiways, runway (the game's Starting Airport, plus a Terminal wing)
+// =====================================================================
+const ground=B.MeshBuilder.CreateGround('grass',{width:3000,height:2200},scene);ground.position.set(380,-0.05,-250);ground.material=M.grass;ground.receiveShadows=true;
+function pave(x0,x1,y0,y1,mat,yy=0.02){const g=B.MeshBuilder.CreateGround('pave',{width:TX(x1)-TX(x0),height:(y1-y0)*T},scene);g.position.set((TX(x0)+TX(x1))/2,yy,(TZ(y0)+TZ(y1))/2);g.material=mat;g.receiveShadows=true;return g;}
+pave(0,48,4,14,M.concrete,0.03); // service roads, aprons in front of the buildings
+pave(15,18,14,18,M.concrete);pave(33,36,14,18,M.concrete);pave(6,42,18,21,M.concrete);pave(6,9,21,24,M.concrete);pave(39,42,21,24,M.concrete);
+pave(6,42,24,28,M.asphalt,0.04);
+// land side: grass strip north with a road
+pave(-4,52,-1,0.6,M.asphalt,0.02);
+// apron markings: centre line of the apron lane, stand lead-ins
+const yellowLines=[];
+function yl(x0,z0,x1,z1,w=0.45){const l=Math.hypot(x1-x0,z1-z0);const m=B.MeshBuilder.CreateGround('yl',{width:w,height:l},scene);m.position.set((x0+x1)/2,0.07,(z0+z1)/2);m.rotation.y=Math.atan2(x1-x0,z1-z0);m.material=M.yellow;yellowLines.push(m);}
+yl(TX(7),TZ(12.5),TX(44),TZ(12.5));yl(TX(6),TZ(19.5),TX(42),TZ(19.5));yl(TX(16.5),TZ(12.5),TX(16.5),TZ(19.5));yl(TX(34.5),TZ(12.5),TX(34.5),TZ(19.5));
+const STANDS=[{x:8,w:2},{x:10,w:2},{x:12,w:3},{x:18,w:3},{x:30,w:3,cargo:true},{x:33,w:2,cargo:true}];
+for(const s of STANDS){const cx=TX(s.x+s.w/2);yl(cx,TZ(8.3),cx,TZ(12.5));yl(cx-3.5,TZ(8.3),cx+3.5,TZ(8.3),0.8);
+  // red dashed outline
+  const x0=TX(s.x)+1.5,x1=TX(s.x+s.w)-1.5,z0=TZ(8)-1,z1=TZ(11)+1;
+  for(const [a,b,c,d] of [[x0,z0,x1,z0],[x1,z0,x1,z1],[x0,z1,x1,z1],[x0,z0,x0,z1]]){const L=Math.hypot(c-a,d-b);for(let q=0;q<L;q+=2.4){const t0=q/L,t1=Math.min(1,(q+1.3)/L);const m=B.MeshBuilder.CreateGround('rd',{width:0.35,height:(t1-t0)*L},scene);m.position.set(a+(c-a)*(t0+t1)/2,0.07,b+(d-b)*(t0+t1)/2);m.rotation.y=Math.atan2(c-a,d-b);m.material=M.red;yellowLines.push(m);}}}
+// runway paint
+for(let x=TX(8);x<TX(40);x+=30){const m=B.MeshBuilder.CreateGround('rc',{width:18,height:0.9},scene);m.position.set(x,0.08,TZ(26));m.material=M.paintWhite;yellowLines.push(m);}
+for(const ex of [TX(6)+6,TX(42)-6])for(let k=-6;k<=6;k++){if(k===0)continue;const m=B.MeshBuilder.CreateGround('th',{width:10,height:1.6},scene);m.position.set(ex,0.08,TZ(26)+k*3.6);m.material=M.paintWhite;yellowLines.push(m);}
+B.Mesh.MergeMeshes(yellowLines.filter(m=>m.material===M.yellow),true,true).receiveShadows=true;
+B.Mesh.MergeMeshes(yellowLines.filter(m=>m.material===M.red),true,true).receiveShadows=true;
+B.Mesh.MergeMeshes(yellowLines.filter(m=>m.material===M.paintWhite),true,true).receiveShadows=true;
+
+// trees outside the fence
+{const r=rng(5);const tm=pbr('leaf','#3f6b34',0.9,0),trunk=pbr('trunk','#5a4632',0.9,0);
+ const crown=B.MeshBuilder.CreateIcoSphere('crown',{radius:4,subdivisions:2},scene);crown.material=tm;const tr=B.MeshBuilder.CreateCylinder('tr',{diameter:0.8,height:4},scene);tr.material=trunk;
+ const cm=[],tm2=[];for(let i=0;i<220;i++){let x=-300+r()*1400,z=200-r()*1000;if(x>-40&&x<820&&z<60&&z>-560)continue;const s=0.7+r()*0.8;cm.push(B.Matrix.Scaling(s,s*1.1,s).multiply(B.Matrix.Translation(x,4+4*s,z)));tm2.push(B.Matrix.Translation(x,2,z));}
+ crown.thinInstanceAdd(cm);tr.thinInstanceAdd(tm2);caster(crown);caster(tr);}
+
+// =====================================================================
+// BUILDINGS (sim tiles → metres). Terminal x 8–21 (main 10 + one 3-tile wing), y 4–8.
+// =====================================================================
+const STYLE={cur:'deck'};
+const styleRoots={deck:new B.TransformNode('deck',scene),hall:new B.TransformNode('hall',scene)};
+const T0={x0:TX(8),x1:TX(21),zN:TZ(4),zS:TZ(8)}; // the Terminal footprint in metres
+const GLASS={
+  hall:glassFacade('g-hall',{bay:9,h:13,w:1,hstep:1.6,vstep:9,seed:3,top:'#4a6175',bottom:'#22303c'}),
+  gate:glassFacade('g-gate',{bay:6,h:6,w:1,hstep:6,vstep:1.5,seed:5,top:'#3a4a58',bottom:'#1d262f'}),
+  land:glassFacade('g-land',{bay:9,h:19,w:1,hstep:1.6,vstep:9,seed:8,floors:[6.5],top:'#4a6175',bottom:'#202b36'}),
+};
+// one glass material per facade length (the texture tiles by width)
+const glassFor=(kind,w)=>{const key=kind+w.toFixed(1);if(!GLASS[key]){const base=GLASS[kind];const m=base.clone(kind+'-'+w.toFixed(0));m.albedoTexture=base.albedoTexture.clone();m.emissiveTexture=base.emissiveTexture.clone();const bay=kind==='gate'?6:9;m.albedoTexture.uScale=m.emissiveTexture.uScale=w/bay;LIT.push({m,c:C3.White(),day:0.05,night:1,group:'win'});GLASS[key]=m;}return GLASS[key];};
+function under(root,from){for(let i=from;i<BUILT.length;i++)BUILT[i].parent=root;}
+
+// ---------- Terminal A: "deck" (BER T1: one flat roof deck on slender columns, colonnades, horizontal-mullion glass) ----------
+{
+  const start=BUILT.length;const {x0,x1,zN,zS}=T0;const W=x1-x0,cx=(x0+x1)/2;
+  const D=zN-zS; // 64
+  // gate level (0–6 m), a stone floor-slab band, then the tall hall glass to 19 m; the hall is set back 4 m on the airside
+  const zg=zS+3, zh=zS+7, zl=zN-5;
+  box(W,6.6,zh-zg,cx,0,(zg+zh)/2,M.darkSteel); // gate-level body behind its glass
+  face(W,6,cx,0,zg-0.02,'s',glassFor('gate',W));
+  box(W+0.4,1.0,zh-zg+0.4,cx,6,(zg+zh)/2,M.stone); // stone band (floor edge)
+  box(W,13,zl-zh,cx,6.5,(zh+zl)/2,M.darkSteel);
+  face(W,12.5,cx,7,zh-0.02,'s',glassFor('hall',W));
+  face(W,19,cx,0,zl+0.02,'n',glassFor('land',W));
+  // stone end walls with tall slot windows
+  for(const [ex,dir] of [[x0,'w'],[x1,'e']]){box(1.2,19.5,zl-zg,ex+(dir==='w'?0.6:-0.6),0,(zg+zl)/2,M.stone);
+    for(let k=0;k<4;k++){const zz=zg+8+k*((zl-zg-16)/3);face(1.6,15,ex+(dir==='w'?-0.05:0.05),2.5,zz,dir,glassFor('gate',1.6));}}
+  // the roof deck: 1.8 m slab, overhanging 7 m airside, 16 m landside (drop-off canopy) and 6 m at the ends
+  const ry=19.5,ox=6,os=7,on=16;
+  box(W+2*ox,1.8,(zl+on)-(zS-os+3),cx,ry,((zl+on)+(zS-os+3))/2,M.fascia);
+  const roofTop=box(W+2*ox-1.2,0.2,(zl+on)-(zS-os+3)-1.2,cx,ry+1.8,((zl+on)+(zS-os+3))/2,M.roof);
+  // skylight bands in the roof, glowing at night
+  const sk=lit(pbr('skylight','#2b3a48',0.08,0.4),'#ffe2b8',0,1.4,'win');
+  for(const zz of [zh+8,(zh+zl)/2,zl-8])box(W-24,0.3,3,cx,ry+1.85,zz,sk);
+  // HVAC on the roof
+  for(let k=0;k<5;k++)box(6,2,4,x0+20+k*(W-40)/4,ry+2,zl+6,M.hvac);
+  // colonnades: slender steel columns along both edges of the deck
+  const cols=[];for(let x=x0-ox+3;x<=x1+ox-3;x+=13){cols.push([x,zl+on-2.5],[x,zS-os+5]);}
+  for(const [x,z] of cols)cyl(0.9,ry,x,0,z,M.steel,{tess:12});
+  // downlights under the deck (the soffit), warm
+  const dl=[];for(let x=x0-ox+4;x<x1+ox-2;x+=6.5){for(let z=zl+2;z<zl+on-1;z+=5)dl.push([x,ry-0.05,z]);for(let z=zS-os+4;z<zg-0.5;z+=3.5)dl.push([x,ry-0.05,z]);}
+  styleRoots.deck._lights=[discs('soffit',bulbWarm,dl,0.35)];
+  label('TERMINAL',cx,ry+2.06,(zh+zl)/2+4,W*0.55,16,'#4a4f55');
+  // landside drop-off kerb
+  box(W+2*ox,0.25,4,cx,0,zl+on-6,M.offWhite);
+  under(styleRoots.deck,start);
+  for(const m of styleRoots.deck._lights)m.parent=styleRoots.deck;
+}
+
+// ---------- Terminal B: "hall" (FRA T3: a long low gate pier with warm terracotta fins in front of a tall hall under a gently curved roof with oval skylights) ----------
+{
+  const start=BUILT.length;const {x0,x1,zN,zS}=T0;const W=x1-x0,cx=(x0+x1)/2;
+  // airside pier: 2 storeys (11 m), 18 m deep, glass behind terracotta fins
+  const zp=zS+18;
+  box(W,11,18,cx,0,(zS+zp)/2,M.darkSteel);
+  face(W,11,cx,0,zS-0.02,'s',(()=>{const m=glassFacade('g-pier',{bay:6,h:11,w:W,hstep:5.5,vstep:1.5,seed:12,floors:[5.2],slab:'#5a5047',top:'#405160',bottom:'#1f2a34'});return m;})());
+  const fin=B.MeshBuilder.CreateBox('fin',{width:0.35,height:11,depth:1.2},scene);fin.material=M.terracotta;
+  const fm=[];for(let x=x0+0.6;x<=x1-0.6;x+=1.5)fm.push(B.Matrix.Translation(x,5.5,zS-0.75));fin.thinInstanceAdd(fm);caster(fin);fin.parent=styleRoots.hall;
+  box(W+1,1.2,19,cx,11,(zS+zp)/2,M.fascia); // pier roof edge
+  box(W-2,0.2,17,cx,12.2,(zS+zp)/2,M.roof);
+  // the hall behind: glass all round, curved roof from 14 to 24 m
+  const zl=zN-3;
+  box(W-4,19,zl-zp,cx,0,(zp+zl)/2,M.darkSteel);
+  face(W-4,6.8,cx,12.4,zp-0.03,'s',glassFor('gate',W-4));
+  face(W-4,19,cx,0,zl+0.02,'n',glassFor('land',W-4));
+  // curved roof: custom mesh along x, arc across z
+  const rise=7,base=19,ov=5;const za=zp-ov+2,zb=zl+ov+3;const NX=2,NA=24;
+  const pos=[],idx=[],uv=[];
+  for(let i=0;i<=NX;i++){const x=x0-3+(W+6)*i/NX;for(let j=0;j<=NA;j++){const t=j/NA;const z=za+(zb-za)*t;const y=base+rise*Math.sin(Math.PI*t);pos.push(x,y,z);uv.push(i/NX,t);}}
+  for(let i=0;i<NX;i++)for(let j=0;j<NA;j++){const a=i*(NA+1)+j,b=a+NA+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  // top surface (with skylight islands painted on, glowing at night), underside soffit in warm wood
+  const roofSkin=tex('hallRoof',2048,512,(g,Wd,H)=>{g.fillStyle='#c4c7c6';g.fillRect(0,0,Wd,H);g.strokeStyle='rgba(0,0,0,0.12)';g.lineWidth=2;for(let x=0;x<Wd;x+=12){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}speckle(g,Wd,H,8000,0.06,2,4);g.fillStyle='#2d3c4a';for(const [cx2,w2] of [[0.2,0.12],[0.5,0.16],[0.8,0.12]]){g.beginPath();g.ellipse(cx2*Wd,H*0.5,w2*Wd/2,H*0.16,0,0,7);g.fill();}});
+  const roofEm=tex('hallRoofE',2048,512,(g,Wd,H)=>{g.fillStyle='#000';g.fillRect(0,0,Wd,H);g.fillStyle='#ffd9a8';for(const [cx2,w2] of [[0.2,0.12],[0.5,0.16],[0.8,0.12]]){g.beginPath();g.ellipse(cx2*Wd,H*0.5,w2*Wd/2,H*0.16,0,0,7);g.fill();}});
+  const rm=pbr('hallRoofM','#ffffff',0.4,0.5,{tex:roofSkin});rm.emissiveTexture=roofEm;lit(rm,'#ffffff',0,1.1,'win');
+  const roofMesh=meshFrom('hallRoof',pos,idx.slice(),uv,rm);roofMesh.parent=styleRoots.hall;
+  // underside: flip winding, warm timber
+  const idx2=[];for(let k=0;k<idx.length;k+=3)idx2.push(idx[k],idx[k+2],idx[k+1]);
+  const pos2=pos.map((v,k)=>k%3===1?v-0.6:v);
+  const wood=pbr('timber','#ffffff',0.7,0,{tex:tex('timberT',256,256,(g,Wd,H)=>{g.fillStyle='#a8754a';g.fillRect(0,0,Wd,H);for(let y=0;y<H;y+=8){g.fillStyle=`rgba(0,0,0,${0.05+0.08*((y/8)%2)})`;g.fillRect(0,y,Wd,4);}},{u:20,v:20})});
+  lit(wood,'#5a3a22',0,0.35,'win');
+  meshFrom('hallSoffit',pos2,idx2,uv,wood).parent=styleRoots.hall;
+  // gable ends: glass fans
+  for(const [ex,dir] of [[x0-3+0.5,-1],[x1+3-0.5,1]]){
+    const gp=[],gi=[],gu=[];gp.push(ex,base,(za+zb)/2);gu.push(0.5,0);
+    for(let j=0;j<=NA;j++){const t=j/NA;gp.push(ex,base+rise*Math.sin(Math.PI*t),za+(zb-za)*t);gu.push(t,1);}
+    for(let j=1;j<=NA;j++){if(dir>0)gi.push(0,j,j+1);else gi.push(0,j+1,j);}
+    meshFrom('gable',gp,gi,gu,M.glassDark).parent=styleRoots.hall;
+  }
+  // columns under the overhangs (tree-like pairs)
+  for(let x=x0;x<=x1;x+=16){cyl(1.0,base+1,x,0,zb-2,M.steel,{tess:12});}
+  // hall end walls in stone
+  for(const ex of [x0+2.5,x1-2.5])box(1.0,19,zl-zp,ex,0,(zp+zl)/2,M.stone);
+  const dl=[];for(let x=x0+2;x<x1;x+=6)for(const z of [zS-0.2-1.5]){dl.push([x,10.8,z]);}
+  styleRoots.hall._lights=[discs('pierLights',bulbWarm,dl,0.3)];
+  styleRoots.hall._lights[0].parent=styleRoots.hall;
+  label('TERMINAL',cx,12.45,(zS+zp)/2,W*0.5,9,'#4a4f55');
+  under(styleRoots.hall,start);
+}
+
+// ---------- jet bridges (both styles): rotunda at the gate level, tunnel to the aircraft door ----------
+const bridgeMat=pbr('bridge','#cfd2d4',0.4,0.3),bridgeGlass=lit(pbr('bridgeGl','#26323c',0.1,0.4),'#ffd9a8',0,0.8,'win');
+function jetBridge(cx,door){ // rotunda left of a nose-in aircraft
+  const rx=cx-13,rz=T0.zS-3.2,H=4.6;
+  cyl(4.2,H+1.4,rx,0,rz,bridgeMat,{tess:20,keep:true});
+  const end=new V3(door.x-2.2,H,door.z);const piv=new V3(rx,H,rz);const len=V3.Distance(piv,end);
+  const t=B.MeshBuilder.CreateBox('tun',{width:2.8,height:3,depth:len},scene);t.position=V3.Lerp(piv,end,0.5);t.lookAt(end);t.material=bridgeMat;caster(t);
+  const strip=B.MeshBuilder.CreateBox('tunW',{width:2.86,height:0.7,depth:len*0.9},scene);strip.position=t.position.add(new V3(0,0.4,0));strip.rotationQuaternion=t.rotationQuaternion.clone();strip.material=bridgeGlass;
+  const cab=B.MeshBuilder.CreateBox('cab',{width:3.6,height:3.2,depth:3.6},scene);cab.position.set(door.x-2.6,H,door.z);cab.material=bridgeMat;caster(cab);
+  const fx=V3.Lerp(piv,end,0.72);cyl(0.5,H-1.5,fx.x,0,fx.z,M.steel,{keep:true});box(3,0.9,1.4,fx.x,0,fx.z,M.rubber,{keep:true});
+}
+
+// ---------- simple stand-in aircraft for scale ----------
+const acWhite=pbr('acW','#f1f2f3',0.35,0.1,{clear:0.8});
+function aircraft(x,z,L,span,tail,o={}){
+  const root=new B.TransformNode('ac',scene);root.position.set(x,0,z);
+  const R=o.R||2,y0=o.gear||2.9;const parts=[];
+  const add=(m,mat)=>{m.material=mat;m.parent=root;caster(m);parts.push(m);return m;};
+  const fus=add(B.MeshBuilder.CreateCylinder('fus',{diameter:2*R,height:L*0.62,tessellation:24},scene),acWhite);fus.rotation.x=Math.PI/2;fus.position.set(0,y0,0.02*L);
+  const nose=add(B.MeshBuilder.CreateSphere('nose',{diameter:2*R,segments:16},scene),acWhite);nose.scaling.z=2.2;nose.position.set(0,y0,0.33*L);
+  const tc=add(B.MeshBuilder.CreateCylinder('tc',{diameterTop:2*R,diameterBottom:0.5,height:L*0.3,tessellation:24},scene),acWhite);tc.rotation.x=-Math.PI/2;tc.position.set(0,y0+0.4,-0.44*L);
+  const tailM=pbr('tail'+tail,tail,0.4,0.1,{clear:0.7});
+  for(const s of [-1,1]){const w=add(B.MeshBuilder.CreateBox('w',{width:span/2,height:0.45,depth:L*0.13},scene),acWhite);w.position.set(s*span/4,y0-R*0.55,-0.02*L);w.rotation.y=s*0.4;
+    const e=add(B.MeshBuilder.CreateCylinder('e',{diameter:o.prop?1.2:2.0,height:3.8,tessellation:16},scene),o.prop?acWhite:tailM);e.rotation.x=Math.PI/2;e.position.set(s*span*0.17,y0-R-0.6,0.06*L);
+    const hs=add(B.MeshBuilder.CreateBox('hs',{width:span*0.18,height:0.3,depth:L*0.07},scene),acWhite);hs.position.set(s*span*0.09,y0+0.8,-0.46*L);hs.rotation.y=s*0.45;}
+  const fin=add(B.MeshBuilder.CreateBox('fin',{width:0.35,height:L*0.18,depth:L*0.13},scene),tailM);fin.position.set(0,y0+R+L*0.08,-0.45*L);fin.rotation.x=-0.45;
+  const winM=lit(pbr('acWin','#1b2430',0.2,0.2),'#ffe1b0',0,1,'win');
+  if(!o.cargo)for(const s of [-1,1]){const st=add(B.MeshBuilder.CreateBox('win',{width:0.05,height:0.35,depth:L*0.5},scene),winM);st.position.set(s*(R-0.02),y0+0.35,0.02*L);}
+  const stripe=add(B.MeshBuilder.CreateBox('str',{width:2*R+0.06,height:0.25,depth:L*0.55},scene),tailM);stripe.position.set(0,y0-0.3,0);
+  for(const gz of [0.28*L,-0.04*L])add(B.MeshBuilder.CreateCylinder('g',{diameter:1.1,height:1.2,tessellation:10},scene),M.rubber).position.set(0,0.55,gz);
+  return {door:new V3(x-R,y0,z+0.26*L)};
+}
+// parked: nose north (towards the building)
+const SC=TZ(9.5);
+for(const s of STANDS){const cx=TX(s.x+s.w/2);
+  if(s.cargo){aircraft(cx,SC-2,s.w===3?39:30,s.w===3?34:26,s.w===3?'#3b4a5a':'#c8a020',{cargo:true});continue;}
+  const a=s.w===3?aircraft(cx,SC-2,37.6,35.8,s.x===12?'#9c1d2a':'#1f4e8c'):aircraft(cx,SC-2,29,26,'#2b7a5a',{R:1.5,gear:2.2});
+  if(s.w===3)jetBridge(cx,a.door);
+}
+
+// ---------- Cargo Hub x 30–37, y 4–8: silver ribbed hall, dark high-bay warehouse, office head, lit roller doors ----------
+{
+  const x0=TX(30),x1=TX(37),zN=TZ(4),zS=TZ(8);const W=x1-x0,cx=(x0+x1)/2;
+  const hh=15;
+  box(W-18,hh,zN-zS-2,cx-9,0,(zN+zS)/2+1,M.cladSilver);
+  // accent band at the top edge
+  box(W-18+0.2,1.2,zN-zS-1.8,cx-9,hh-1.6,(zN+zS)/2+1,pbr('accent','#1f8a8a',0.5,0.2));
+  // high-bay warehouse at the back-west corner
+  box(40,30,26,x0+20,0,zN-13,M.cladBlue);
+  box(40.4,0.6,26.4,x0+20,30,zN-13,M.fascia);
+  // office head at the east end: 3 storeys of ribbon windows
+  const offG=glassFacade('g-off',{bay:18,h:13,w:18,hstep:4.3,vstep:1.8,floors:[4.3,8.6],slab:'#e8e6e0',seed:21,top:'#4a6175',bottom:'#22303c'});
+  box(18,13.2,zN-zS-2,x1-9,0,(zN+zS)/2+1,M.white);
+  face(18,13,x1-9,0,zS+2-0.03,'s',offG);
+  const offE=offG.clone('g-offE');offE.albedoTexture=offG.albedoTexture.clone();offE.emissiveTexture=offG.emissiveTexture.clone();offE.albedoTexture.uScale=offE.emissiveTexture.uScale=(zN-zS-2)/18;LIT.push({m:offE,c:C3.White(),day:0.05,night:1,group:'win'});
+  face(zN-zS-2,13,x1+0.03,0,(zN+zS)/2+1,'e',offE);
+  // airside roller doors with sodium-lit insides and a canopy over them
+  const doorLit=lit(pbr('doorIn','#2a2622',0.8,0),'#ffb060',0.02,1.2,'win');
+  const doorSteel=pbr('doorSteel','#ffffff',0.5,0.5,{tex:ribsH('doorT','#9aa3ab',0,{u:1,v:2})});
+  for(let k=0;k<5;k++){const dx=x0+7+k*15.5;
+    face(9,7.5,dx,0,zS+2-0.04,'s',k%2?doorSteel:doorLit); // open (lit) and closed doors alternate
+    box(10,0.5,0.6,dx,7.5,zS+1.7,M.yellow);
+    box(1,1.2,1.2,dx-5.2,0,zS-0.2,M.yellow);box(1,1.2,1.2,dx+5.2,0,zS-0.2,M.yellow);}
+  box(W-18,0.6,7,cx-9,9.5,zS-2.5,M.fascia);
+  const cl=[];for(let x=x0+3;x<x1-18;x+=6)cl.push([x,9.45,zS-2.5]);discs('cargoCanopy',bulbSodium,cl,0.45);
+  // skylights and vents on the roof
+  const sk=lit(pbr('skyC','#2b3a48',0.08,0.4),'#ffd0a0',0,1,'win');for(const zz of [zS+14,zS+30,zS+46])box(W-30,0.4,2.4,cx-12,hh,zz,sk);
+  for(let k=0;k<4;k++)box(4,1.6,3,x0+50+k*9,hh,zN-8,M.hvac);
+  label('CARGO',cx-9,hh+0.45,(zN+zS)/2+4,40,12,'#3a3f45');
+  // wall-pack lights on the airside wall
+  const wp=[];for(let x=x0+4;x<x1-2;x+=8)wp.push([x,12.5,zS+1.6]);points('wallpacks',bulbSodium,wp,0.6);
+}
+
+// ---------- ATC Tower x 2–5, y 4–8: base building + slim round shaft, flared cab with outward-sloping green glass ----------
+{
+  const x0=TX(2),x1=TX(5),zN=TZ(4),zS=TZ(8);const cx=(x0+x1)/2;
+  // base building: 2 storeys, white with ribbon windows
+  const bw=36,bd=24,bz=zS+16;
+  box(bw,8.4,bd,cx,0,bz,M.white);
+  const ribbon=glassFacade('g-base',{bay:12,h:8,w:bw,hstep:4,vstep:2,floors:[3.9],slab:'#e9eaea',seed:31});
+  face(bw,7,cx,0.6,bz-bd/2-0.03,'s',ribbon);
+  box(bw+0.6,0.6,bd+0.6,cx,8.4,bz,M.fascia);
+  // shaft
+  const sx=cx+6,sz=zN-16,H=52;
+  cyl(7.5,H,sx,0,sz,M.white,{tess:32,keep:true});
+  // lit stair slit up the shaft
+  const slit=lit(pbr('slit','#1a2028',0.2,0.2),'#fff0d6',0,1.2,'win');box(0.9,H-12,0.4,sx,8,sz-3.7,slit,{keep:true});
+  // flared equipment floors (cone), then the cab
+  cyl(1,6,sx,H,sz,M.offWhite,{top:15,bottom:7.5,tess:32,keep:true});
+  const ring=lit(pbr('ring','#1d262f',0.1,0.4),'#ffe7c4',0.02,0.9,'win');cyl(15.2,1.4,sx,H+6,sz,ring,{tess:32,keep:true});
+  cyl(15.4,0.6,sx,H+7.4,sz,M.fascia,{tess:32,keep:true});
+  // cab glass: 12 sides, sloping outward
+  const cab=B.MeshBuilder.CreateCylinder('cab',{diameterBottom:14.6,diameterTop:17.2,height:5.2,tessellation:12},scene);cab.position.set(sx,H+8+2.6,sz);cab.material=cabGlow;caster(cab);
+  // mullions on the cab corners
+  const mul=B.MeshBuilder.CreateBox('mul',{width:0.25,height:5.4,depth:0.25},scene);mul.material=M.darkSteel;const mm=[];for(let k=0;k<12;k++){const a=k/12*Math.PI*2+Math.PI/12;const r1=7.9;mm.push(B.Matrix.RotationZ(0).multiply(B.Matrix.Translation(sx+Math.cos(a)*r1,H+8+2.7,sz+Math.sin(a)*r1)));}mul.thinInstanceAdd(mm);
+  // roof disc, antennas, radar dome
+  cyl(19,1.1,sx,H+13.2,sz,M.fascia,{tess:32,keep:true});
+  cyl(3.2,2.5,sx,H+14.3,sz,M.offWhite,{tess:16,keep:true});
+  const dome=B.MeshBuilder.CreateSphere('dome',{diameter:3.6,segments:16},scene);dome.position.set(sx,H+18,sz);dome.material=M.white;caster(dome);
+  for(const [dx,dz,h] of [[5,2,6],[-5,-2,8],[3,-6,5]])cyl(0.3,h,sx+dx,H+14.3,sz+dz,M.steel,{keep:true});
+  window.towerBeacons=points('towerRed',redLight,[[sx+5,H+20.6,sz+2],[sx-5,H+22.6,sz-2],[sx,H+20,sz]],0.8);
+  label('TWR',cx-6,0.1,zS-4,10,4,'#cfd8d4');
+}
+
+// ---------- Fire & Rescue Station x 22–25, y 5–7 (between the buildings, onto the apron) ----------
+{
+  const x0=TX(22),x1=TX(25),zN=TZ(5),zS=TZ(7);const W=x1-x0,cx=(x0+x1)/2;
+  box(W-8,9,zN-zS-4,cx-4,0,(zN+zS)/2+2,M.offWhite);
+  // red band and 4 tall glazed bay doors (lit white inside at night)
+  box(W-7.6,1.4,zN-zS-3.6,cx-4,9,(zN+zS)/2+2,M.red);
+  const bay=glassFacade('g-firebay',{bay:7,h:7,w:7,hstep:0.9,vstep:7,seed:41,top:'#56606a',bottom:'#2a3038',warm:[235,240,255]});
+  for(let k=0;k<4;k++){const dx=x0+6+k*8.2;face(7,7,dx,0,zS+4-0.03,'s',bay);box(0.6,7.4,0.5,dx-3.8,0,zS+3.8,M.red);}
+  // drill tower
+  box(6,20,6,x1-4,0,zN-6,M.offWhite,{keep:true});box(6.4,1.2,6.4,x1-4,20,zN-6,M.red,{keep:true});
+  const tw=glassFacade('g-drill',{bay:2,h:16,w:2,hstep:3.2,seed:44});for(let k=0;k<1;k++)face(2,15,x1-4,3,zN-9.03,'s',tw);
+  // crash tenders on the forecourt
+  const truckRed=pbr('truckRed','#c0281c',0.35,0.2,{clear:0.8});
+  for(const [tx,tz] of [[x0+10,zS-4],[x0+26,zS-4]]){
+    box(4,3.6,12,tx,0.9,tz,truckRed,{keep:true});box(4.1,0.5,12.1,tx,2.2,tz,M.paintWhite,{keep:true});box(3.6,2.2,2.6,tx,1.4,tz-6.4,truckRed,{keep:true});
+    cyl(0.5,0.8,tx,4.5,tz-2,M.steel,{keep:true});
+    for(const wz of [-4,-0.5,3.5])for(const s of [-1,1])cyl(1.4,0.8,tx+s*2.0,0.7,tz+wz,M.rubber,{rz:Math.PI/2,keep:true});
+  }
+  window.fireBeacons=points('fireBlue',lit(pbr('blueL','#001433',0.4,0),'#2a6bff',0,3,'beacon'),[[x0+10,4.8,zS-1.2],[x0+26,4.8,zS-1.2]],0.5);
+}
+
+// ---------- office buildings north: Admin Office (fins), Airline Office (glass + bronze crown), Ramp Agent Station (low + GSE shed) ----------
+function office(x,y,w,h,o){
+  const x0=TX(x),x1=TX(x+w),zN=TZ(y),zS=TZ(y+h);const W=x1-x0-6,D=zN-zS-6,cx=(x0+x1)/2,cz=(zN+zS)/2;const H=o.floors*4.2;
+  box(W,H,D,cx,0,cz,M.darkSteel);
+  const fl=[];for(let k=1;k<o.floors;k++)fl.push(k*4.2);
+  const g=glassFacade('g-'+o.name,{bay:W,h:H,w:W,hstep:4.2,vstep:1.8,floors:fl,slab:o.slab||'#e6e2da',seed:o.seed||50,top:'#4d6377',bottom:'#25313c'});
+  for(const dir of ['s','n']){face(W,H,cx,0,cz+(dir==='s'?-D/2-0.03:D/2+0.03),dir,g);}
+  const ge=g.clone('g-'+o.name+'e');ge.albedoTexture=g.albedoTexture.clone();ge.emissiveTexture=g.emissiveTexture.clone();ge.albedoTexture.uScale=ge.emissiveTexture.uScale=D/W;LIT.push({m:ge,c:C3.White(),day:0.05,night:1,group:'win'});
+  for(const dir of ['e','w'])face(D,H,cx+(dir==='w'?-W/2-0.03:W/2+0.03),0,cz,dir,ge);
+  if(o.fins){const fin=B.MeshBuilder.CreateBox('ofin',{width:0.3,height:H,depth:0.9},scene);fin.material=o.fins;const fm=[];for(let xx=cx-W/2+0.9;xx<=cx+W/2-0.9;xx+=1.8){fm.push(B.Matrix.Translation(xx,H/2,cz-D/2-0.5),B.Matrix.Translation(xx,H/2,cz+D/2+0.5));}fin.thinInstanceAdd(fm);caster(fin);}
+  box(W+1.2,0.8,D+1.2,cx,H,cz,o.crown||M.fascia);
+  box(8,2.2,6,cx+W/4,H+0.8,cz,M.hvac);
+  label(o.name.toUpperCase(),cx,0.1,zS+1.5,Math.min(W,34),3.2,'#cfd8d4');
+}
+office(8,0.4,3,2,{name:'Admin Office',floors:4,fins:M.stone,seed:51});
+office(12,0.4,3,2,{name:'Airline Office',floors:3,crown:M.bronze,slab:'#7a644d',seed:52});
+// Ramp Agent Station: a low building and a GSE canopy with tugs and carts
+{
+  const x0=TX(26),x1=TX(29),zN=TZ(0.4),zS=TZ(2.4);const cx=(x0+x1)/2,cz=(zN+zS)/2;
+  box(20,5,14,x0+12,0,cz,M.offWhite);
+  const rg=glassFacade('g-ramp',{bay:20,h:4,w:20,hstep:4,vstep:2,seed:61});face(20,3.6,x0+12,0.6,cz-7.03,'s',rg);
+  box(20.6,0.5,14.6,x0+12,5,cz,M.orange);
+  // canopy shed
+  for(const xx of [x0+25,x0+44])for(const zz of [cz-10,cz+10])cyl(0.5,6,xx,0,zz,M.steel,{tess:8});
+  box(22,0.4,24,x0+34.5,6,cz,pbr('canopyRoof','#cfd6da',0.3,0.5));
+  const tug=pbr('tug','#e0a21c',0.5,0.2,{clear:0.4});for(let k=0;k<3;k++){box(2.2,1.6,3.4,x0+28+k*6,0.3,cz-4,tug,{keep:true});for(let c=0;c<3;c++)box(1.8,1.6,2.6,x0+28+k*6,0.3,cz+1+c*3.2,pbr('cart'+k+c,'#5d6a78',0.6,0.3),{keep:true});}
+  label('RAMP AGENT STATION',x0+12,0.1,zS+1,30,3,'#cfd8d4');
+}
+// ---------- Fuel Farm x 38–41, y 4–6 ----------
+{
+  const x0=TX(38),x1=TX(41),zN=TZ(4),zS=TZ(6);const cx=(x0+x1)/2,cz=(zN+zS)/2;
+  // bund wall
+  for(const [w,d,x,z] of [[44,0.6,cx,zN-2],[44,0.6,cx,zS+2],[0.6,28,x0+2,cz],[0.6,28,x1-2,cz]])box(w,1.4,d,x,0,z,M.offWhite);
+  const tankW=pbr('tank','#e8e9e8',0.45,0.3);const tankBand=pbr('tankBand','#2f6f8f',0.5,0.3);
+  for(const [tx,tz] of [[x0+11,cz+4],[x0+25,cz+4],[x0+38,cz+4]]){cyl(11,9.5,tx,0,tz,tankW,{tess:32,keep:true});cyl(11.1,1,tx,7,tz,tankBand,{tess:32,keep:true});cyl(1,1.6,tx,9.5,tz,M.offWhite,{top:2,bottom:11,tess:32,keep:true});
+    // spiral stair hint: a slanted strip
+    const st=B.MeshBuilder.CreateBox('stair',{width:0.8,height:0.25,depth:10},scene);st.position.set(tx+5.6,4.8,tz);st.rotation.x=0.8;st.material=M.darkSteel;caster(st);}
+  // pipe rack along the front and a pump house
+  for(let k=0;k<3;k++)cyl(0.6,38,cx,1.6+k*0.8,zS+5,pbr('pipe'+k,['#c9b037','#9aa0a4','#c9b037'][k],0.5,0.4),{rz:Math.PI/2,tess:10});
+  box(8,4,6,x1-7,0,zS+6,M.white);
+  points('fuelLights',bulbWhite,[[x0+3,6,zS+3],[x1-3,6,zS+3]],0.6);
+  label('FUEL FARM',cx,0.1,zS+0.8,22,3,'#cfd8d4');
+}
+// ---------- De-icing Pad x 38–41, y 0–2 ----------
+{
+  const x0=TX(38),x1=TX(41),zN=TZ(0.2),zS=TZ(2.2);const cx=(x0+x1)/2,cz=(zN+zS)/2;
+  const pad=B.MeshBuilder.CreateGround('dpad',{width:46,height:30},scene);pad.position.set(cx,0.05,cz);pad.material=M.concrete;pad.receiveShadows=true;
+  const blue=pbr('dBlue','#7fc4ff',0.6,0);for(const [w,d,x,z] of [[44,0.5,cx,zN-1],[44,0.5,cx,zS+1],[0.5,28,x0+1,cz],[0.5,28,x1-1,cz]]){const m=B.MeshBuilder.CreateGround('dl',{width:w,height:d},scene);m.position.set(x,0.08,z);m.material=blue;}
+  const truck=pbr('deice','#e9a320',0.45,0.2,{clear:0.5});
+  for(const [tx,tz,ry] of [[x0+12,cz,0.4],[x1-12,cz,-0.5]]){const r=new B.TransformNode('dt',scene);r.position.set(tx,0,tz);r.rotation.y=ry;
+    const add=(m)=>{m.parent=r;caster(m);return m;};
+    const b1=add(B.MeshBuilder.CreateBox('dtb',{width:2.6,height:2.6,depth:8},scene));b1.position.set(0,1.9,0);b1.material=truck;
+    const c1=add(B.MeshBuilder.CreateBox('dtc',{width:2.6,height:2.2,depth:2.2},scene));c1.position.set(0,1.7,5);c1.material=M.white;
+    const boom=add(B.MeshBuilder.CreateBox('boom',{width:0.6,height:0.6,depth:11},scene));boom.position.set(0,7,-1);boom.rotation.x=-0.75;boom.material=M.offWhite;
+    const bk=add(B.MeshBuilder.CreateBox('bk',{width:1.8,height:1.6,depth:1.8},scene));bk.position.set(0,10.8,3.2);bk.material=truck;}
+  cyl(3,6,x1-4,0,zN-5,M.white,{tess:16});cyl(3,6,x1-8,0,zN-5,M.white,{tess:16});
+  label('DE-ICING PAD',cx,0.1,zS+0.6,22,3,'#cfd8d4');
+}
+
+// ---------- apron flood masts with real spot lights (night) ----------
+const floods=[];
+for(const [x,z] of [[TX(8)-6,TZ(8)-4],[TX(21)+4,TZ(8)-4],[TX(30)-4,TZ(8)-4],[TX(37)+4,TZ(8)-4]]){
+  cyl(0.7,26,x,0,z,M.steel,{tess:10,keep:true});box(4,1,1.6,x,26,z,M.darkSteel,{keep:true});
+  const head=B.MeshBuilder.CreateBox('head',{width:3.6,height:0.2,depth:1.3},scene);head.position.set(x,25.95,z);head.material=bulbWhite;glow.addIncludedOnlyMesh(head);
+  const sp=new B.SpotLight('flood',new V3(x,25,z),new V3(0,-1,-0.55).normalize(),1.25,2,scene);sp.diffuse=C3.FromHexString('#ffe7c2');sp.specular=sp.diffuse.scale(0.3);sp.range=160;sp.intensity=0;floods.push(sp);
+}
+
+// ---------- merge static meshes by material (fewer draw calls) ----------
+{const groups=new Map();for(const m of BUILT){const k=(m.parent?m.parent.name:'')+'|'+m.material.uniqueId;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(m);}
+ for(const g of groups.values()){const parent=g[0].parent;g.forEach(m=>m.parent=null);const merged=g.length>1?B.Mesh.MergeMeshes(g,true,true):g[0];if(!merged)continue;merged.parent=parent;caster(merged);}}
+
+// ---------- terminal style switch ----------
+const STYLES={deck:{name:'Deck (BER)',note:'A flat roof deck on slender steel colonnades, overhanging the airside and the landside drop-off; tall glass with horizontal glazing bars; stone ends; glowing skylight bands and soffit downlights.'},
+  hall:{name:'Hall (FRA)',note:'A low gate pier wrapped in warm terracotta fins in front of a tall hall under a gently curved roof with oval skylights; the timber underside glows through the glass at night.'}};
+function setStyle(k){STYLE.cur=k;for(const [s,r] of Object.entries(styleRoots))r.setEnabled(s===k);document.querySelectorAll('#styles button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));document.getElementById('styleNote').textContent=STYLES[k].note;}
+{const box=document.getElementById('styles');for(const [k,v] of Object.entries(STYLES)){const b=document.createElement('button');b.textContent=v.name;b.dataset.k=k;b.onclick=()=>setStyle(k);box.appendChild(b);}}
+setStyle('deck');
+
+// =====================================================================
+// TIME OF DAY (the game's daylight curve: dark until 05:30, sunrise to 07:30, day, evening light to 20:00, dark from 21:00)
+// =====================================================================
+const C=h=>C3.FromHexString(h);
+const SKY=[ // hour, top, horizon, sun colour
+  [4.5,C('#04060c'),C('#0d1420'),C('#000000')],
+  [5.6,C('#101a33'),C('#5a4a5e'),C('#ff9a5a')],
+  [6.4,C('#2b4775'),C('#f0a070'),C('#ffb070')],
+  [8.0,C('#3d6fb8'),C('#b8d0e8'),C('#fff0d8')],
+  [17.5,C('#3f74c4'),C('#bcd5ee'),C('#fff4e2')],
+  [19.3,C('#3b4f86'),C('#f29a5a'),C('#ff9a50')],
+  [20.3,C('#1c2346'),C('#a0566a'),C('#ff6a3a')],
+  [21.2,C('#070a16'),C('#18203a'),C('#000000')],
+  [24.5,C('#04060c'),C('#0d1420'),C('#000000')]];
+function skyAt(h){for(let i=1;i<SKY.length;i++)if(h<=SKY[i][0]){const a=SKY[i-1],b=SKY[i];const t=smooth(a[0],b[0],h);return [C3.Lerp(a[1],b[1],t),C3.Lerp(a[2],b[2],t),C3.Lerp(a[3],b[3],t)];}return SKY[SKY.length-1].slice(1);}
+let hour=12,lastSky=-1;
+function setTime(h){
+  hour=h;
+  const dark=Math.max(1-smooth(5.5,7.2,h),smooth(19.6,21.0,h));
+  const elev=Math.sin(Math.PI*clamp((h-5.8)/(20.6-5.8),0,1))*58*Math.PI/180;
+  const az=lerp(Math.PI*0.5,Math.PI*1.5,clamp((h-5.8)/(20.6-5.8),0,1)); // east → south → west
+  const sd=new V3(Math.sin(az)*Math.cos(elev),Math.sin(elev),-Math.cos(az)*Math.cos(elev)); // towards the sun (x east, z north; south = -z)
+  const [top,hor,sunC]=skyAt(h);
+  const day=1-dark;const low=1-smooth(0.05,0.5,elev);
+  sun.direction=sd.scale(-1);sun.position=new V3(330,0,-150).add(sd.scale(900));
+  sun.diffuse=C3.Lerp(C('#fff6ea'),C('#ffae6a'),low);sun.intensity=elev>0.01?(1.4+1.6*smooth(0.05,0.6,elev))*day:0;
+  sun.shadowEnabled=sun.intensity>0.05;
+  moon.intensity=0.32*dark;
+  hemi.intensity=0.15+0.45*day;hemi.diffuse=C3.Lerp(C('#5a6f9a'),C3.Lerp(C('#dfe9f5'),C('#ffd2b0'),low*0.6),day);hemi.groundColor=C3.Lerp(C('#10141c'),C('#5d5a48'),day);
+  scene.environmentIntensity=0.25+0.75*day;
+  scene.fogColor=hor.scale(0.9);
+  const ground=C3.Lerp(C('#05070a'),C('#59604a'),day);
+  paintSky(top,hor,ground,sd,sunC,elev>-0.1?1.2*(1-smooth(0.2,0.7,elev)*0.7):0);
+  if(Math.abs(h-lastSky)>0.15){lastSky=h;probe.cubeTexture.resetRefreshCounter();}
+  // lights: windows, lamps, beacons
+  const winK=smooth(0.1,0.75,dark),lampK=smooth(0.25,0.8,dark);
+  for(const L of LIT){const k=L.group==='lamp'?lampK:L.group==='beacon'?1:winK;L.m.emissiveColor=L.c.scale(lerp(L.day,L.night,k));}
+  for(const f of floods)f.intensity=lampK*2.6;
+  glow.intensity=0.35+0.6*dark;
+  pipe.imageProcessing.exposure=1.0+0.25*dark;
+  document.getElementById('hourLbl').textContent=String(Math.floor(h)).padStart(2,'0')+':'+String(Math.round((h%1)*60)%60).padStart(2,'0');
+  document.getElementById('hour').value=h;
+}
+const PRESETS=[['Dawn',6.2],['Morning',9],['Midday',13],['Dusk',19.8],['Night',22.5]];
+{const box=document.getElementById('presets');for(const [n,h] of PRESETS){const b=document.createElement('button');b.textContent=n;b.onclick=()=>{running=false;setTime(h);};box.appendChild(b);}}
+document.getElementById('hour').oninput=e=>{running=false;setTime(+e.target.value);};
+let running=false;document.getElementById('clock').onclick=()=>{running=!running;document.getElementById('clock').textContent=running?'❚❚ Stop the clock':'▶ Run the clock';};
+
+// =====================================================================
+// CAMERA VIEWS
+// =====================================================================
+const VIEWS={
+  'Game view':[-Math.PI/2-0.35,0.95,620,[TX(24),0,TZ(9)]],
+  'Terminal airside':[-Math.PI/2-0.5,1.2,190,[TX(14.5),8,TZ(8)]],
+  'Terminal landside':[Math.PI/2+0.5,1.15,200,[TX(14.5),8,TZ(4)]],
+  'Cargo Hub':[-Math.PI/2+0.55,1.15,190,[TX(33.5),8,TZ(6.5)]],
+  'Tower':[-Math.PI/2-0.6,1.25,150,[TX(3.5)+6,34,TZ(5)]],
+  'Fire & offices':[-Math.PI/2+0.3,1.05,230,[TX(20),5,TZ(3.5)]],
+  'Fuel & de-icing':[-Math.PI/2+0.6,1.05,150,[TX(39.5),3,TZ(3)]],
+  'Overhead':[-Math.PI/2,0.12,640,[TX(24),0,TZ(8)]],
+};
+function view(n){const [a,b,r,t]=VIEWS[n];cam.setTarget(new V3(...t),false,false,true);cam.alpha=a;cam.beta=b;cam.radius=r;document.querySelectorAll('#views button').forEach(x=>x.classList.toggle('on',x.textContent===n));}
+{const box=document.getElementById('views');for(const n of Object.keys(VIEWS)){const b=document.createElement('button');b.textContent=n;b.onclick=()=>view(n);box.appendChild(b);}}
+view('Game view');
+setTime(13);
+document.getElementById('collapse').onclick=()=>{const p=document.getElementById('panel');p.classList.toggle('closed');document.getElementById('collapse').textContent=p.classList.contains('closed')?'+':'–';};
+
+// =====================================================================
+let last=performance.now(),frames=0;
+engine.runRenderLoop(()=>{const now=performance.now();const dt=Math.min(0.1,(now-last)/1000);last=now;
+  if(running){let h=hour+dt*0.35;if(h>24)h=5;setTime(h);}
+  const blink=(now%1500)<180;window.towerBeacons.isVisible=blink||hour<0;window.fireBeacons.isVisible=(now%700)<350;
+  scene.render();frames++;});
+window.addEventListener('resize',()=>engine.resize());
+window.proto={setTime,view,setStyle,frames:()=>frames,ready:true};
+}
+</script>
+</body>
+</html>
