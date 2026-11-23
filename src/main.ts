@@ -17,6 +17,7 @@ import { showMainMenu } from './ui/mainMenu';
 import { showDayReport } from './ui/dayReport';
 import { showNotice } from './ui/resume';
 import { BUILD, copyText } from './ui/seed';
+import { createLayout, type Structure } from './sim/layout';
 
 // `?seed=123` makes every New Run use that seed (used for README screenshots and bug reports).
 const fixedSeed = Number(new URLSearchParams(location.search).get('seed'));
@@ -247,11 +248,15 @@ async function start(): Promise<void> {
     if (document.hidden && options.runInBackground) play(Math.min(elapsed, 5_000));
   }, 1_000);
   let frames = 0;
-  // `?debug` hands the view and the Run to scripts (the README screenshots aim the camera and fix the quality with it)
+  // `?debug` hands the view and the Run to scripts (the README screenshots aim the camera and fix the quality with it).
+  // `showLayout(structures)` draws other structures in place of the Run's (only the picture: the Day plays on with the
+  // Run's layout) until the next Day or Plan Mode, or `showLayout()`, which draws the Run's layout again.
   if (new URLSearchParams(location.search).has('debug')) {
     let drawn = 0;
     view.onFrame(() => drawn++);
-    Object.assign(window, { aab: { view, sim: () => sim, layout: () => run.layout, frames: () => drawn } });
+    const showLayout = (structures?: readonly Structure[]) =>
+      view.setLayout(structures ? createLayout(run.layout.width, run.layout.height, structures) : run.layout);
+    Object.assign(window, { aab: { view, sim: () => sim, layout: () => run.layout, frames: () => drawn, showLayout } });
   }
   view.onFrame((ms) => {
     lastBackground = performance.now();
