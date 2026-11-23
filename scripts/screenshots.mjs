@@ -163,7 +163,10 @@ const best = async (name, aim = null, clean = true) => {
   const from = await lp.evaluate(() => window.aab.frames());
   await lp.waitForFunction((from) => window.aab.frames() >= from + 5, from, { timeout: 180_000, polling: 500 });
   await lp.screenshot({ path: `docs/screenshots/look/${name}.jpg`, type: 'jpeg', quality: 90 });
-  await lp.evaluate(() => window.aab.view.setQuality('low'));
+  await lp.evaluate(() => {
+    window.aab.view.setQuality('low');
+    document.documentElement.classList.remove('clean'); // the speed buttons again
+  });
   console.log(`look/${name}: ${await lookClock()}`);
 };
 const parked = (a, b = 1.15, r = 34) => ({ what: 'parked', r, a, b });
