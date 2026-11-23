@@ -6,9 +6,6 @@ micromanagement sit at the end.
 
 ## Next up
 
-- **Airline Contracts (reward after a Boss Day)**: after winning a Week, the Player picks one of three Contracts (or
-  skips for $10,000) that steer the traffic for the rest of the Run and pay a bonus. Designed 2026-11-23:
-  [`airline-contracts.md`](airline-contracts.md).
 - **Delay penalties**: flights that arrive or leave late earn lower fees (or lower Score). Since Incidents and Crashes
   no longer cost money, this is the downside of an airport built too small: lots of Holding Bays let it take more
   flights, but they wait and pay less. Open: what counts as late (Holding time, time waiting for a Stand, a late

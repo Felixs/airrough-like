@@ -455,3 +455,28 @@ button.danger { height: 36px; padding: 0 14px; border-radius: 4px; border: 1px s
 .options-dialog { z-index: 30; }
 .overlay.options-dialog .card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; display: grid; gap: 14px; }
 .options-dialog .options { display: grid; gap: 12px; font-size: 13px; }
+
+/* Airline Contracts: the pick after a won Week, and the signed ones in Plan Mode */
+.overlay .card.contract-offer { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 28px 32px; }
+.contracts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+.contract { position: relative; display: grid; grid-template-columns: 28px 1fr auto; align-content: start; gap: 6px 8px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: 12px var(--mono); text-align: left; }
+button.contract { border-color: var(--teal); cursor: pointer; min-height: 110px; }
+button.contract:hover, button.contract:focus-visible { background: rgb(56 208 176 / 0.08); outline: 2px solid var(--teal); outline-offset: 1px; }
+.contract .c-icon { font-size: 20px; grid-row: span 2; }
+.contract .c-name { font-size: 14px; color: var(--teal); }
+.contract .c-kind { font-size: 10px; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; align-self: start; }
+.contract .c-kind.tradeOff { color: var(--amber); }
+.contract .c-kind.growth { color: var(--green); }
+.contract .c-gives, .contract .c-catch { grid-column: 2 / -1; line-height: 1.45; }
+.contract .c-catch { color: var(--amber); }
+.contract .c-key { position: absolute; right: 8px; bottom: 6px; color: var(--mute); font-size: 10px; }
+.contracts.compact { grid-template-columns: 1fr; gap: 6px; margin: 8px 0 0; }
+.contracts.compact .contract { padding: 8px 10px; grid-template-columns: 22px 1fr auto; }
+.contracts.compact .c-icon { font-size: 16px; }
+.contracts.compact .c-name { font-size: 12px; }
+.contracts-card .note, .card p.note { color: var(--mute); font-size: 11px; margin: 8px 0 0; }
+.offer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.offer-foot .signed { color: var(--mute); font-size: 12px; }
+.offer-foot .skip { padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text); font: 12px var(--mono); cursor: pointer; }
+.offer-foot .skip:hover, .offer-foot .skip:focus-visible { border-color: var(--teal); }
+@media (max-width: 720px) { .contracts { grid-template-columns: 1fr; } button.contract { min-height: 0; } }
