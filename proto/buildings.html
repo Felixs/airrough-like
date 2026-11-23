@@ -182,7 +182,7 @@ function glassFacade(name,o){
   },{u:o.w/o.bay});
   const m=pbr(name,'#ffffff',o.rough??0.06,o.metal??0.35,{tex:albedo});
   m.emissiveTexture=em;
-  lit(m,'#ffffff',o.dayLit??0.05,1,'win');
+  lit(m,'#ffffff',o.dayLit??0.12,1,'win');
   return m;
 }
 // solid cladding textures
@@ -228,7 +228,7 @@ const BUILT=[]; // meshes to merge by material at the end
 function box(w,h,d,x,y,z,mat,o={}){const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d},scene);m.position.set(x,y+h/2,z);if(o.ry)m.rotation.y=o.ry;m.material=mat;if(o.keep)caster(m);else BUILT.push(m);return m;}
 function cyl(d,h,x,y,z,mat,o={}){const m=B.MeshBuilder.CreateCylinder('c',{diameter:d,diameterTop:o.top,diameterBottom:o.bottom,height:h,tessellation:o.tess||20},scene);m.position.set(x,(o.rx||o.rz)?y:y+h/2,z);if(o.rx)m.rotation.x=o.rx;if(o.rz)m.rotation.z=o.rz;if(o.ry)m.rotation.y=o.ry;m.material=mat;if(o.keep)caster(m);else BUILT.push(m);return m;}
 // a facade plane: centre x,z at bottom y, width w, height h, facing 's'|'n'|'e'|'w'
-const FACE={s:Math.PI,n:0,w:-Math.PI/2,e:Math.PI/2}; // a plane's front faces +z
+const FACE={s:0,n:Math.PI,w:Math.PI/2,e:-Math.PI/2};
 function face(w,h,x,y,z,dir,mat){const m=B.MeshBuilder.CreatePlane('f',{width:w,height:h},scene);m.position.set(x,y+h/2,z);m.rotation.y=FACE[dir];m.material=mat;BUILT.push(m);return m;}
 function label(text,x,y,z,w,h,ink='#3a3f45',rot=0){
   const t=tex('lbl-'+text,1024,256,(g,W,H)=>{g.clearRect(0,0,W,H);g.fillStyle=ink;g.font=`700 ${H*0.62}px "Segoe UI",Roboto,sans-serif`;g.textAlign='center';g.textBaseline='middle';g.fillText(text,W/2,H/2+4);},{clamp:true,alpha:true});
@@ -278,13 +278,14 @@ B.Mesh.MergeMeshes(yellowLines.filter(m=>m.material===M.paintWhite),true,true).r
 const STYLE={cur:'deck'};
 const styleRoots={deck:new B.TransformNode('deck',scene),hall:new B.TransformNode('hall',scene)};
 const T0={x0:TX(8),x1:TX(21),zN:TZ(4),zS:TZ(8)}; // the Terminal footprint in metres
-const GLASS={
-  hall:glassFacade('g-hall',{bay:9,h:13,w:1,hstep:1.6,vstep:9,seed:3,top:'#4a6175',bottom:'#22303c'}),
-  gate:glassFacade('g-gate',{bay:6,h:6,w:1,hstep:6,vstep:1.5,seed:5,top:'#3a4a58',bottom:'#1d262f'}),
-  land:glassFacade('g-land',{bay:9,h:19,w:1,hstep:1.6,vstep:9,seed:8,floors:[6.5],top:'#4a6175',bottom:'#202b36'}),
+const GLASS_KIND={
+  hall:{bay:9,h:13,hstep:1.6,vstep:9,seed:3,top:'#5a7389',bottom:'#2a3a48'},
+  gate:{bay:6,h:6,hstep:6,vstep:1.5,seed:5,top:'#4a5d6e',bottom:'#243039'},
+  land:{bay:9,h:19,hstep:1.6,vstep:9,seed:8,floors:[6.5],top:'#5a7389',bottom:'#283642'},
 };
-// one glass material per facade length (the texture tiles by width)
-const glassFor=(kind,w)=>{const key=kind+w.toFixed(1);if(!GLASS[key]){const base=GLASS[kind];const m=base.clone(kind+'-'+w.toFixed(0));m.albedoTexture=base.albedoTexture.clone();m.emissiveTexture=base.emissiveTexture.clone();const bay=kind==='gate'?6:9;m.albedoTexture.uScale=m.emissiveTexture.uScale=w/bay;LIT.push({m,c:C3.White(),day:0.05,night:1,group:'win'});GLASS[key]=m;}return GLASS[key];};
+// one glass material per facade length (the texture tiles by width); painted fresh each time
+const GLASS={};
+const glassFor=(kind,w)=>{const key=kind+w.toFixed(1);return GLASS[key]||(GLASS[key]=glassFacade('g-'+key,{...GLASS_KIND[kind],w}));};
 function under(root,from){for(let i=from;i<BUILT.length;i++)BUILT[i].parent=root;}
 
 // ---------- Terminal A: "deck" (BER T1: one flat roof deck on slender columns, colonnades, horizontal-mullion glass) ----------
@@ -428,7 +429,7 @@ for(const s of STANDS){const cx=TX(s.x+s.w/2);
   const offG=glassFacade('g-off',{bay:18,h:13,w:18,hstep:4.3,vstep:1.8,floors:[4.3,8.6],slab:'#e8e6e0',seed:21,top:'#4a6175',bottom:'#22303c'});
   box(18,13.2,zN-zS-2,x1-9,0,(zN+zS)/2+1,M.white);
   face(18,13,x1-9,0,zS+2-0.03,'s',offG);
-  const offE=offG.clone('g-offE');offE.albedoTexture=offG.albedoTexture.clone();offE.emissiveTexture=offG.emissiveTexture.clone();offE.albedoTexture.uScale=offE.emissiveTexture.uScale=(zN-zS-2)/18;LIT.push({m:offE,c:C3.White(),day:0.05,night:1,group:'win'});
+  const offE=glassFacade('g-offE',{bay:18,h:13,w:zN-zS-2,hstep:4.3,vstep:1.8,floors:[4.3,8.6],slab:'#e8e6e0',seed:22,top:'#4a6175',bottom:'#22303c'});
   face(zN-zS-2,13,x1+0.03,0,(zN+zS)/2+1,'e',offE);
   // airside roller doors with sodium-lit insides and a canopy over them
   const doorLit=lit(pbr('doorIn','#2a2622',0.8,0),'#ffb060',0.02,1.2,'win');
@@ -506,7 +507,7 @@ function office(x,y,w,h,o){
   const fl=[];for(let k=1;k<o.floors;k++)fl.push(k*4.2);
   const g=glassFacade('g-'+o.name,{bay:W,h:H,w:W,hstep:4.2,vstep:1.8,floors:fl,slab:o.slab||'#e6e2da',seed:o.seed||50,top:'#4d6377',bottom:'#25313c'});
   for(const dir of ['s','n']){face(W,H,cx,0,cz+(dir==='s'?-D/2-0.03:D/2+0.03),dir,g);}
-  const ge=g.clone('g-'+o.name+'e');ge.albedoTexture=g.albedoTexture.clone();ge.emissiveTexture=g.emissiveTexture.clone();ge.albedoTexture.uScale=ge.emissiveTexture.uScale=D/W;LIT.push({m:ge,c:C3.White(),day:0.05,night:1,group:'win'});
+  const ge=glassFacade('g-'+o.name+'e',{bay:D,h:H,w:D,hstep:4.2,vstep:1.8,floors:fl,slab:o.slab||'#e6e2da',seed:(o.seed||50)+1,top:'#4d6377',bottom:'#25313c'});
   for(const dir of ['e','w'])face(D,H,cx+(dir==='w'?-W/2-0.03:W/2+0.03),0,cz,dir,ge);
   if(o.fins){const fin=B.MeshBuilder.CreateBox('ofin',{width:0.3,height:H,depth:0.9},scene);fin.material=o.fins;const fm=[];for(let xx=cx-W/2+0.9;xx<=cx+W/2-0.9;xx+=1.8){fm.push(B.Matrix.Translation(xx,H/2,cz-D/2-0.5),B.Matrix.Translation(xx,H/2,cz+D/2+0.5));}fin.thinInstanceAdd(fm);caster(fin);}
   box(W+1.2,0.8,D+1.2,cx,H,cz,o.crown||M.fascia);
