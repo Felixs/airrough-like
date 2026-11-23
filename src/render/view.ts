@@ -312,8 +312,8 @@ export class AirportView {
     const c = this.camera;
     const aspect = Math.max(0.5, this.aspect());
     const half = Math.tan(c.fov / 2);
-    // close enough that the airport fills the view (its edges may run off the sides)
-    const radius = Math.max((a.w * T) / 2 / (half * aspect), (a.h * T) / 2 / half) * 0.7;
+    // the whole airport in view, tilted
+    const radius = Math.max((a.w * T) / 2 / (half * aspect), (a.h * T) / 2 / half) * 1.05;
     c.upperRadiusLimit = radius * 3.5;
     c.alpha = -Math.PI / 2 - 0.35;
     c.beta = 0.95;
