@@ -3,7 +3,7 @@ import type { AircraftTypeId } from '../sim/aircraft';
 import type { Flight } from '../sim/simulation';
 import { aircraftMaterials, buildMaster, CARGO_LIVERY, frontDoor, MODELS, type AircraftMaterials, type Master } from './aircraftModels';
 import type { JetBridge } from './airfield';
-import { METRE, mapPoint } from './units';
+import { METRE } from './units';
 import { vehicleMasters, type VehicleKind } from './vehicles';
 
 /**
