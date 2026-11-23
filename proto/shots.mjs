@@ -9,7 +9,15 @@ page.on('console', (m) => logs.push(`${m.type()}: ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
 page.setDefaultTimeout(180_000);
 await page.goto('http://localhost:8000/proto/buildings.html');
-await page.waitForFunction(() => window.proto?.ready, null, { timeout: 120_000 });
+try {
+  await page.waitForFunction(() => window.proto?.ready, null, { timeout: 120_000 });
+} catch (e) {
+  logs.push('not ready: ' + e.message, 'errors: ' + JSON.stringify(await page.evaluate(() => window.protoErrors)));
+  await page.screenshot({ path: 'proto/shots/failed.jpg', type: 'jpeg' });
+  writeFileSync('proto/shots/log.txt', logs.join('\n'));
+  await browser.close();
+  process.exit(0);
+}
 await page.addStyleTag({ content: '#panel{display:none}' });
 const shot = async (name, style, view, hour) => {
   await page.evaluate(([s, v, h]) => { window.proto.setStyle(s); window.proto.view(v); window.proto.setTime(h); }, [style, view, hour]);
