@@ -257,8 +257,8 @@ cooldown (`simulation.ts → ACTIONS`).
   is the strong light and the sky only a weaker, cooler fill, so sunlit and shaded sides differ clearly. Glazing is
   tinted mirror glass: by day it shows the sky (lighter towards the top of each pane, pale blue-grey on the façades,
   pale green on the Tower cab) with its bars and floor slabs as matt paint; at night the lit interior shows through.
-  The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and dull ground
-  colour below the horizon.
+  The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and turns part
+  way to a dull ground colour below the horizon (so glass seen from above still reads as sky).
 - **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
   for the landing pilot. Taxiways are one paved surface of light concrete slabs, the same as the aprons and Stands (only

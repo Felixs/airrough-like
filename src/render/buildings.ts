@@ -180,8 +180,8 @@ function glass(kit: BuildingKit, name: string, w: number, o: GlassSpec): PBRMate
   m.albedoTexture = canvasTexture(kit.scene, `glass-${name}`, bw, bh, (g, W, H) => {
     const grd = g.createLinearGradient(0, 0, 0, H);
     // as a mirror's tint the glazing colours are lightened (a dark tint would hide the sky it reflects)
-    grd.addColorStop(0, mirrorTint(o.top ?? '#5a7389', 0.55));
-    grd.addColorStop(1, mirrorTint(o.bottom ?? '#2a3a48', 0.45));
+    grd.addColorStop(0, mirrorTint(o.top ?? '#5a7389', 0.65));
+    grd.addColorStop(1, mirrorTint(o.bottom ?? '#2a3a48', 0.5));
     g.fillStyle = grd;
     g.fillRect(0, 0, W, H);
     bars(g, W, H, '#2b3138');
