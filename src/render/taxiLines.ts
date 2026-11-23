@@ -7,12 +7,25 @@ type Dir = 'n' | 's' | 'e' | 'w';
 const STEP: Record<Dir, [number, number]> = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
 const key = (x: number, y: number) => `${x},${y}`;
 
-/** Centre-line tiles to draw the yellow line on: the network's centre line, stopping at the hold-short lines. */
+/**
+ * Centre-line tiles to draw the yellow line on: the network's centre line, stopping at the hold-short lines. Where a
+ * strip's centre line runs on one tile past a corner or junction into the end of the strip it meets, that tile is
+ * left out, so no line leads into nowhere and a plain corner is a single curve, not a T.
+ */
 export function centreTiles(layout: AirportLayout): Set<string> {
   const out = centreLine(layout);
   for (const h of holdShortLines(layout)) {
     for (let y = h.y; y < h.y + h.h; y++) for (let x = h.x; x < h.x + h.w; x++) out.delete(key(x, y));
   }
+  const arms = (x: number, y: number) => (Object.values(STEP) as Array<[number, number]>).filter(([dx, dy]) => out.has(key(x + dx, y + dy)));
+  const stubs = [...out].filter((k) => {
+    const [x, y] = k.split(',').map(Number) as [number, number];
+    const next = arms(x, y);
+    if (next.length !== 1) return false;
+    const [dx, dy] = next[0]!;
+    return arms(x + dx, y + dy).length >= 3;
+  });
+  for (const k of stubs) out.delete(k);
   return out;
 }
 
