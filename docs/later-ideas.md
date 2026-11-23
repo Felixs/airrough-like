@@ -6,12 +6,9 @@ micromanagement sit at the end.
 
 ## Next up
 
-- **Airline Contracts (reward after a Boss Day)**: after winning a Week's Boss Day, the Player picks one of 3–4
-  Contracts (like a Slay the Spire reward after each act). Each gives a small bonus and changes the traffic for the
-  rest of the Run, so the Player knows which way to grow the airport. Examples: +50% Cargo flights; 25% of Passenger
-  flights become Cargo; +10% Large aircraft. Contracts carry over, so a Run collects up to three by Week 4. Open:
-  how big the bonuses are, whether a Contract can also raise Demand, and how they show on the Run Calendar and
-  Forecast.
+- **Airline Contracts (reward after a Boss Day)**: after winning a Week, the Player picks one of three Contracts (or
+  skips for $10,000) that steer the traffic for the rest of the Run and pay a bonus. Designed 2026-11-23:
+  [`airline-contracts.md`](airline-contracts.md).
 - **Delay penalties**: flights that arrive or leave late earn lower fees (or lower Score). Since Incidents and Crashes
   no longer cost money, this is the downside of an airport built too small: lots of Holding Bays let it take more
   flights, but they wait and pay less. Open: what counts as late (Holding time, time waiting for a Stand, a late
