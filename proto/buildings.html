@@ -381,7 +381,7 @@ function jetBridge(cx,door){ // rotunda left of a nose-in aircraft
   cyl(4.2,H+1.4,rx,0,rz,bridgeMat,{tess:20,keep:true});
   const end=new V3(door.x-2.2,H,door.z);const piv=new V3(rx,H,rz);const len=V3.Distance(piv,end);
   const t=B.MeshBuilder.CreateBox('tun',{width:2.8,height:3,depth:len},scene);t.position=V3.Lerp(piv,end,0.5);t.lookAt(end);t.material=bridgeMat;caster(t);
-  const strip=B.MeshBuilder.CreateBox('tunW',{width:2.86,height:0.7,depth:len*0.9},scene);strip.position=t.position.add(new V3(0,0.4,0));strip.rotationQuaternion=t.rotationQuaternion.clone();strip.material=bridgeGlass;
+  const strip=B.MeshBuilder.CreateBox('tunW',{width:2.86,height:0.7,depth:len*0.9},scene);strip.position=t.position.add(new V3(0,0.4,0));if(t.rotationQuaternion)strip.rotationQuaternion=t.rotationQuaternion.clone();else strip.rotation.copyFrom(t.rotation);strip.material=bridgeGlass;
   const cab=B.MeshBuilder.CreateBox('cab',{width:3.6,height:3.2,depth:3.6},scene);cab.position.set(door.x-2.6,H,door.z);cab.material=bridgeMat;caster(cab);
   const fx=V3.Lerp(piv,end,0.72);cyl(0.5,H-1.5,fx.x,0,fx.z,M.steel,{keep:true});box(3,0.9,1.4,fx.x,0,fx.z,M.rubber,{keep:true});
 }
