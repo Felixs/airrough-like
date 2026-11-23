@@ -131,14 +131,21 @@ const speedTo = async (s) => {
   if (cover) console.warn(`speed ${s}: the button is covered by ${cover}`);
 };
 const playTo = async (time) => {
-  await speedTo('8');
-  const start = Date.now();
-  while ((await lookClock()) < time && Date.now() - start < 240_000) {
-    const ack = await lp.$('#alert-banner:not([hidden]) button[data-ack]');
-    if (ack) await ack.click();
-    await lp.waitForTimeout(150);
-  }
-  await speedTo('0');
+  // watched and paused inside the page: Playwright's own clicks wait for frames and let the Day run on meanwhile
+  await lp.evaluate(
+    (time) =>
+      new Promise((done) => {
+        document.querySelector('[data-speed="8"]').click();
+        const tick = () => {
+          document.querySelector('#alert-banner:not([hidden]) button[data-ack]')?.click();
+          if ((document.querySelector('#clock').textContent ?? '') < time) return void setTimeout(tick, 20);
+          document.querySelector('[data-speed="0"]').click();
+          done();
+        };
+        tick();
+      }),
+    time,
+  );
 };
 /** Aims the camera (null: the starting view over the whole airport) and saves a picture at High quality. */
 const best = (name, aim = null, clean = true) =>

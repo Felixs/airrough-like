@@ -279,9 +279,9 @@ export class AirportView {
   private applyCamera(): void {
     const aspect = this.aspect();
     const c = this.camera;
+    c.setTarget(new Vector3(this.view.x, 0, this.view.z), false, false, true);
     c.alpha = -Math.PI / 2;
     c.radius = 3000;
-    c.setTarget(new Vector3(this.view.x, 0, this.view.z));
     c.orthoTop = this.view.h / 2;
     c.orthoBottom = -this.view.h / 2;
     c.orthoLeft = (-this.view.h * aspect) / 2;
@@ -319,10 +319,11 @@ export class AirportView {
     // the whole airport in view, tilted
     const radius = Math.max((a.w * T) / 2 / (half * aspect), (a.h * T) / 2 / half) * 1.05;
     c.upperRadiusLimit = radius * 3.5;
+    // the target first: moving it works the angles and distance out again from where the camera stands
+    c.setTarget(new Vector3((a.x + a.w / 2) * T, 0, -(a.y + a.h / 2) * T), false, false, true);
     c.alpha = -Math.PI / 2 - 0.35;
     c.beta = 0.95;
     c.radius = radius;
-    c.setTarget(new Vector3((a.x + a.w / 2) * T, 0, -(a.y + a.h / 2) * T));
   }
 
   /** Keeps the free camera over the map. */
@@ -332,7 +333,7 @@ export class AirportView {
     const margin = 20 * T;
     const x = clamp(t.x, this.area.x * T - margin, (this.area.x + this.area.w) * T + margin);
     const z = clamp(t.z, -(this.area.y + this.area.h) * T - margin, -this.area.y * T + margin);
-    if (x !== t.x || z !== t.z || t.y !== 0) this.camera.setTarget(new Vector3(x, 0, z));
+    if (x !== t.x || z !== t.z || t.y !== 0) this.camera.setTarget(new Vector3(x, 0, z), false, false, true);
   }
 
   /** The tile under a point on the canvas (CSS pixels from its top-left). */
@@ -451,10 +452,10 @@ export class AirportView {
   lookAt(x: number, y: number, radius: number, alpha: number, beta: number): void {
     this.moved = true;
     const c = this.camera;
+    c.setTarget(new Vector3(x, 0, -y), false, false, true);
     c.alpha = alpha;
     c.beta = clamp(beta, c.lowerBetaLimit ?? 0, c.upperBetaLimit ?? Math.PI / 2);
     c.radius = Math.max(radius, c.lowerRadiusLimit ?? 0);
-    c.setTarget(new Vector3(x, 0, -y));
   }
 
   /** The quality level in use (for bug reports). */
