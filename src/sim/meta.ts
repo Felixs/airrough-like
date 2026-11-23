@@ -8,7 +8,8 @@ import { airMiles } from './run';
 
 export type UnlockableId =
   | 'remoteStands' | 'adminOffice' | 'rampAgentStation' | 'cargoApronLighting'
-  | 'airlineOffice' | 'fuelFarm' | 'fireRescueStation' | 'deIcingPad' | 'bonusTwists' | 'towerLevel45';
+  | 'airlineOffice' | 'fuelFarm' | 'fireRescueStation' | 'deIcingPad' | 'bonusTwists' | 'towerLevel45'
+  | 'tradeOffContracts' | 'growthContracts';
 
 export type BoostId =
   | 'higherFees' | 'lowerUpkeep' | 'longerFuel' | 'shorterCooldowns' | 'fasterTurnaround' | 'cheaperTaxiways' | 'cheaperLand'
@@ -33,6 +34,8 @@ export const UNLOCKABLES: ReadonlyArray<{ readonly id: UnlockableId; readonly na
   { id: 'fireRescueStation', name: 'Fire & Rescue Station', effect: 'Building that clears Crashes and Incidents faster; levels in Plan Mode', cost: 700 },
   { id: 'deIcingPad', name: 'De-icing pad', effect: 'Building: Weather Twists raise error chances 30% less', cost: 800 },
   { id: 'bonusTwists', name: 'Bonus Twists', effect: 'In Plan Mode, add a Twist to a weekday for extra Score', cost: 1_000 },
+  { id: 'tradeOffContracts', name: 'Trade-off Contracts', effect: 'Airline Contracts with a big bonus and a catch can be offered', cost: 600 },
+  { id: 'growthContracts', name: 'Growth Contracts', effect: 'Airline Contracts that add flights (and Quota) for a bigger bonus can be offered', cost: 800 },
   { id: 'towerLevel45', name: 'Tower Modules 4–5', effect: 'Tower Modules can go to level 4 and 5', cost: 1_200 },
 ];
 

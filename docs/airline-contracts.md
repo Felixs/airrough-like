@@ -1,6 +1,7 @@
-# Airline Contracts (design, not built yet)
+# Airline Contracts (design notes)
 
-Agreed with the Player on 2026-11-23. Exact numbers are first guesses, to be checked with the balance lab.
+Agreed with the Player on 2026-11-23 and built the same day. The rules as built are in
+[`game-design.md`](game-design.md#airline-contracts); this note keeps why, and what the balance lab found.
 
 ## Why
 
@@ -15,7 +16,7 @@ the airport for the rest of the Run.
   with its bonus, its traffic change and any catch. The Player picks one, or skips and gets **$10,000** instead.
 - A signed Contract lasts for the rest of the Run. Contracts stack.
 - At most one of the three offered has a catch; it is marked **Trade-off**.
-- Later Weeks offer stronger versions (e.g. +10% after Week 1, up to +20% after Week 3).
+- Later Weeks offer stronger versions: bonuses ×1 after Week 1, ×1.25 after Week 2, ×1.5 after Week 3.
 
 ## What a Contract does
 
@@ -30,13 +31,13 @@ the airport for the rest of the Run.
 | Contract | Effect |
 |---|---|
 | Freight Partner | +50% Cargo flights; Cargo fees +20% |
-| Cargo Conversion | 25% of Passenger flights become Cargo |
+| Cargo Conversion | 25% of Passenger flights become Cargo; Cargo fees +10% (every Contract pays something) |
 | Wide-body Deal | +10% Large aircraft; Large fees +25% |
 | Regional Shuttle | +20% Small aircraft; Small Turnaround −20% |
 | Night Mail | some extra Cargo arrivals after 20:00 paying double (only offered with a Lit Runway) |
 | Holiday Charter | Passenger flights on the Rush Day ×1.3, their fees +30% that Day |
 | Signing Bonus | +$40,000 once; traffic unchanged |
-| Land Grant | one free Land Plot |
+| Land Grant | the next Land Plot bought is free |
 
 ## Unlockable Contracts (Air Miles)
 
@@ -47,6 +48,7 @@ Trade-off and growth Contracts are Unlockables, for example:
 | Hub Carrier | Passenger fees +40% | Cargo flights −30% |
 | Heavy Freight | +30% Large Cargo; Cargo fees +40% | Large Turnaround +15% |
 | Low-cost Base | +25% Small and Medium Passenger flights; their fees +15% | Daily Quota +5% |
+| Expansion Deal (Growth) | +15% Demand, the Quota rising with it; all fees +15% | |
 
 ## Where Contracts show
 

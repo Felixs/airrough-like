@@ -30,13 +30,18 @@ loop round the old Runway's end), Holding Bays.
 | `planner-no-…` | the planner leaving something out (`lit`, `tower`, `secondRunway`, `holdingBays`, `ils`), to measure its value |
 | `random` | on half the Days, one random affordable thing |
 
+**Airline Contracts:** every player answers a Contract offer the same way, set per variant (default `best`):
+`ignore` (as before Contracts existed: no Contract, no money), `skip` (+$10,000), `first` (sign the first one) or
+`best` (sign whichever earns the most over the next Week at the airport as it is, counting one-off money and half a
+plot's price for a free Land Plot, against skipping).
+
 ## Experiments (`src/sim/lab/experiments.ts`)
 
 Each plays its players in every variant over the same seeds. A variant is a set of overrides of the tuning tables
 (`BUILD_COSTS`, `PRICES`, `UPKEEP`, `SCHEDULE_RULES`, `SAFETY`, `ATC`, `TIMINGS`, `AIRCRAFT_TYPES`, `SCORE`), by path,
 e.g. `"BUILD_COSTS.stand.medium": 20000`, and the meta-progression to start with (none, or everything bought).
-Current set: `baseline`, `meta`, `upgrade-value`, `stand-prices`, `land-price`, `boss-quota`, `taxi-incidents`,
-`traffic-growth`. Add one by adding an entry.
+Current set: `baseline`, `meta`, `meta-split`, `growth`, `upgrade-value`, `stand-prices`, `land-price`, `boss-quota`,
+`taxi-incidents`, `traffic-growth`, `contracts`. Add one by adding an entry.
 
 ## Targets (no meta-progression unless said)
 
