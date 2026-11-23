@@ -153,6 +153,12 @@ interface GlassSpec {
   bottom?: string;
 }
 
+/** A glazing colour lightened toward pale blue-grey by `k` (0…1), as the tint of mirror glass. */
+function mirrorTint(hex: string, k: number): string {
+  const c = Color3.Lerp(Color3.FromHexString(hex), Color3.FromHexString('#dfe8ef'), k);
+  return c.toHexString();
+}
+
 /** A glass curtain wall `w` metres long: reflective tinted glass with bars, and a lit interior behind it at night. */
 function glass(kit: BuildingKit, name: string, w: number, o: GlassSpec): PBRMaterial {
   const PX = 8;
@@ -168,16 +174,28 @@ function glass(kit: BuildingKit, name: string, w: number, o: GlassSpec): PBRMate
     g.fillStyle = colour;
     for (const f of o.floors ?? []) g.fillRect(0, H - Math.round(f * PX) - Math.round(0.9 * PX), W, Math.round(0.9 * PX));
   };
-  const m = pbr(kit.scene, `glass-${name}`, '#ffffff', 0.06, 0.35);
+  // the panes are a tinted mirror (metallic, smooth: they show the sky, and nothing of the sun's diffuse light);
+  // bars and floor slabs are matt paint. A metallic/roughness map tells them apart (green: roughness, blue: metal).
+  const m = pbr(kit.scene, `glass-${name}`, '#ffffff', 1, 1);
   m.albedoTexture = canvasTexture(kit.scene, `glass-${name}`, bw, bh, (g, W, H) => {
     const grd = g.createLinearGradient(0, 0, 0, H);
-    grd.addColorStop(0, o.top ?? '#5a7389');
-    grd.addColorStop(1, o.bottom ?? '#2a3a48');
+    // as a mirror's tint the glazing colours are lightened (a dark tint would hide the sky it reflects)
+    grd.addColorStop(0, mirrorTint(o.top ?? '#5a7389', 0.65));
+    grd.addColorStop(1, mirrorTint(o.bottom ?? '#2a3a48', 0.5));
     g.fillStyle = grd;
     g.fillRect(0, 0, W, H);
     bars(g, W, H, '#2b3138');
     slabs(g, W, H, o.slab ?? '#c9c4b8');
   }, { u: w / o.bay });
+  m.metallicTexture = canvasTexture(kit.scene, `glass-${name}-mr`, bw, bh, (g, W, H) => {
+    g.fillStyle = 'rgb(0,14,235)';
+    g.fillRect(0, 0, W, H);
+    bars(g, W, H, 'rgb(0,120,140)');
+    slabs(g, W, H, 'rgb(0,200,0)');
+  }, { u: w / o.bay });
+  m.useRoughnessFromMetallicTextureGreen = true;
+  m.useMetallnessFromMetallicTextureBlue = true;
+  m.useRoughnessFromMetallicTextureAlpha = false;
   const r = rng(o.seed ?? 7);
   const [wr, wg, wb] = o.warm ?? [255, 214, 160];
   m.emissiveTexture = canvasTexture(kit.scene, `glass-${name}-lit`, bw, bh, (g, W, H) => {
@@ -462,11 +480,12 @@ export function buildTower(kit: BuildingKit, s: TileRect, front: Facing): void {
   f.cyl(1, 6, sx, H, sz, M.offWhite, { top: 15, bottom: 7.5, tess: 32 });
   f.cyl(15.2, 1.4, sx, H + 6, sz, glowing(kit, `tower-ring-${s.x}-${s.y}`, '#1d262f', '#c8b496'), { tess: 32 });
   f.cyl(15.4, 0.6, sx, H + 7.4, sz, M.fascia, { tess: 32 });
-  const cab = pbr(kit.scene, `tower-cab-${s.x}-${s.y}`, '#ffffff', 0.05, 0.4);
+  // green-tinted mirror glass (it shows the sky by day); the mullions are dark
+  const cab = pbr(kit.scene, `tower-cab-${s.x}-${s.y}`, '#ffffff', 0.06, 0.92);
   cab.albedoTexture = canvasTexture(kit.scene, `tower-cab-${s.x}-${s.y}`, 192, 32, (g, W, H2) => {
     const grd = g.createLinearGradient(0, 0, 0, H2);
-    grd.addColorStop(0, '#5f8f84');
-    grd.addColorStop(1, '#1c3a34');
+    grd.addColorStop(0, '#a8cfc4');
+    grd.addColorStop(1, '#5d8f83');
     g.fillStyle = grd;
     g.fillRect(0, 0, W, H2);
     g.fillStyle = '#2b3138';

@@ -13,8 +13,9 @@ tables as they are. Numbers quoted here are the current values.
 A **Run** is up to 4 Weeks of 7 Days (`run.ts → WEEKS_TO_WIN`). Each Day is **Plan Mode** (buy and build, read the
 Forecast and Run Calendar) followed by a **Live Day** the Player watches but does not steer, except with Emergency
 Actions. Missing one Daily Quota loses the Run ([ADR 0002](adr/0002-daily-quota-loss-condition.md)); surviving Week 4
-wins it, and the Run may continue in Endless mode. Every Day ends with a Day report; a finished Run ends on the Score
-Screen, which turns Score into Air Miles for the meta-progression.
+wins it, and the Run may continue in Endless mode. Every Day ends with a Day report; a won Week (Weeks 1–3, and every
+Endless Week) is followed by the pick of an Airline Contract; a finished Run ends on the Score Screen, which turns
+Score into Air Miles for the meta-progression.
 
 ## Time
 
@@ -233,6 +234,8 @@ cooldown (`simulation.ts → ACTIONS`).
   - **Upgrades** grouped Runways (Runway Surface 💡), ATC Tower (Radar 📡, Ground Radar 🛰, Weather Station 🌦,
     Controller Training 🎧), Safety (Fire & Rescue 🚒), each with its icon, price and effect; **Suggested** keeps the
     tips that are not about money tomorrow (Lit Runways, Radar 3, Fire & Rescue).
+  - **Airline Contracts** signed so far, one row each (icon, name, what it gives, any catch), under the Forecast; a
+    note when a Land Grant makes the next Land Plot free.
 - **Expected money** (Plan Mode Forecast): the fees the next Day earns if every flight that comes is handled —
   each arrival's Arrival Fee, and the Departure Fee of every aircraft that can still leave that Day (its Turnaround
   ends before dusk, or a fitting Lit/ILS Runway works tonight; overnight aircraft count too). Arrivals after 20:00
@@ -240,6 +243,47 @@ cooldown (`simulation.ts → ACTIONS`).
   the expected net and the money after the Day. Lost fees from Incidents, Crashes and Diversions are not included.
 - Twists (`twists.ts`, Severity 1–4 rising with the Week): Weather, Infrastructure and Traffic Surge families, shown in
   advance on the Run Calendar.
+
+## Airline Contracts
+
+A reward for winning a Week that also steers the rest of the Run (`contracts.ts → CONTRACTS`, `CONTRACT_RULES`).
+
+- **When:** after the Boss Day of Weeks 1, 2 and 3 is won, and after every won Endless Week (not after the Week 4
+  win itself). Before the next Plan Mode a "Week N won · pick an Airline Contract" screen shows **three** Contract
+  cards (icon, name, what it gives, a Trade-off or Growth badge, any catch in amber) and a **Skip** button worth
+  $10,000. Keys 1–3 pick a card, S skips. The pick is saved with the Run, so it waits after a reload.
+- **The offer** is drawn from the Run Seed and the Week (the same Run always gets the same offer). It never repeats
+  a Contract already signed (Signing Bonus and Land Grant may come again), offers Night Mail only when a Runway is Lit
+  or ILS, holds at most one Trade-off Contract, and offers Trade-off and Growth Contracts only once their Unlockable
+  is owned.
+- **Strength:** a Contract keeps the tier of the Week it was won in: its bonus is ×1 after Week 1, ×1.25 after Week 2
+  and ×1.5 after Week 3 and in Endless (e.g. Freight Partner's Cargo fees +20%, +25%, +30%). Traffic changes and
+  catches don't scale.
+- **Lasts** the rest of the Run; Contracts stack.
+- **Traffic:** a Contract changes which flights the Schedule makes: the Cargo share (×, or a share of Passenger
+  flights converted), the size mix (added, then scaled back to 100%), a share of Cargo flights made Large, or extra
+  flights on top of Demand (with their own Purpose, sizes, arrival window or weekday). Extra flights show in Demand
+  but don't raise the Daily Quota; only Growth Contracts (more Demand) and the Low-cost Base catch (+5%) raise it.
+  Flights the airport can't take are turned away as usual, so a Contract pays only once the airport is built for it.
+- **Bonus:** fee bonuses multiply the Arrival and Departure Fees of matching flights (by Purpose, size, arrival
+  after a time, or a weekday); Turnaround changes by size; or money once / a free Land Plot (the next one bought).
+  The Forecast, the expected fees and Money Warnings include them; the Day report says how much of the fees the
+  Contracts added.
+
+| Contract | Kind | Gives (tier 1) | Catch |
+|---|---|---|---|
+| 📦 Freight Partner | standard | Cargo share ×1.5; Cargo fees +20% | |
+| 🔁 Cargo Conversion | standard | 25% of Passenger flights come as Cargo; Cargo fees +10% | |
+| ✈ Wide-body Deal | standard | +10 points of Large aircraft in the mix; Large fees +25% | |
+| 🛩 Regional Shuttle | standard | +20 points of Small aircraft; Small Turnaround −20% | |
+| 🌙 Night Mail | standard (needs a Lit Runway) | extra Cargo flights (8% of Demand) arriving 20:00–21:45; Cargo arriving after 20:00 pays +100% | |
+| 🏖 Holiday Charter | standard | Rush Day: extra Passenger flights (22% of Demand), their fees +30% | |
+| 💰 Signing Bonus | standard | $40,000 once | |
+| 🗺 Land Grant | standard | the next Land Plot is free | |
+| 🏢 Hub Carrier | Trade-off | Passenger fees +40% | Cargo share ×0.7 |
+| 🏗 Heavy Freight | Trade-off | 30% of Cargo flights come as Large; Cargo fees +40% | Large Turnaround +15% |
+| 🎫 Low-cost Base | Trade-off | extra Small/Medium Passenger flights (25% of Demand), their fees +15% | Daily Quota +5% |
+| 📈 Expansion Deal | Growth | Demand ×1.15 (the Quota rises with it); all fees +15% | |
 
 ## Presentation
 
@@ -253,7 +297,12 @@ cooldown (`simulation.ts → ACTIONS`).
   (Controls). Scale: a tile is 16 m, so Medium aircraft fit their 3-tile Stands at real size.
 - **Lighting:** physically based materials (painted metal with a clear coat, glass, concrete, grass), a sun that moves
   from east to west through the Day and casts real shadows, sky reflections on paint and glass, tone mapping and a
-  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion).
+  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion). The sun
+  is the strong light and the sky only a weaker, cooler fill, so sunlit and shaded sides differ clearly. Glazing is
+  tinted mirror glass: by day it shows the sky (lighter towards the top of each pane, pale blue-grey on the façades,
+  pale green on the Tower cab) with its bars and floor slabs as matt paint; at night the lit interior shows through.
+  The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and turns part
+  way to a dull ground colour below the horizon (so glass seen from above still reads as sky).
 - **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
   for the landing pilot. Taxiways are one paved surface of light concrete slabs, the same as the aprons and Stands (only
@@ -295,15 +344,24 @@ cooldown (`simulation.ts → ACTIONS`).
     (white tanks with a blue band in a bund wall, a pipe rack and a pump house); De-icing Pad (blue-lined pad, two
     boom trucks, glycol tanks).
   - Flood masts stand at the front corners of Terminals and Cargo Hubs; at night their heads glow and the first four
-    light the apron round them.
+    light the apron round them (real lights, so aircraft and vehicles there are lit too).
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
 - **Runway lights follow the surface:** none on Grass and Asphalt; white edge and green threshold lights when Lit;
   approach lights added with ILS.
 - **Day and night:** during the Live Day the light follows the clock (`clock.ts → daylight`): dark until 05:30, a warm
-  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. At night the sun gives
-  way to dim blue moonlight, and lights, lit windows and glass glow. Plan Mode and Build Mode are in daylight.
+  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. The sun rises in the
+  east at 06:00 about 5° high, peaks near 58° at 13:00 and sets in the west at 20:00. Golden hour follows the sun's
+  height (strongest below about 12°, gone above about 34°, so roughly 06:00–08:00 and 18:00–20:00): the sunlight turns
+  gold and stays strong, so shadows are long and crisp and the walls facing the sun glow, while the sky overhead stays
+  blue (a cool fill in the shadows) and only the horizon turns gold. The haze in the distance is pale blue by day and a
+  light peach at golden hour (never brown), slightly thinner then; at night it is dark blue. Midday has a little more
+  contrast than the rest of the Day. At night the sun gives way to dim blue moonlight, and lights, lit windows and
+  glass glow, and pools of warm light lie on the ground: a wide one under every flood mast, a softer one on every
+  Stand and a row of small ones along each side of a building that meets paving. The pools are painted on the ground,
+  not real lights (aircraft over them are not lit by them, and anything standing on them hides them); they fade in
+  with the lit windows at dusk and out at dawn. Plan Mode and Build Mode are in daylight.
 - **Aircraft** (`render/aircraftModels.ts`) are 3D models built from each type's real dimensions, with a painted
   livery: Caravan (high wing, nose propeller; the freighter with a belly pod), Q400 (high wing, two propellers,
   T-tail), A320 (rounded nose, sharklets), B737 (pointed nose, split-scimitar winglets), A350 (curled wingtips, dark
@@ -339,7 +397,7 @@ cooldown (`simulation.ts → ACTIONS`).
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day
-  with its Twists and the button to plan it. Details lists money (fees, Upkeep, net), traffic (landed by Purpose,
+  with its Twists and the button to plan it. Details lists money (fees, the part Airline Contracts added, Upkeep, net), traffic (landed by Purpose,
   diversions by reason, parked overnight, busiest hour), every Crash and Incident with its time, and the Run Seed. The
   Score Screen's Summary shows Score, Air Miles earned and Days survived (and, after a loss, how many Movements the last
   Day was short); its Details hold the Run totals and the last Day's details.

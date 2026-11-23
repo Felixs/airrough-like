@@ -12,9 +12,12 @@ import { daylight, NIGHT_DARKNESS } from '../sim/clock';
 import { TILE_SIZE, type AirportLayout, type TileRect } from '../sim/layout';
 import { AircraftLayer } from './aircraftLayer';
 import { buildAirfield, type Airfield } from './airfield';
+import { buildLightPools, type LightPools } from './lightPools';
 import { PerfOverlay } from './perfOverlay';
 import { canvasTexture } from './textures';
 
+const GROUND_NIGHT = new Color3(0.02, 0.025, 0.03);
+const GROUND_DAY = new Color3(0.42, 0.46, 0.4);
 const T = TILE_SIZE;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -53,6 +56,7 @@ export class AirportView {
   private readonly probe: ReflectionProbe | null;
   private ssao: SSAO2RenderingPipeline | null = null;
   private floods: PointLight[] = [];
+  private pools: LightPools | null = null;
   /** Live Day: where "Reset view" goes back to; null until the first framing. */
   private home: TileRect | null = null;
   private moved = false;
@@ -61,10 +65,11 @@ export class AirportView {
   private layout: AirportLayout | null = null;
   private view = { x: 0, z: 0, h: 400 };
   private area: TileRect | null = null;
-  private light = { darkness: -1, warmth: -1 };
+  private light = { darkness: -1, warmth: -1, hour: -1 };
   /** The sky colours now and when the reflections were last drawn (−1: never). */
   private readonly skyHorizon = new Color3(-1, -1, -1);
   private readonly skyZenith = new Color3(-1, -1, -1);
+  private readonly skyGround = new Color3(0, 0, 0);
   private readonly probeHorizon = new Color3(-1, -1, -1);
   private readonly probeZenith = new Color3(-1, -1, -1);
   private probeDue = false;
@@ -201,6 +206,8 @@ export class AirportView {
     const s = this.scene;
     const before = new Set<object>([...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes]);
     this.airfield = buildAirfield({ scene: s, caster: (m) => this.shadows.addShadowCaster(m, false), glow: (m) => this.glow.addIncludedOnlyMesh(m) }, layout);
+    // painted pools of light on the ground at night (under every flood mast, on Stands, along building fronts)
+    this.pools = this.mode === 'live' ? buildLightPools(s, layout, this.airfield.floods) : null;
     this.airfieldItems = [...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes].filter((x) => !before.has(x));
     this.freezeStatic();
     this.aircraft.bridges = this.airfield.bridges;
@@ -214,7 +221,7 @@ export class AirportView {
       light.intensity = 0;
       return light;
     });
-    this.light = { darkness: -1, warmth: -1 };
+    this.light = { darkness: -1, warmth: -1, hour: -1 };
     this.applyLight(this.lastMinute);
   }
 
@@ -257,18 +264,24 @@ export class AirportView {
   private applyLight(minute: number | null): number {
     const { darkness, warmth } = minute === null ? { darkness: 0, warmth: 0 } : daylight(minute);
     const aircraftGlow = clamp((darkness - 0.1) / 0.25, 0, 1);
-    if (Math.abs(darkness - this.light.darkness) < 0.002 && Math.abs(warmth - this.light.warmth) < 0.01) return darkness;
-    this.light = { darkness, warmth };
-    const day = 1 - darkness / NIGHT_DARKNESS;
     const hour = minute === null ? 13 : minute / 60;
+    // the sun also moves through the day while darkness and warmth stay put
+    const same = Math.abs(darkness - this.light.darkness) < 0.002 && Math.abs(warmth - this.light.warmth) < 0.01 && Math.abs(hour - this.light.hour) < 0.05;
+    if (same) return darkness;
+    this.light = { darkness, warmth, hour };
+    const day = 1 - darkness / NIGHT_DARKNESS;
     const arc = clamp((hour - 6) / 14, 0, 1);
     const az = Math.PI * arc;
-    const el = (10 + 48 * Math.sin(Math.PI * arc)) * (Math.PI / 180);
-    const sunCol = Color3.Lerp(new Color3(1, 0.97, 0.92), new Color3(1, 0.58, 0.32), warmth);
+    const elDeg = 5 + 53 * Math.sin(Math.PI * arc);
+    const el = elDeg * (Math.PI / 180);
+    // golden hour: how low the sun is (follows its height, so the light changes smoothly through sunrise and sunset)
+    const golden = minute === null ? 0 : clamp((34 - elDeg) / 22, 0, 1) ** 0.8;
+    const sunCol = Color3.Lerp(new Color3(1, 0.96, 0.9), new Color3(1, 0.66, 0.36), golden);
     if (day > 0.15) {
       this.sun.direction = new Vector3(-Math.cos(az) * Math.cos(el), -Math.sin(el), Math.sin(az) * Math.cos(el)).normalize();
       this.sun.diffuse = sunCol;
-      this.sun.intensity = 3.1 * day ** 1.3;
+      // a low sun stays strong (long, crisp shadows; golden light on the walls that face it)
+      this.sun.intensity = 3.5 * day ** 1.2 * (1 + 0.45 * golden);
     } else {
       this.sun.direction = new Vector3(0.33, -0.56, 0.46).normalize();
       this.sun.diffuse = new Color3(0.55, 0.65, 0.95);
@@ -276,21 +289,31 @@ export class AirportView {
     }
     this.sun.specular = this.sun.diffuse;
     this.sun.position = this.sun.direction.scale(-1500);
-    const zenith = Color3.Lerp(new Color3(0.012, 0.018, 0.045), new Color3(0.22, 0.45, 0.82), day);
-    let horizon = Color3.Lerp(new Color3(0.035, 0.045, 0.09), new Color3(0.72, 0.81, 0.92), day);
-    horizon = Color3.Lerp(horizon, new Color3(0.98, 0.56, 0.34), warmth * 0.7);
-    this.hemi.intensity = 0.08 + 0.22 * day;
-    this.hemi.diffuse = Color3.Lerp(zenith, Color3.White(), 0.55);
-    this.hemi.groundColor = Color3.Lerp(new Color3(0.05, 0.06, 0.05), new Color3(0.35, 0.38, 0.3), day);
-    this.scene.environmentIntensity = 0.15 + 0.85 * day;
-    this.scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);
-    this.scene.fogColor = horizon.clone();
+    // the sky stays blue overhead at sunrise and sunset (a cool fill in the shadows); only the horizon glows gold
+    const zenith = Color3.Lerp(new Color3(0.012, 0.018, 0.045), Color3.Lerp(new Color3(0.2, 0.44, 0.84), new Color3(0.2, 0.36, 0.7), golden), day);
+    const glowGold = new Color3(1, 0.74, 0.48).scale(0.45 + 0.55 * day);
+    let horizon = Color3.Lerp(new Color3(0.035, 0.045, 0.09), new Color3(0.7, 0.8, 0.93), day);
+    horizon = Color3.Lerp(horizon, glowGold, golden * 0.75);
+    // haze: pale and clean (a light peach at golden hour, never brown), a little thinner when the sun is low
+    const hazeDay = Color3.Lerp(new Color3(0.74, 0.81, 0.91), new Color3(0.93, 0.82, 0.72), golden * 0.85);
+    const haze = Color3.Lerp(new Color3(0.03, 0.04, 0.08), hazeDay, day ** 0.8);
+    this.hemi.intensity = 0.05 + 0.15 * day;
+    this.hemi.diffuse = Color3.Lerp(zenith, Color3.White(), 0.4);
+    this.hemi.groundColor = Color3.Lerp(new Color3(0.04, 0.05, 0.04), new Color3(0.3, 0.32, 0.26), day);
+    // less sky fill than sun, more so when the sun is low: deeper shadows, more contrast
+    this.scene.environmentIntensity = 0.12 + day * (0.68 - 0.2 * golden);
+    this.scene.clearColor = new Color4(haze.r, haze.g, haze.b, 1);
+    this.scene.fogColor = haze;
+    this.scene.fogDensity = 0.00035 * (1 - 0.25 * golden * day);
     for (const f of this.floods) f.intensity = 1.6 * aircraftGlow;
-    this.paintSky(horizon, zenith);
+    this.pools?.setStrength(aircraftGlow);
+    Color3.LerpToRef(GROUND_NIGHT, GROUND_DAY, day, this.skyGround);
+    this.paintSky(horizon, zenith, this.skyGround);
     for (const l of this.airfield?.lights ?? []) l.mat.emissiveColor = l.colour.scale(l.day + (1 - l.day) * aircraftGlow);
     for (const g of this.airfield?.litGlass ?? []) g.emissiveColor = Color3.White().scale(1.3 * aircraftGlow);
     this.glow.intensity = 0.35 + 0.9 * aircraftGlow;
-    this.pipeline.imageProcessing.exposure = 1 + 0.4 * aircraftGlow;
+    this.pipeline.imageProcessing.exposure = 1 + 0.4 * aircraftGlow + 0.12 * golden * day;
+    this.pipeline.imageProcessing.contrast = 1.12 + 0.08 * day;
     return darkness;
   }
 
@@ -300,22 +323,29 @@ export class AirportView {
   }
 
   /** Colours the sky dome from the horizon up to the zenith (reusing its buffers) and asks for new reflections if it changed enough. */
-  private paintSky(horizon: Color3, zenith: Color3): void {
+  private paintSky(horizon: Color3, zenith: Color3, ground: Color3): void {
     if (!this.skyHeights || !this.skyColours) {
       const pos = this.dome.getVerticesData('position');
       if (!pos) return;
       const n = pos.length / 3;
+      // ≥ 0: how far towards the zenith colour; < 0: how far towards the ground colour (below the horizon the dome
+      // turns only part way to a dull ground colour, so glass seen from above still reads as sky)
       this.skyHeights = new Float32Array(n);
-      for (let i = 0; i < n; i++) this.skyHeights[i] = Math.pow(clamp(pos[i * 3 + 1]! / 3500, 0, 1), 0.45);
+      for (let i = 0; i < n; i++) {
+        const y = pos[i * 3 + 1]! / 3500;
+        this.skyHeights[i] = y >= 0 ? Math.pow(Math.min(y, 1), 0.45) : -0.45 * clamp(-y / 0.3, 0, 1);
+      }
       this.skyColours = new Float32Array(n * 4);
     }
     const k = this.skyHeights;
     const col = this.skyColours;
     for (let i = 0; i < k.length; i++) {
       const t = k[i]!;
-      col[i * 4] = horizon.r + (zenith.r - horizon.r) * t;
-      col[i * 4 + 1] = horizon.g + (zenith.g - horizon.g) * t;
-      col[i * 4 + 2] = horizon.b + (zenith.b - horizon.b) * t;
+      const to = t >= 0 ? zenith : ground;
+      const f = Math.abs(t);
+      col[i * 4] = horizon.r + (to.r - horizon.r) * f;
+      col[i * 4 + 1] = horizon.g + (to.g - horizon.g) * f;
+      col[i * 4 + 2] = horizon.b + (to.b - horizon.b) * f;
       col[i * 4 + 3] = 1;
     }
     this.dome.updateVerticesData(VertexBuffer.ColorKind, col);

@@ -3,7 +3,7 @@
  * same seeds; a variant is a set of tuning overrides (see tuning.ts) and the meta-progression to start with.
  */
 import { BOOSTS, UNLOCKABLES } from '../meta';
-import type { MetaSpec } from './play';
+import type { ContractPolicy, MetaSpec } from './play';
 import type { Overrides } from './tuning';
 
 export interface Variant {
@@ -11,6 +11,8 @@ export interface Variant {
   readonly overrides?: Overrides;
   /** Meta-progression: none (a first Run), every Unlockable and Boost at its top level, or a chosen set. */
   readonly meta?: MetaSpec;
+  /** How Airline Contract offers are answered (default: the best fit). */
+  readonly contracts?: ContractPolicy;
 }
 
 export interface Experiment {
@@ -124,6 +126,19 @@ export const EXPERIMENTS: readonly Experiment[] = [
     question: 'How steep should Demand rise from Week to Week?',
     players: ['reactive', 'planner'],
     variants: [{ label: '+15 flights/Week', overrides: { 'SCHEDULE_RULES.flightsPerWeek': 15 } }, CURRENT, { label: '+25 flights/Week', overrides: { 'SCHEDULE_RULES.flightsPerWeek': 25 } }],
+  },
+  {
+    id: 'contracts',
+    title: 'Airline Contracts',
+    question: 'How much do Airline Contracts lift a Run (target: +5–10 points of win rate for the planner)?',
+    players: ['reactive', 'planner'],
+    variants: [
+      { label: 'no Contracts', contracts: 'ignore' },
+      { label: 'always skip ($10,000)', contracts: 'skip' },
+      { label: 'first offered', contracts: 'first' },
+      { label: 'best fit', contracts: 'best' },
+      { label: 'best fit, all Contracts unlocked', contracts: 'best', meta: { unlocks: ['tradeOffContracts', 'growthContracts'] } },
+    ],
   },
 ];
 
