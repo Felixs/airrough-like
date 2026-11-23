@@ -297,7 +297,12 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   (Controls). Scale: a tile is 16 m, so Medium aircraft fit their 3-tile Stands at real size.
 - **Lighting:** physically based materials (painted metal with a clear coat, glass, concrete, grass), a sun that moves
   from east to west through the Day and casts real shadows, sky reflections on paint and glass, tone mapping and a
-  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion).
+  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion). The sun
+  is the strong light and the sky only a weaker, cooler fill, so sunlit and shaded sides differ clearly. Glazing is
+  tinted mirror glass: by day it shows the sky (lighter towards the top of each pane, pale blue-grey on the façades,
+  pale green on the Tower cab) with its bars and floor slabs as matt paint; at night the lit interior shows through.
+  The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and turns part
+  way to a dull ground colour below the horizon (so glass seen from above still reads as sky).
 - **Ground:** inside a perimeter fence round everything built (and the landside dressing) the grass is kept short and
   mown in wide light and dark bands running east–west; outside it lies farmland: fields of slightly different greens
   (a few hay-coloured, some with faint rows), soft lusher and drier patches, and fine grass detail close up, so no
@@ -317,7 +322,7 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   dollies, tugs and ground power units. All of it keeps to free tiles, clear of structures, Runway end zones and a
   tile round each Runway, and is left out wherever there is no room (a building squeezed between others gets no car
   park or service road on that side).
-- **Runways** are painted asphalt with are painted asphalt with
+- **Runways** are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
   for the landing pilot. Taxiways are one paved surface of light concrete slabs, the same as the aprons and Stands (only
   Runways are dark asphalt); a Taxiway is 3 tiles wide for aircraft, but
@@ -330,24 +335,41 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   yellow lines across the drawn paving, with a red sign such as "09-27" beside them).
 - **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
   their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
-  yellow one. Contact Stands at a Terminal get a jet bridge: a rotunda by the building on the left of a parked aircraft,
-  a tunnel on a wheeled leg and a cab. At rest it points out along the Stand, angled away from it; once a Medium or
-  Large aircraft has stopped on the Stand it swings out until the cab meets the aircraft's front left door, and swings
-  back when the aircraft leaves (Small aircraft use stairs: the bridge stays at rest). While an aircraft is on its Stand, ground vehicles stand round it: a pushback tug at
-  the nose, belt loaders with a baggage tug and two to four container carts at its holds, often ground power, and for
-  Medium and Large aircraft often a fuel truck under the wing and a catering truck at the rear door.
+  yellow one. Contact Stands at a Terminal get a jet bridge (light grey): a round rotunda on a column by the building,
+  on the left of a parked aircraft, with a steel roof cap, a window band and a steel service stair down to the apron along
+  the building; from it two telescoping tunnel sections, each with a window strip (the outer one, towards the
+  aircraft, a little larger and sliding over the inner one, so the step between them shows), a drive bogie (two legs
+  down to a beam on four wheels) under the outer section, dark grey ribbed bellows and a cab with a window band and a
+  dark grey canopy. At rest it points out along the Stand, angled away from it; once a Medium or Large aircraft has stopped on
+  the Stand it swings out until the canopy meets the aircraft's front left door, the sections lengthening or
+  shortening to reach it, and swings back when the aircraft leaves (Small aircraft use stairs: the bridge stays at
+  rest). The windows glow warm at night. While an aircraft is on its Stand, ground vehicles stand round it, at real
+  size even when the aircraft is drawn smaller: a yellow towbar pushback tractor at the nose (long and low, cab at the
+  far end, towbar to the nose gear); per hold a white belt loader (cab beside the low end of a conveyor with yellow
+  rails rising towards the aircraft on struts), a yellow baggage tractor (bonnet, open cab with roof) and two to four
+  grey carts each carrying an aluminium container with a cut corner and a grey net door; often a white ground power
+  trailer with louvres; and for Medium and Large aircraft often a fuel truck under the wing (white cab, aluminium tank
+  with ribs and a rail, hose cabinet at the back) and a catering truck at the rear door (white cab, a white box with an
+  orange band raised on a scissor lift, a railed platform in front). Every vehicle has a window band round its cab,
+  dark tyres with grey hubs, and an orange beacon on the cab roof.
 - **Buildings** stand up in 3D at real size (inspired by Berlin Brandenburg Terminal 1, Frankfurt's cargo centres and
   the German standard control tower). Each is turned so its airside faces its Stands or Holding Bays (else a Taxiway,
   else south) and stays inside its footprint, apart from the Terminal's roof edge reaching 2 m over the airside.
   At night glass glows warm from inside and lamps light up.
+  Building names are clean sans-serif capitals with open letter spacing (not the UI's monospace font, which Stand
+  numbers keep): painted on the roof of a Terminal or Cargo Hub (dark grey, between two skylight bands, readable from
+  above) and on the ground in front of the Tower and Support Buildings (pale), always running along the building and
+  never upside down from the south (bottom to top on buildings facing east or west). Terminals and Cargo Hubs also
+  carry a name sign on their airside roof edge: white capitals on a dark plate, lit at night.
   - **Terminal** ("Deck"): gate lounges behind glass at apron level, a light stone floor band, a hall about 20 m tall
     glazed with horizontal bars, stone end walls with tall slot windows, and one flat roof deck over everything on
     slender steel columns (a row along the airside and one along the landside, where the deck shelters a drop-off
     kerb). On the roof: three skylight bands (glowing at night), roof plant and TERMINAL; downlights in the deck's
-    underside. Wings look the same and join it seamlessly.
+    underside; a TERMINAL sign on short posts along the airside roof edge. Wings look the same and join it seamlessly.
   - **Cargo Hub:** a 15 m hall in silver ribbed cladding with a teal band, a dark 30 m high-bay warehouse at the back
     of long hubs, a three-storey glass office head at one end, roller doors on the airside (open ones lit orange at
-    night) with yellow lintels and bollards under a canopy with sodium lights, skylights, roof plant and CARGO.
+    night) with yellow lintels and bollards under a canopy with sodium lights, skylights, roof plant and CARGO, and a
+    CARGO sign on the airside roof edge.
   - **ATC Tower:** a white two-storey base with ribbon windows, a slim round white shaft with a lit stair slit, flared
     equipment floors with a lit window band, a 12-sided cab of outward-sloping green-tinted glass (a faint green glow
     at night), a roof disc with antennas and a radar dome, red obstruction lights, and TWR on the ground.
@@ -359,15 +381,24 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
     boom trucks, glycol tanks).
   - Flood masts (28 m, matt galvanised grey, tapering) stand at the front corners of Terminals and Cargo Hubs, a little
     out on the apron side. Each head is a frame with a service platform and two rows of four floodlight housings
-    tilted down towards the apron; at night their lenses glow and the first four masts light the apron round them.
+    tilted down towards the apron; at night their lenses glow and the first four masts light the apron round them (real lights, so aircraft and vehicles there are lit too).
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
 - **Runway lights follow the surface:** none on Grass and Asphalt; white edge and green threshold lights when Lit;
   approach lights added with ILS.
 - **Day and night:** during the Live Day the light follows the clock (`clock.ts → daylight`): dark until 05:30, a warm
-  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. At night the sun gives
-  way to dim blue moonlight, and lights, lit windows and glass glow. Plan Mode and Build Mode are in daylight.
+  sunrise to 07:30, full daylight until 18:30, low warm evening light to 20:00, dark from 21:00. The sun rises in the
+  east at 06:00 about 5° high, peaks near 58° at 13:00 and sets in the west at 20:00. Golden hour follows the sun's
+  height (strongest below about 12°, gone above about 34°, so roughly 06:00–08:00 and 18:00–20:00): the sunlight turns
+  gold and stays strong, so shadows are long and crisp and the walls facing the sun glow, while the sky overhead stays
+  blue (a cool fill in the shadows) and only the horizon turns gold. The haze in the distance is pale blue by day and a
+  light peach at golden hour (never brown), slightly thinner then; at night it is dark blue. Midday has a little more
+  contrast than the rest of the Day. At night the sun gives way to dim blue moonlight, and lights, lit windows and
+  glass glow, and pools of warm light lie on the ground: a wide one under every flood mast, a softer one on every
+  Stand and a row of small ones along each side of a building that meets paving. The pools are painted on the ground,
+  not real lights (aircraft over them are not lit by them, and anything standing on them hides them); they fade in
+  with the lit windows at dusk and out at dawn. Plan Mode and Build Mode are in daylight.
 - **Aircraft** (`render/aircraftModels.ts`) are 3D models built from each type's real dimensions, with a painted
   livery: Caravan (high wing, nose propeller; the freighter with a belly pod), Q400 (high wing, two propellers,
   T-tail), A320 (rounded nose, sharklets), B737 (pointed nose, split-scimitar winglets), A350 (curled wingtips, dark
@@ -391,7 +422,15 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
 - **Quality:** the view starts at High (sharp on high-density screens, detailed shadows, edge smoothing, glow) and
   steps down by itself to Medium (normal resolution, coarser shadows, no glow) and then Low (lower resolution, no
   shadows) when frames stay below 45 per second for two seconds. Adding `?quality=high` (or `medium`, `low`) to the
-  game's address fixes the level instead.
+  game's address fixes the level instead. Adding `?perf` shows a small box in the bottom-left corner (only then,
+  never in normal play) for measuring the view, e.g. full screen or on a weak computer: frames per second and
+  milliseconds per frame, the 1% low (the average of the slowest 1% of frames over the last five seconds, with the
+  slowest single frame), the time the computer spent preparing each frame, the quality level, draw calls, meshes drawn
+  and the size of the picture in pixels; it updates twice a second and hides while the view is covered (Plan Mode).
+  To keep frames even, the light, sky and reflections change once per game minute (the sky's reflections only once its
+  colours have moved noticeably, at most about three times a second), and the aircraft models of every type and
+  livery, with one spare aircraft of each, are built while the menus or Plan Mode are open, so an aircraft's first
+  appearance in a Day doesn't stutter.
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day

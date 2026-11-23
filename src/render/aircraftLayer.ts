@@ -1,9 +1,10 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3, type InstancedMesh, type Mesh, type Scene } from '@babylonjs/core';
 import type { AircraftTypeId } from '../sim/aircraft';
 import type { Flight } from '../sim/simulation';
-import { aircraftMaterials, buildMaster, CARGO_LIVERY, frontDoor, MODELS, pbr, type AircraftMaterials, type Master } from './aircraftModels';
+import { aircraftMaterials, buildMaster, CARGO_LIVERY, frontDoor, MODELS, type AircraftMaterials, type Master } from './aircraftModels';
 import type { JetBridge } from './airfield';
-import { METRE, mapPoint } from './units';
+import { METRE } from './units';
+import { vehicleMasters, type VehicleKind } from './vehicles';
 
 /**
  * How much an aircraft is drawn at, so it fits the Stands of its size class (1 tile = 16 m): a Stand is 3 tiles deep
@@ -17,19 +18,6 @@ export function drawScale(type: AircraftTypeId): number {
   return Math.min(1, (3 * 16 * 0.95 * give) / m.L, (width * give) / m.span);
 }
 
-type VehicleMat = 'yellow' | 'white' | 'red' | 'grey' | 'uld' | 'dark' | 'glass';
-type VehicleKind = 'tug' | 'cart' | 'belt' | 'fuel' | 'cater' | 'push' | 'gpu';
-/** Ground vehicles as boxes: width (along the vehicle), height, depth, position, paint and an optional tilt (metres). */
-const VEHICLES: Record<VehicleKind, ReadonlyArray<readonly [number, number, number, number, number, number, VehicleMat, number?]>> = {
-  tug: [[2.8, 1.0, 1.7, 0, 0.75, 0, 'yellow'], [1.1, 0.9, 1.5, -0.6, 1.7, 0, 'glass'], [0.7, 0.55, 1.9, 0.9, 0.35, 0, 'dark'], [0.7, 0.55, 1.9, -0.9, 0.35, 0, 'dark']],
-  cart: [[3.0, 0.3, 1.6, 0, 0.55, 0, 'grey'], [2.6, 1.6, 1.5, 0, 1.5, 0, 'uld'], [0.6, 0.45, 1.7, 1, 0.25, 0, 'dark'], [0.6, 0.45, 1.7, -1, 0.25, 0, 'dark']],
-  belt: [[6.5, 0.9, 2.0, 0, 0.8, 0, 'white'], [8, 0.25, 0.9, 0.6, 2.3, 0, 'dark', 0.32], [1.4, 1.2, 1.7, -2.4, 1.8, 0, 'glass'], [0.8, 0.6, 2.1, 2, 0.3, 0, 'dark'], [0.8, 0.6, 2.1, -2, 0.3, 0, 'dark']],
-  fuel: [[2.6, 2.4, 2.5, 4.4, 1.7, 0, 'red'], [1.2, 0.9, 2.4, 4.9, 2.2, 0, 'glass'], [8, 2.4, 2.4, -1, 2.0, 0, 'white'], [12, 0.7, 2.4, 0, 0.6, 0, 'dark']],
-  cater: [[2.4, 2.4, 2.4, 3.4, 1.6, 0, 'white'], [1.0, 0.9, 2.3, 4.0, 2.1, 0, 'glass'], [6.5, 2.8, 2.5, -1, 4.2, 0, 'white'], [7, 0.8, 2.4, 0, 0.7, 0, 'dark'], [4, 2.2, 2.2, -1, 2.1, 0, 'grey']],
-  push: [[6, 1.3, 3.0, 0, 0.9, 0, 'yellow'], [1.3, 1.0, 1.6, -2.2, 2.0, 0, 'glass'], [6.2, 0.6, 3.1, 0, 0.35, 0, 'dark']],
-  gpu: [[2.2, 1.4, 1.4, 0, 1.0, 0, 'white'], [2.2, 0.4, 1.4, 0, 0.2, 0, 'dark']],
-};
-
 /** Highest point of a landing or takeoff on the map, in world units (altitude 1). */
 const CLIMB = 45;
 
@@ -41,12 +29,21 @@ const poseOf = (f: Flight): Pose => ({ x: f.position?.x ?? 0, y: f.position?.y ?
 const headingOf = (dx: number, dy: number, fallback: number) => (dx * dx + dy * dy < 1e-9 ? fallback : (Math.atan2(dx, -dy) * 180) / Math.PI);
 const turnTo = (from: number, to: number, k: number) => from + (((((to - from) % 360) + 540) % 360) - 180) * k;
 
+/** A point on the map with a heading (degrees); `between` writes into one, so the frame loop allocates nothing. */
+interface Spot { x: number; y: number; heading: number }
+const place = (out: Spot, x: number, y: number, heading: number): Spot => {
+  out.x = x;
+  out.y = y;
+  out.heading = heading;
+  return out;
+};
+
 /**
  * Where an aircraft is `k` (0…1) of the way between two steps. Into a Stand or Bay it follows the lead-in: a smooth turn
  * off the taxilane onto the centre line, then straight in, nose first. Out of one it is pushed back straight along the
  * centre line, tail first, then turns onto the taxilane. Elsewhere it glides in a straight line.
  */
-function between(a: Pose, b: Pose, k: number): { x: number; y: number; heading: number } {
+function between(a: Pose, b: Pose, k: number, out: Spot): Spot {
   if (b.parked && !a.parked) {
     // the centre line runs through the Stand's middle (b) along its parked heading; P is where the lane meets it
     const dx = Math.sin((b.heading * Math.PI) / 180);
@@ -59,7 +56,7 @@ function between(a: Pose, b: Pose, k: number): { x: number; y: number; heading: 
     const y = u * u * a.y + 2 * u * k * py + k * k * b.y;
     const tx = u * (px - a.x) + k * (b.x - px);
     const ty = u * (py - a.y) + k * (b.y - py);
-    return { x, y, heading: headingOf(tx, ty, b.heading) };
+    return place(out, x, y, headingOf(tx, ty, b.heading));
   }
   if (a.parked && !b.parked) {
     const dx = Math.sin((a.heading * Math.PI) / 180);
@@ -69,12 +66,12 @@ function between(a: Pose, b: Pose, k: number): { x: number; y: number; heading: 
     const py = a.y + dy * along;
     if (k < 0.6) {
       const q = k / 0.6;
-      return { x: a.x + (px - a.x) * q, y: a.y + (py - a.y) * q, heading: a.heading };
+      return place(out, a.x + (px - a.x) * q, a.y + (py - a.y) * q, a.heading);
     }
     const q = (k - 0.6) / 0.4;
-    return { x: px + (b.x - px) * q, y: py + (b.y - py) * q, heading: turnTo(a.heading, b.heading, q) };
+    return place(out, px + (b.x - px) * q, py + (b.y - py) * q, turnTo(a.heading, b.heading, q));
   }
-  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, heading: turnTo(a.heading, b.heading, k) };
+  return place(out, a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, turnTo(a.heading, b.heading, k));
 }
 
 interface Visual {
@@ -117,6 +114,13 @@ function liveryFor(f: Flight): number {
 }
 
 /**
+ * Compiles a master's shaders for drawing through instances now, rather than on the frame the first instance shows up.
+ */
+function compileForInstances(mesh: Mesh): void {
+  mesh.material?.forceCompilation(mesh, undefined, { useInstances: true });
+}
+
+/**
  * Keeps one 3D aircraft per flight on the airfield in sync with the simulation (Holding aircraft are not drawn). Each
  * aircraft is a set of instances of its type's master, so all aircraft of a type and livery cost one draw call per part.
  */
@@ -130,8 +134,15 @@ export class AircraftLayer {
   private readonly visuals = new Map<string, Visual>();
   private readonly free = new Map<string, Visual[]>();
   private readonly ring: Mesh;
-  private readonly vehicleParts: Record<VehicleMat, Mesh>;
+  private readonly vehicles: Record<VehicleKind, Mesh[]>;
   private minute = -1;
+  private litWindows = -1;
+  /** Scratch space reused every frame (no allocations while drawing). */
+  private readonly present = new Set<string>();
+  private readonly docked = new Set<JetBridge>();
+  private readonly spot: Spot = { x: 0, y: 0, heading: 0 };
+  private readonly doorAt = new Vector3();
+  private readonly doorOut = new Vector3();
   /** The airfield's jet bridges by Stand id; parked jets dock them. */
   bridges: ReadonlyMap<string, JetBridge> = new Map();
   /** Reduce motion: the beacon glows steadily and the strobes stay off instead of flashing. */
@@ -184,18 +195,8 @@ export class AircraftLayer {
     this.ring.isPickable = false;
     this.ring.setEnabled(false);
     glow(this.ring);
-    const paint = (name: string, hex: string, rough = 0.45, metal = 0) => {
-      const box = MeshBuilder.CreateBox(`vehicle-${name}`, { size: 1 }, scene);
-      box.material = pbr(scene, `vehicle-${name}`, hex, rough, metal, rough < 0.5);
-      box.isVisible = false;
-      box.isPickable = false;
-      caster(box);
-      return box;
-    };
-    this.vehicleParts = {
-      yellow: paint('yellow', '#f2b705'), white: paint('white', '#f1f2f3'), red: paint('red', '#c62828'), grey: paint('grey', '#8b9199', 0.5, 0.3),
-      uld: paint('uld', '#c4c8cc', 0.3, 0.75), dark: paint('dark', '#1a1c20', 0.7), glass: paint('glass', '#10161e', 0.08, 0.1),
-    };
+    this.vehicles = vehicleMasters(scene, caster);
+    for (const m of [...Object.values(this.lightMasters), this.beamMaster, this.bladeMaster, this.discMaster, ...Object.values(this.vehicles).flat()]) compileForInstances(m);
   }
 
   /** Pushback tug, ground power, belt loaders with baggage trains, a fuel truck and a catering truck round an aircraft. */
@@ -211,13 +212,7 @@ export class AircraftLayer {
       v.parent = service;
       v.position.set(x, 0, z);
       v.rotation.y = yaw;
-      for (const [w, h, d, px, py, pz, mat, pitch] of VEHICLES[kind]) {
-        const part = this.vehicleParts[mat].createInstance('part');
-        part.parent = v;
-        part.scaling.set(w, h, d);
-        part.position.set(px, py, pz);
-        if (pitch) part.rotation.z = pitch;
-      }
+      for (const master of this.vehicles[kind]) master.createInstance(kind).parent = v;
     };
     const r = (k: number) => ((seed * 9301 + k * 49297) % 233280) / 233280;
     put('push', nose + 5.5, 0, Math.PI);
@@ -240,7 +235,11 @@ export class AircraftLayer {
     let m = this.masters.get(key);
     if (!m) {
       m = buildMaster(this.scene, type, livery, this.mats);
-      for (const mesh of [...m.meshes, ...m.gear]) this.caster(mesh);
+      for (const mesh of [...m.meshes, ...m.gear]) {
+        this.caster(mesh);
+        compileForInstances(mesh);
+      }
+      if (this.litWindows >= 0) m.lit?.emissiveColor.set(this.litWindows, this.litWindows, this.litWindows);
       this.masters.set(key, m);
     }
     return m;
@@ -249,16 +248,21 @@ export class AircraftLayer {
   private acquire(f: Flight): Visual {
     const livery = liveryFor(f);
     const key = `${f.type}:${livery}`;
-    const pooled = this.free.get(key)?.pop();
     const at = poseOf(f);
-    const phaseMs = [...f.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7);
-    if (pooled) {
-      pooled.root.setEnabled(true);
-      return Object.assign(pooled, { from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs });
-    }
-    const m = this.master(f.type, livery);
-    const s = drawScale(f.type) * METRE;
-    const root = new TransformNode(`ac-${f.id}`, this.scene);
+    let phaseMs = 7;
+    for (let i = 0; i < f.id.length; i++) phaseMs = (phaseMs * 31 + f.id.charCodeAt(i)) % 997;
+    const v = this.free.get(key)?.pop() ?? this.build(f.type, livery, phaseMs);
+    v.root.setEnabled(true);
+    return Object.assign(v, { from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs });
+  }
+
+  /** A new aircraft of a type and livery (disabled until acquired); `seed` picks its ground vehicles. */
+  private build(type: AircraftTypeId, livery: number, seed: number): Visual {
+    const key = `${type}:${livery}`;
+    const m = this.master(type, livery);
+    const s = drawScale(type) * METRE;
+    const root = new TransformNode(`ac-${key}`, this.scene);
+    root.setEnabled(false);
     root.scaling.setAll(s);
     const body = new TransformNode('body', this.scene);
     body.parent = root;
@@ -306,13 +310,16 @@ export class AircraftLayer {
       discs.push(disc);
       props.push(hub);
     }
-    const service = this.buildService(root, f.type, drawScale(f.type), phaseMs);
-    return { key, root, gear, nav, beacons, strobes, beam, props, discs, service, body, door: frontDoor(f.type), from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs };
+    const service = this.buildService(root, type, drawScale(type), seed);
+    const at: Pose = { x: 0, y: 0, heading: 0, parked: false };
+    return { key, root, gear, nav, beacons, strobes, beam, props, discs, service, body, door: frontDoor(type), from: at, to: { ...at }, altFrom: 0, altTo: 0, phaseMs: seed };
   }
 
   private release(v: Visual): void {
     v.root.setEnabled(false);
-    this.free.set(v.key, [...(this.free.get(v.key) ?? []), v]);
+    const pool = this.free.get(v.key);
+    if (pool) pool.push(v);
+    else this.free.set(v.key, [v]);
   }
 
   /**
@@ -322,17 +329,23 @@ export class AircraftLayer {
   update(flights: readonly Flight[], darkness: number, nowMs: number, minute: number, fraction: number, litWindows: number): void {
     const stepped = minute !== this.minute;
     this.minute = minute;
-    const present = new Set(flights.filter((f) => f.position).map((f) => f.id));
+    const present = this.present;
+    present.clear();
+    for (const f of flights) if (f.position) present.add(f.id);
     for (const [id, v] of this.visuals) {
       if (!present.has(id)) {
         this.release(v);
         this.visuals.delete(id);
       }
     }
-    for (const m of this.masters.values()) if (m.lit) m.lit.emissiveColor = Color3.White().scale(litWindows);
+    if (litWindows !== this.litWindows) {
+      this.litWindows = litWindows;
+      for (const m of this.masters.values()) m.lit?.emissiveColor.set(litWindows, litWindows, litWindows);
+    }
     const lightsOn = darkness > 0.1;
     let ringed = false;
-    const docked = new Set<JetBridge>();
+    const docked = this.docked;
+    docked.clear();
     for (const f of flights) {
       if (!f.position) continue;
       let v = this.visuals.get(f.id);
@@ -352,13 +365,11 @@ export class AircraftLayer {
         }
       }
       const k = minute < 0 ? 1 : fraction;
-      const pose = between(v.from, v.to, k);
-      const x = pose.x;
-      const y = pose.y;
+      const pose = between(v.from, v.to, k, this.spot);
       const heading = (pose.heading * Math.PI) / 180;
       const alt = v.altFrom + (v.altTo - v.altFrom) * k;
-      const p = mapPoint(x, y, alt * CLIMB);
-      v.root.position.copyFrom(p);
+      // on the map (see units.ts: sim (x, y) is drawn at (x, height, −y))
+      const p = v.root.position.set(pose.x, alt * CLIMB, -pose.y);
       // heading 0 = north (+z), 90 = east (+x); the model's nose points along +x
       v.root.rotation.y = Math.atan2(-Math.cos(heading), Math.sin(heading));
       const climbing = v.altTo > v.altFrom;
@@ -378,7 +389,9 @@ export class AircraftLayer {
       if (bridge) {
         v.root.computeWorldMatrix(true);
         const world = v.body.computeWorldMatrix(true);
-        bridge.dock(Vector3.TransformCoordinates(v.door, world), Vector3.TransformNormal(new Vector3(0, 0, 1), world).normalize());
+        Vector3.TransformCoordinatesToRef(v.door, world, this.doorAt);
+        Vector3.TransformNormalFromFloatsToRef(0, 0, 1, world, this.doorOut);
+        bridge.dock(this.doorAt, this.doorOut.normalize());
         docked.add(bridge);
       }
       const spinning = moving || f.phase === 'holdShort';
@@ -398,8 +411,9 @@ export class AircraftLayer {
   }
 
   /**
-   * Builds one more of the masters a Day may need; called while nothing is flying (Plan Mode), so the first
-   * appearance of a type during a Day doesn't stutter. False once all are built.
+   * Builds one more thing a Day may need: first the master of every type and livery, then one spare aircraft of each
+   * (kept hidden for the first flight that needs it). Called while nothing is flying (menus, Plan Mode), so the first
+   * appearance of a type during a Day doesn't stutter. False once everything is built.
    */
   prewarmStep(): boolean {
     for (const type of Object.keys(LIVERIES_OF) as AircraftTypeId[]) {
@@ -410,6 +424,18 @@ export class AircraftLayer {
         }
       }
     }
+    for (const type of Object.keys(LIVERIES_OF) as AircraftTypeId[]) {
+      for (const l of LIVERIES_OF[type]) {
+        const key = `${type}:${l}`;
+        if (this.spared.has(key)) continue;
+        this.spared.add(key);
+        if (!this.free.get(key)?.length) this.release(this.build(type, l, this.spared.size * 131));
+        return true;
+      }
+    }
     return false;
   }
+
+  /** Types and liveries that already have a spare aircraft (or had one in use). */
+  private readonly spared = new Set<string>();
 }
