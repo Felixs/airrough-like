@@ -107,6 +107,20 @@ Current set: `baseline`, `meta`, `meta-split`, `growth`, `upgrade-value`, `stand
 - Still below the targets (planner 70–80%): most losses are "holding" on the last Boss Days. Next: a smarter planner
   (second Runway timing, Holding Bays, using Support Buildings) before judging the late-game difficulty.
 
+## Airline Contracts (23 Nov 2026: `contracts` and `baseline`, 30 seeds)
+
+| Player | No Contracts | Always skip (+$10,000) | First offered | Best fit | Best fit, all Contracts unlocked |
+|---|---|---|---|---|---|
+| planner | 7% (2–21%), median Day 13 | 10% | 10% | **20% (10–37%), median Day 27** | 20% |
+| reactive | 0%, median Day 13 | 0% | 0% (median Day 19) | 0% | 0% |
+
+- **Picking well is worth about +13 points** for the planner (7% → 20%), a little over the +5–10 target, but within
+  the noise of 30 seeds (the two intervals overlap). Signing just the first one offered, or skipping, adds 3 points.
+  The best-fit pick also moves the planner's typical loss from the Week 2 Boss Day to the Week 4 Boss Day.
+- Unlocking Trade-off and Growth Contracts adds nothing on top for these players.
+- The reactive player can't use them: it still loses on the Week 2 Boss Day ("holding"), with or without.
+- With Contracts answered by best fit (the lab's default now), the baseline planner wins 20%.
+
 ## Next steps
 
 1. Decide how adding Stands should work on a first Run: cheaper Taxiways, Remote Stands always available (and the

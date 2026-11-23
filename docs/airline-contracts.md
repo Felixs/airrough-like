@@ -60,3 +60,7 @@ Trade-off and growth Contracts are Unlockables, for example:
 
 The balance lab's scripted players pick Contracts too (first offered, best fit, or skip). Target: Contracts raise the
 planner player's win rate by 5–10 points, not more.
+
+First run (23 Nov 2026, 30 seeds): best fit takes the planner from 7% to 20% (+13 points), signing the first one or
+skipping adds 3; Trade-off and Growth Contracts add nothing more for the scripted players. Slightly over the target
+but within the noise; details in [`balance-lab.md`](balance-lab.md).
