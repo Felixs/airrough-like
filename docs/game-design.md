@@ -243,14 +243,17 @@ cooldown (`simulation.ts → ACTIONS`).
 
 ## Presentation
 
-- **View:** the airfield in realistic 3D (ADR 0003), seen from a fixed camera above it with no perspective
-  (orthographic), so tiles stay square and sizes compare at a glance. A Live Day shows the whole airport (its
-  structures plus a 3-tile margin), tilted slightly so building walls and the tower show; Build Mode looks straight down
-  at the whole map and can zoom and pan (Controls). The camera never rotates. Scale: a tile is 16 m, so Medium
-  aircraft fit their 3-tile Stands at real size.
+- **View:** the airfield in realistic 3D (ADR 0003). In a Live Day the map fills the whole window and the top bar,
+  flight strips, Tower panel and hour bars float over it (the strips and the Tower panel collapse to narrow rails).
+  The camera is free: it starts close over the airport, tilted (about 55° from straight down) and framing most of
+  it; dragging turns it round, the right button or two fingers move it, the wheel or a pinch zooms (from about 35 m
+  to three times the starting distance), and it can't go below about 20° above the ground or wander far off the map.
+  "⌂ View" (key V) goes back to the starting view. Far away the airfield fades into haze under a sky that follows the
+  Day. Build Mode looks straight down at the whole map without perspective (tiles stay square) and can zoom and pan
+  (Controls). Scale: a tile is 16 m, so Medium aircraft fit their 3-tile Stands at real size.
 - **Lighting:** physically based materials (painted metal with a clear coat, glass, concrete, grass), a sun that moves
   from east to west through the Day and casts real shadows, sky reflections on paint and glass, tone mapping and a
-  soft glow round lights.
+  soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion).
 - **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
   for the landing pilot. Taxiways are one paved surface with slab joints; a Taxiway is 3 tiles wide for aircraft, but
@@ -261,12 +264,18 @@ cooldown (`simulation.ts → ACTIONS`).
   yellow lines across the drawn paving, with a red sign such as "09-27" beside them).
 - **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
   their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
-  yellow one. Contact Stands at a Terminal get a jet bridge from the building.
-- **Buildings** stand up in 3D: Terminals with glass curtain walls (lit from inside at night) and TERMINAL on the roof,
+  yellow one. Taxiway tiles within 3 tiles of a Stand or Holding Bay are concrete apron rather than asphalt. Contact
+  Stands at a Terminal get a jet bridge: a rotunda by the building, a tunnel angled out to a cab by the aircraft's
+  front door, and a wheeled leg. While an aircraft is on its Stand, ground vehicles stand round it: a pushback tug at
+  the nose, belt loaders with a baggage tug and two to four container carts at its holds, often ground power, and for
+  Medium and Large aircraft often a fuel truck under the wing and a catering truck at the rear door.
+- **Buildings** stand up in 3D: Terminals with glass curtain walls (lit from inside at night), a curved standing-seam
+  metal roof overhanging the glass on columns, and TERMINAL on the roof,
   Cargo Hubs with ribbed metal walls and CARGO on the roof, the ATC Tower (base building, tapered concrete shaft,
   catwalk, glass cab, roof, mast and dome, TWR on the ground beside it), the Fire & Rescue Station with red bay doors and
   two fire trucks, fuel tanks for the Fuel Farm, a painted De-icing Pad, and plain buildings for the other Support
-  Buildings, each with its name beside it.
+  Buildings, each with its name beside it. Flood masts stand at the front corners of Terminals and Cargo Hubs; at
+  night their heads glow and the first four light the apron round them.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
@@ -281,8 +290,8 @@ cooldown (`simulation.ts → ACTIONS`).
   cockpit mask), B777 (raked wingtips, very large engines, blade tail cone), B747-8F (upper-deck hump, four engines).
   Passenger aircraft have rows of cabin windows that light up at night; freighters have none. Liveries are five
   made-up airlines (one of two per passenger type, by the flight's airline; freighters all fly the cargo one), with
-  titles, a tail emblem and coloured winglets. Large aircraft are drawn at about 60% of their real size so they fit
-  their 4-tile Stands. The gear is down below a third of the climb.
+  titles, a tail emblem and coloured winglets. Large aircraft are drawn at about 70% of their real size, overhanging
+  their 4-tile Stands a little. The gear is down below a third of the climb.
 - **Aircraft lights:** red (left) and green (right) wingtip navigation lights and a white tail light at night whenever
   not parked; a flashing red beacon while moving; white strobes double-flashing on the Runway; a landing-light beam
   at night on the Runway and in the air.
@@ -307,7 +316,7 @@ cooldown (`simulation.ts → ACTIONS`).
 ## Controls and accessibility
 
 - **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
-  answer the low-fuel decision (Divert / Mayday). Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
+  answer the low-fuel decision (Divert / Mayday), V resets the camera. Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
   confirms, Ctrl Z undoes, Esc frees the cursor; the arrow keys move the map, + and − zoom, F shows the whole map. Buttons name their keys; the Main Menu lists them.
 - **Options while playing:** a ⚙ Options button in the Plan Mode header and the Live Day top bar (key O) opens the
   same Options as the Main Menu (speed, pop-ups, music, background running, reduce motion) as a dialog; a running Day
@@ -322,8 +331,8 @@ cooldown (`simulation.ts → ACTIONS`).
   ◐ due with the arriving callsign, ● with the parked callsign); played Days on the Run Calendar carry ✓ or ✗;
   alerts start with what happened (CRASH, MAYDAY, …).
 - **Text** is at least 11 px; the palette keeps every text colour at 6:1 contrast or better on the dark panels.
-- **Screen sizes:** below 1200 px wide the side panels narrow and the top bar wraps; below 900 px the Live Day stacks
-  (map on top, flight strips and Tower panel below), Plan Mode becomes one column and Build Mode puts its tools above
+- **Screen sizes:** below 1200 px wide the side panels narrow and the top bar wraps; below 900 px the map no longer
+  fills the window and the Live Day stacks (map on top, flight strips and Tower panel below), Plan Mode becomes one column and Build Mode puts its tools above
   the map.
 - **Reduce motion** (Options; follows the system setting until changed): aircraft beacons glow steadily and strobes
   stay off instead of flashing.

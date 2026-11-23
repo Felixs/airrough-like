@@ -1,18 +1,33 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, type InstancedMesh, type Mesh, type Scene } from '@babylonjs/core';
 import type { AircraftTypeId } from '../sim/aircraft';
 import type { Flight } from '../sim/simulation';
-import { aircraftMaterials, buildMaster, CARGO_LIVERY, MODELS, type AircraftMaterials, type Master } from './aircraftModels';
+import { aircraftMaterials, buildMaster, CARGO_LIVERY, MODELS, pbr, type AircraftMaterials, type Master } from './aircraftModels';
 import { METRE, mapPoint } from './units';
 
 /**
  * How much an aircraft is drawn at, so it fits the Stands of its size class (1 tile = 16 m): a Stand is 3 tiles deep
- * and 2 / 3 / 4 tiles wide. Small and Medium aircraft fit at real size; Large ones are drawn at about 60%.
+ * and 2 / 3 / 4 tiles wide. Small and Medium aircraft fit at real size; Large ones are drawn at about 70%, overhanging their Stand a little.
  */
 export function drawScale(type: AircraftTypeId): number {
   const m = MODELS[type];
   const width = { small: 2, medium: 3, large: 4 }[m.size] * 16;
-  return Math.min(1, (3 * 16 * 0.95) / m.L, width / m.span);
+  // wide-bodies may overhang their Stand a little (nose over the apron edge, wingtips over the lane)
+  const give = m.size === 'large' ? 1.2 : 1;
+  return Math.min(1, (3 * 16 * 0.95 * give) / m.L, (width * give) / m.span);
 }
+
+type VehicleMat = 'yellow' | 'white' | 'red' | 'grey' | 'uld' | 'dark' | 'glass';
+type VehicleKind = 'tug' | 'cart' | 'belt' | 'fuel' | 'cater' | 'push' | 'gpu';
+/** Ground vehicles as boxes: width (along the vehicle), height, depth, position, paint and an optional tilt (metres). */
+const VEHICLES: Record<VehicleKind, ReadonlyArray<readonly [number, number, number, number, number, number, VehicleMat, number?]>> = {
+  tug: [[2.8, 1.0, 1.7, 0, 0.75, 0, 'yellow'], [1.1, 0.9, 1.5, -0.6, 1.7, 0, 'glass'], [0.7, 0.55, 1.9, 0.9, 0.35, 0, 'dark'], [0.7, 0.55, 1.9, -0.9, 0.35, 0, 'dark']],
+  cart: [[3.0, 0.3, 1.6, 0, 0.55, 0, 'grey'], [2.6, 1.6, 1.5, 0, 1.5, 0, 'uld'], [0.6, 0.45, 1.7, 1, 0.25, 0, 'dark'], [0.6, 0.45, 1.7, -1, 0.25, 0, 'dark']],
+  belt: [[6.5, 0.9, 2.0, 0, 0.8, 0, 'white'], [8, 0.25, 0.9, 0.6, 2.3, 0, 'dark', 0.32], [1.4, 1.2, 1.7, -2.4, 1.8, 0, 'glass'], [0.8, 0.6, 2.1, 2, 0.3, 0, 'dark'], [0.8, 0.6, 2.1, -2, 0.3, 0, 'dark']],
+  fuel: [[2.6, 2.4, 2.5, 4.4, 1.7, 0, 'red'], [1.2, 0.9, 2.4, 4.9, 2.2, 0, 'glass'], [8, 2.4, 2.4, -1, 2.0, 0, 'white'], [12, 0.7, 2.4, 0, 0.6, 0, 'dark']],
+  cater: [[2.4, 2.4, 2.4, 3.4, 1.6, 0, 'white'], [1.0, 0.9, 2.3, 4.0, 2.1, 0, 'glass'], [6.5, 2.8, 2.5, -1, 4.2, 0, 'white'], [7, 0.8, 2.4, 0, 0.7, 0, 'dark'], [4, 2.2, 2.2, -1, 2.1, 0, 'grey']],
+  push: [[6, 1.3, 3.0, 0, 0.9, 0, 'yellow'], [1.3, 1.0, 1.6, -2.2, 2.0, 0, 'glass'], [6.2, 0.6, 3.1, 0, 0.35, 0, 'dark']],
+  gpu: [[2.2, 1.4, 1.4, 0, 1.0, 0, 'white'], [2.2, 0.4, 1.4, 0, 0.2, 0, 'dark']],
+};
 
 /** Highest point of a landing or takeoff on the map, in world units (altitude 1). */
 const CLIMB = 45;
@@ -29,6 +44,8 @@ interface Visual {
   readonly beam: InstancedMesh;
   readonly props: TransformNode[];
   readonly discs: InstancedMesh[];
+  /** Ground vehicles round the aircraft while it is on its Stand. */
+  readonly service: TransformNode;
   from: Pose;
   to: Pose;
   altFrom: number;
@@ -67,6 +84,7 @@ export class AircraftLayer {
   private readonly visuals = new Map<string, Visual>();
   private readonly free = new Map<string, Visual[]>();
   private readonly ring: Mesh;
+  private readonly vehicleParts: Record<VehicleMat, Mesh>;
   private minute = -1;
   /** Reduce motion: the beacon glows steadily and the strobes stay off instead of flashing. */
   calm = false;
@@ -118,6 +136,55 @@ export class AircraftLayer {
     this.ring.isPickable = false;
     this.ring.setEnabled(false);
     glow(this.ring);
+    const paint = (name: string, hex: string, rough = 0.45, metal = 0) => {
+      const box = MeshBuilder.CreateBox(`vehicle-${name}`, { size: 1 }, scene);
+      box.material = pbr(scene, `vehicle-${name}`, hex, rough, metal, rough < 0.5);
+      box.isVisible = false;
+      box.isPickable = false;
+      caster(box);
+      return box;
+    };
+    this.vehicleParts = {
+      yellow: paint('yellow', '#f2b705'), white: paint('white', '#f1f2f3'), red: paint('red', '#c62828'), grey: paint('grey', '#8b9199', 0.5, 0.3),
+      uld: paint('uld', '#c4c8cc', 0.3, 0.75), dark: paint('dark', '#1a1c20', 0.7), glass: paint('glass', '#10161e', 0.08, 0.1),
+    };
+  }
+
+  /** Pushback tug, ground power, belt loaders with baggage trains, a fuel truck and a catering truck round an aircraft. */
+  private buildService(root: TransformNode, type: AircraftTypeId, scale: number, seed: number): TransformNode {
+    const m = MODELS[type];
+    const service = new TransformNode('service', this.scene);
+    service.parent = root;
+    service.scaling.setAll(1 / scale); // vehicles at real size, placed round the (possibly shrunk) aircraft
+    const nose = (m.L / 2) * scale;
+    const side = -(m.R * scale + 1); // the right-hand side (−z), where the holds and service doors are
+    const put = (kind: VehicleKind, x: number, z: number, yaw: number) => {
+      const v = new TransformNode(kind, this.scene);
+      v.parent = service;
+      v.position.set(x, 0, z);
+      v.rotation.y = yaw;
+      for (const [w, h, d, px, py, pz, mat, pitch] of VEHICLES[kind]) {
+        const part = this.vehicleParts[mat].createInstance('part');
+        part.parent = v;
+        part.scaling.set(w, h, d);
+        part.position.set(px, py, pz);
+        if (pitch) part.rotation.z = pitch;
+      }
+    };
+    const r = (k: number) => ((seed * 9301 + k * 49297) % 233280) / 233280;
+    put('push', nose + 5.5, 0, Math.PI);
+    if (r(1) < 0.7) put('gpu', nose - 6, side - 1.6, 0);
+    const holds = m.size === 'large' ? [nose * 0.4, -nose * 0.45] : [-nose * 0.45];
+    for (const hx of holds) {
+      put('belt', hx, side - 2.6, 0.22);
+      put('tug', hx - 6, side - 8, 0);
+      const carts = 2 + Math.floor(r(2) * 3);
+      for (let i = 0; i < carts; i++) put('cart', hx - 10 - i * 4.2, side - 8, 0);
+    }
+    if (m.size !== 'small' && r(3) < 0.65) put('fuel', nose - (m.wing.pos * m.L + m.wing.root * 0.2) * scale, -(m.span / 2) * scale * 0.42, Math.PI);
+    if (m.size !== 'small' && !m.cargo && r(4) < 0.7) put('cater', nose - (m.tc - 0.02) * m.L * scale, side - 4.2, -Math.PI / 2);
+    service.setEnabled(false);
+    return service;
   }
 
   private master(type: AircraftTypeId, livery: number): Master {
@@ -191,7 +258,8 @@ export class AircraftLayer {
       discs.push(disc);
       props.push(hub);
     }
-    return { key, root, gear, nav, beacons, strobes, beam, props, discs, from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs };
+    const service = this.buildService(root, f.type, drawScale(f.type), phaseMs);
+    return { key, root, gear, nav, beacons, strobes, beam, props, discs, service, from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs };
   }
 
   private release(v: Visual): void {
@@ -254,6 +322,7 @@ export class AircraftLayer {
       for (const b of v.beacons) b.m.isVisible = moving && (this.calm || (t + b.phase * 500) % 1000 < 130);
       for (const s of v.strobes) s.isVisible = !this.calm && runway && (t < 60 || (t > 160 && t < 220));
       v.beam.isVisible = lightsOn && (runway || alt > 0.01);
+      v.service.setEnabled(f.phase === 'onStand');
       const spinning = moving || f.phase === 'holdShort';
       for (const h of v.props) if (spinning) h.rotation.x += 0.9;
       for (const d of v.discs) d.isVisible = spinning;

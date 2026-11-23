@@ -31,8 +31,8 @@ micromanagement sit at the end.
   traffic rule to be tough but beatable (e.g. the first Week mostly Small aircraft, fading to normal by Week 3).
   Undecided whether it is wanted.
 - **Blender aircraft models**: the 3D view (ADR 0003) builds aircraft in code from their real dimensions. Models made
-  in Blender (glTF) would add detail for close-ups, if a closer camera is ever wanted.
-- **Bigger Large Stands**: at 16 m per tile, Large aircraft are drawn at about 60% to fit 4-tile Stands, so wide-bodies
+  in Blender (glTF) would add detail when the free camera is zoomed right in.
+- **Bigger Large Stands**: at 16 m per tile, Large aircraft are drawn at about 70%, overhanging 4-tile Stands, so wide-bodies
   look only a little longer than narrow-bodies. 5 × 4-tile Large Stands would let them be drawn nearer real size; a
   build-rules and balance change.
 

@@ -1,11 +1,12 @@
 /**
- * The 3D airport view (Babylon.js): a fixed top-down camera over the airfield, sunlight and night lighting that follow
- * the Day's clock, and quality that drops by itself when frames get slow. Live Day shows the whole airport with a
- * slight tilt; Build Mode looks straight down and can zoom and pan.
+ * The 3D airport view (Babylon.js): sunlight and night lighting that follow the Day's clock, and quality that drops by
+ * itself when frames get slow. In a Live Day the camera is free (orbit, zoom, pan) and starts close over the airport;
+ * Build Mode looks straight down, without perspective, and can zoom and pan.
  */
 import {
-  ArcRotateCamera, Camera, Color3, Color4, DefaultRenderingPipeline, DirectionalLight, Engine, GlowLayer, HemisphericLight, ImageProcessingConfiguration,
-  Matrix, Mesh, MeshBuilder, ReflectionProbe, RenderTargetTexture, Scene, ShadowGenerator, StandardMaterial, Vector3, VertexBuffer, type LinesMesh,
+  ArcRotateCamera, CascadedShadowGenerator, Camera, Color3, Color4, DefaultRenderingPipeline, DirectionalLight, Engine, GlowLayer, HemisphericLight,
+  ImageProcessingConfiguration, Matrix, Mesh, MeshBuilder, PointLight, ReflectionProbe, RenderTargetTexture, Scene, ShadowGenerator,
+  SSAO2RenderingPipeline, StandardMaterial, Vector3, VertexBuffer, type LinesMesh,
 } from '@babylonjs/core';
 import { daylight, NIGHT_DARKNESS } from '../sim/clock';
 import { TILE_SIZE, type AirportLayout, type TileRect } from '../sim/layout';
@@ -38,6 +39,10 @@ export class AirportView {
   private readonly pipeline: DefaultRenderingPipeline;
   private readonly dome: Mesh;
   private readonly probe: ReflectionProbe | null;
+  private ssao: SSAO2RenderingPipeline | null = null;
+  private floods: PointLight[] = [];
+  /** Live Day: where "Reset view" goes back to; null until the first framing. */
+  private home: { target: Vector3; radius: number } | null = null;
   private airfield: Airfield | null = null;
   private airfieldItems: Array<{ dispose(): void }> = [];
   private layout: AirportLayout | null = null;
@@ -59,13 +64,36 @@ export class AirportView {
     const scene = (this.scene = new Scene(this.engine));
     scene.skipPointerMovePicking = true;
     scene.clearColor = new Color4(0.05, 0.07, 0.06, 1);
-    this.camera = new ArcRotateCamera('camera', -Math.PI / 2, mode === 'live' ? 0.38 : 0.0001, 3000, Vector3.Zero(), scene);
-    this.camera.mode = Camera.ORTHOGRAPHIC_CAMERA;
-    this.camera.minZ = 10;
-    this.camera.maxZ = 8000;
+    const cam = (this.camera = new ArcRotateCamera('camera', -Math.PI / 2 - 0.35, mode === 'live' ? 0.95 : 0.0001, 3000, Vector3.Zero(), scene));
     this.hemi = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
     this.sun = new DirectionalLight('sun', new Vector3(-0.4, -1, 0.3), scene);
-    this.shadows = new ShadowGenerator(2048, this.sun);
+    if (mode === 'live') {
+      // free camera: drag to orbit, right-drag or two fingers to pan, wheel or pinch to zoom
+      cam.fov = 0.75;
+      cam.minZ = 1;
+      cam.maxZ = 9000;
+      cam.lowerRadiusLimit = 18;
+      cam.lowerBetaLimit = 0.12;
+      cam.upperBetaLimit = 1.38;
+      cam.wheelDeltaPercentage = 0.01;
+      cam.pinchDeltaPercentage = 0.004;
+      cam.panningSensibility = 40;
+      cam.attachControl(this.canvas, true);
+      cam.onViewMatrixChangedObservable.add(() => this.clampTarget());
+      scene.fogMode = Scene.FOGMODE_EXP2;
+      scene.fogDensity = 0.0009;
+      const csm = new CascadedShadowGenerator(2048, this.sun);
+      csm.numCascades = 3;
+      csm.lambda = 0.85;
+      csm.shadowMaxZ = 1400;
+      csm.stabilizeCascades = true;
+      this.shadows = csm;
+    } else {
+      cam.mode = Camera.ORTHOGRAPHIC_CAMERA;
+      cam.minZ = 10;
+      cam.maxZ = 8000;
+      this.shadows = new ShadowGenerator(2048, this.sun);
+    }
     this.shadows.usePercentageCloserFiltering = true;
     this.shadows.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
     this.shadows.bias = 0.002;
@@ -78,8 +106,10 @@ export class AirportView {
     dm.disableLighting = true;
     dm.emissiveColor = Color3.White();
     dm.backFaceCulling = false;
+    dm.fogEnabled = false;
     this.dome.material = dm;
     this.dome.isPickable = false;
+    this.dome.infiniteDistance = true;
     this.dome.setVerticesData(VertexBuffer.ColorKind, new Float32Array(this.dome.getTotalVertices() * 4), true);
     let probe: ReflectionProbe | null = null;
     try {
@@ -131,13 +161,39 @@ export class AirportView {
     const before = new Set<object>([...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes]);
     this.airfield = buildAirfield({ scene: s, caster: (m) => this.shadows.addShadowCaster(m, false), glow: (m) => this.glow.addIncludedOnlyMesh(m) }, layout);
     this.airfieldItems = [...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes].filter((x) => !before.has(x));
+    // floodlights over the aprons (a few real lights; the other masts only glow)
+    for (const f of this.floods) f.dispose();
+    this.floods = (this.mode === 'live' ? this.airfield.floods.slice(0, 4) : []).map((p, i) => {
+      const light = new PointLight(`flood${i}`, p, s);
+      light.diffuse = Color3.FromHexString('#ffe2b0');
+      light.specular = light.diffuse;
+      light.range = 120;
+      light.intensity = 0;
+      return light;
+    });
     this.light = { darkness: -1, warmth: -1 };
     this.applyLight(this.lastMinute);
   }
 
-  /** Frames a tile area (the airport in a Live Day, the whole map in Build Mode). */
+  /**
+   * Frames a tile area: in Build Mode the whole map; in a Live Day the airport, close and tilted (only the first time,
+   * or after Reset view; later calls just move where Reset view goes).
+   */
   fit(area: TileRect): void {
     this.area = area;
+    if (this.mode === 'live') {
+      const c = this.camera;
+      const aspect = this.aspect();
+      const half = Math.tan(c.fov / 2);
+      const w = area.w * T;
+      const d = area.h * T;
+      const radius = Math.max(w / 2 / (half * aspect), d / 2 / half) * 0.85;
+      const first = !this.home;
+      this.home = { target: new Vector3((area.x + area.w / 2) * T, 0, -(area.y + area.h / 2) * T), radius };
+      c.upperRadiusLimit = radius * 3;
+      if (first) this.resetCamera();
+      return;
+    }
     const aspect = this.aspect();
     const tilt = Math.cos(this.camera.beta);
     const w = area.w * T;
@@ -183,7 +239,9 @@ export class AirportView {
     this.hemi.diffuse = Color3.Lerp(zenith, Color3.White(), 0.55);
     this.hemi.groundColor = Color3.Lerp(new Color3(0.05, 0.06, 0.05), new Color3(0.35, 0.38, 0.3), day);
     this.scene.environmentIntensity = 0.15 + 0.85 * day;
-    this.scene.clearColor = new Color4(horizon.r * 0.5, horizon.g * 0.5, horizon.b * 0.5, 1);
+    this.scene.clearColor = new Color4(horizon.r, horizon.g, horizon.b, 1);
+    this.scene.fogColor = horizon.clone();
+    for (const f of this.floods) f.intensity = 1.6 * aircraftGlow;
     const pos = this.dome.getVerticesData('position');
     if (pos) {
       const col = new Float32Array((pos.length / 3) * 4);
@@ -242,7 +300,27 @@ export class AirportView {
 
   private resize(): void {
     this.engine.resize();
-    if (this.area) this.fit(this.area);
+    if (this.mode === 'build' && this.area) this.fit(this.area);
+  }
+
+  /** Live Day: back to the starting view over the whole airport. */
+  resetCamera(): void {
+    if (!this.home) return;
+    const c = this.camera;
+    c.alpha = -Math.PI / 2 - 0.35;
+    c.beta = 0.95;
+    c.radius = this.home.radius;
+    c.setTarget(this.home.target.clone());
+  }
+
+  /** Keeps the free camera over the map. */
+  private clampTarget(): void {
+    if (!this.area) return;
+    const t = this.camera.target;
+    const margin = 20 * T;
+    const x = clamp(t.x, this.area.x * T - margin, (this.area.x + this.area.w) * T + margin);
+    const z = clamp(t.z, -(this.area.y + this.area.h) * T - margin, -this.area.y * T + margin);
+    if (x !== t.x || z !== t.z || t.y !== 0) this.camera.setTarget(new Vector3(x, 0, z));
   }
 
   /** The tile under a point on the canvas (CSS pixels from its top-left). */
@@ -305,7 +383,7 @@ export class AirportView {
     this.engine.setHardwareScalingLevel(1 / Math.min(dpr, t.scale));
     if (t.shadow) {
       this.sun.shadowEnabled = true;
-      this.shadows.getShadowMap()?.resize(t.shadow);
+      if (this.mode === 'build') this.shadows.getShadowMap()?.resize(t.shadow);
       this.shadows.filteringQuality = t.shadow >= 2048 ? ShadowGenerator.QUALITY_MEDIUM : ShadowGenerator.QUALITY_LOW;
     } else {
       this.sun.shadowEnabled = false;
@@ -313,8 +391,26 @@ export class AirportView {
     this.pipeline.samples = t.msaa > 1 && this.engine.webGLVersion >= 2 ? t.msaa : 1;
     this.pipeline.fxaaEnabled = t.msaa <= 1;
     this.pipeline.bloomEnabled = t.bloom;
+    // ambient occlusion (soft contact shadows) only at the best quality, and only with perspective
+    const wantAo = i === 0 && this.mode === 'live' && this.engine.webGLVersion >= 2;
+    if (wantAo && !this.ssao) {
+      try {
+        const ao = new SSAO2RenderingPipeline('ao', this.scene, { ssaoRatio: 0.5, blurRatio: 1 }, [this.camera]);
+        ao.radius = 1.5;
+        ao.totalStrength = 1;
+        ao.samples = 16;
+        ao.maxZ = 600;
+        ao.expensiveBlur = true;
+        this.ssao = ao;
+      } catch {
+        this.ssao = null;
+      }
+    } else if (!wantAo && this.ssao) {
+      this.ssao.dispose(true);
+      this.ssao = null;
+    }
     this.engine.resize();
-    if (this.area) this.fit(this.area);
+    if (this.mode === 'build' && this.area) this.fit(this.area);
   }
 
   /** Steps quality down after two seconds below 45 fps (only while the tab is shown). */

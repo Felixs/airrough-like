@@ -51,6 +51,7 @@ async function start(): Promise<void> {
     view.fit(airportBounds(run.layout));
   };
   mountAirfield();
+  document.querySelector('#view-reset')!.addEventListener('click', () => view.resetCamera());
 
   let speed: Speed = 1;
   let lastRunning: Speed = 1; // what Space resumes to
@@ -206,7 +207,7 @@ async function start(): Promise<void> {
       && !document.querySelector('.menu')) openOptions();
   });
 
-  // Live Day keys: Space pause/resume, 1–5 Live / 1× / 2× / 4× / 8×, D / M answer a low-fuel decision
+  // Live Day keys: Space pause/resume, 1–5 Live / 1× / 2× / 4× / 8×, D / M answer a low-fuel decision, V resets the camera
   const SPEED_KEYS: Record<string, Speed> = { '1': REAL_TIME, '2': 1, '3': 2, '4': 4, '5': 8 };
   window.addEventListener('keydown', (e) => {
     if (ended || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -221,6 +222,8 @@ async function start(): Promise<void> {
       topBar.setSpeed(speed === 0 ? lastRunning : 0);
     } else if (SPEED_KEYS[e.key] !== undefined) {
       topBar.setSpeed(SPEED_KEYS[e.key]!);
+    } else if (key === 'v') {
+      view.resetCamera();
     }
   });
 

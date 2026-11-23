@@ -86,6 +86,14 @@ export function mountLiveDay(root: HTMLElement, handlers: LiveDayHandlers): Live
     toggle.textContent = collapsed ? '⟩' : '⟨';
     toggle.title = collapsed ? 'Expand flight strips' : 'Collapse flight strips';
   });
+  const panel = $<HTMLElement>('#panel');
+  const panelToggle = $<HTMLButtonElement>('#panel-toggle');
+  panelToggle.addEventListener('click', () => {
+    const collapsed = panel.classList.toggle('collapsed');
+    panelToggle.setAttribute('aria-expanded', String(!collapsed));
+    panelToggle.textContent = collapsed ? '⟨' : '⟩';
+    panelToggle.title = collapsed ? 'Expand the Tower panel' : 'Collapse the Tower panel';
+  });
 
   let lastRender = -1;
   let lastEvents = -1;

@@ -3,11 +3,11 @@
  * Stands and Holding Bays with markings and numbers; Terminals, Cargo Hubs, the ATC Tower and Support Buildings.
  * Everything is built in code from the tile rectangles (1 tile = 16 m).
  */
-import { Color3, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, type Scene, type Texture } from '@babylonjs/core';
+import { Color3, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, Vector3, type Scene, type Texture } from '@babylonjs/core';
 import { runwayNames, sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type RunwayName, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, TAXIWAY_INSET, taxiwayEdgeLights } from '../sim/markings';
 import { pbr } from './aircraftModels';
-import { groundLines, meshFrom, orient, thinInstances, type Place } from './geometry';
+import { groundLines, loft, meshFrom, orient, thinInstances, type Place } from './geometry';
 import { centreLinePaths } from './taxiLines';
 import { blots, canvasTexture, rng, speckle } from './textures';
 
@@ -21,6 +21,8 @@ export interface Airfield {
   readonly lights: ReadonlyArray<{ mat: StandardMaterial; colour: Color3; day: number }>;
   /** Glass that glows from inside at night. */
   readonly litGlass: readonly PBRMaterial[];
+  /** Where floodlights hang over the aprons (the view lights the first few at night). */
+  readonly floods: readonly Vector3[];
 }
 
 export interface AirfieldContext {
@@ -36,6 +38,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   const { scene } = ctx;
   const lights: Array<{ mat: StandardMaterial; colour: Color3; day: number }> = [];
   const litGlass: PBRMaterial[] = [];
+  const floods: Vector3[] = [];
   const lightMat = (name: string, hex: string, day = 0.12) => {
     const mat = new StandardMaterial(name, scene);
     mat.disableLighting = true;
@@ -63,6 +66,8 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   };
   const yellow = paint('paint-yellow', '#e7b928');
   const bridgeMat = pbr(scene, 'jet-bridge', '#c9ccd0', 0.4, 0.3);
+  const metalMat = pbr(scene, 'bridge-metal', '#b9bec5', 0.32, 0.8);
+  const darkMat = pbr(scene, 'bridge-dark', '#1a1c20', 0.65);
   const red = paint('paint-red', '#c0392b');
 
   // ---- grass, trees, fence
@@ -178,17 +183,25 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     if (s.kind === 'runway' || s.kind === 'stand' || s.kind === 'holdingBay') for (let x = s.x; x < s.x + s.w; x++) for (let y = s.y; y < s.y + s.h; y++) others.add(`${x},${y}`);
   }
   const open = (x: number, y: number) => !paved.has(`${x},${y}`) && !others.has(`${x},${y}`);
+  // Taxiway tiles next to Stands and Holding Bays are apron: concrete, like the Stands themselves
+  const spotTiles = new Set<string>();
+  for (const s of layout.structures) {
+    if (s.kind !== 'stand' && s.kind !== 'holdingBay') continue;
+    for (let x = s.x - 3; x < s.x + s.w + 3; x++) for (let y = s.y - 3; y < s.y + s.h + 3; y++) spotTiles.add(`${x},${y}`);
+  }
+  const apron = { pos: [] as number[], idx: [] as number[], uv: [] as number[] };
   const I = TAXIWAY_INSET * T;
-  const pos: number[] = [];
-  const idx: number[] = [];
-  const uv: number[] = [];
+  const asphalt = { pos: [] as number[], idx: [] as number[], uv: [] as number[] };
+  let buf = asphalt;
+  const idx = { push: (...v: number[]) => buf.idx.push(...v) };
   const vert = (x: number, y: number) => {
-    pos.push(x, Y.taxi, -y);
-    uv.push(x / 64, -y / 64);
-    return pos.length / 3 - 1;
+    buf.pos.push(x, Y.taxi, -y);
+    buf.uv.push(x / 64, -y / 64);
+    return buf.pos.length / 3 - 1;
   };
   for (const k of paved) {
     const [tx, ty] = k.split(',').map(Number) as [number, number];
+    buf = spotTiles.has(k) ? apron : asphalt;
     const l = open(tx - 1, ty) ? I : 0;
     const rr = open(tx + 1, ty) ? I : 0;
     const t = open(tx, ty - 1) ? I : 0;
@@ -216,8 +229,8 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       }
     }
   }
-  if (idx.length) {
-    const taxiMesh = orient(meshFrom(scene, 'taxiways', pos, idx, uv), (x, _y, z) => [x, Y.taxi - 1, z]);
+  if (asphalt.idx.length) {
+    const taxiMesh = orient(meshFrom(scene, 'taxiways', asphalt.pos, asphalt.idx, asphalt.uv), (x, _y, z) => [x, Y.taxi - 1, z]);
     taxiMesh.material = textured('taxiway', canvasTexture(scene, 'taxiway', 512, 512, (g, W, H) => {
       g.fillStyle = '#3d3f43';
       g.fillRect(0, 0, W, H);
@@ -282,6 +295,12 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       g.stroke();
     }
   }));
+  if (apron.idx.length) {
+    const apronMesh = orient(meshFrom(scene, 'apron', apron.pos, apron.idx, apron.uv), (x, _y, z) => [x, Y.taxi - 1, z]);
+    apronMesh.material = concrete;
+    apronMesh.receiveShadows = true;
+    apronMesh.isPickable = false;
+  }
   const pads: number[] = [];
   const padIdx: number[] = [];
   const padUv: number[] = [];
@@ -327,23 +346,32 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       dash(ou, ov, ou, ov + oh);
       // jet bridge from the Terminal to Contact Stands
       if (s.placement === 'contact' && layout.structures.some((o) => o.kind === 'terminal' && sharesEdge(o, s))) {
-        const [ax, az] = f.p(c + 3.1, -0.5);
-        const [bx, bz] = f.p(c + 3.1, 4.5);
-        const tunnel = MeshBuilder.CreateBox('jet-bridge', { width: 1.6, height: 1.5, depth: 1.6 }, scene);
-        const lenB = Math.hypot(bx - ax, bz - az);
-        tunnel.scaling.set(1, 1, lenB / 1.6);
-        tunnel.position.set((ax + bx) / 2, 2.6, (az + bz) / 2);
-        tunnel.rotation.y = Math.atan2(bx - ax, bz - az);
+        const [rx, rz] = f.p(c + Math.min(7, f.across / 2 - 1), 1.6);
+        const [cx2, cz2] = f.p(c + 2.6, 7.5);
+        const y = 2.4;
+        const rot = MeshBuilder.CreateCylinder('jet-bridge-rotunda', { diameter: 2.4, height: y + 1, tessellation: 16 }, scene);
+        rot.position.set(rx, (y + 1) / 2, rz);
+        rot.material = bridgeMat;
+        ctx.caster(rot);
+        const len = Math.hypot(cx2 - rx, cz2 - rz);
+        const tunnel = MeshBuilder.CreateBox('jet-bridge', { width: 1.5, height: 1.5, depth: len }, scene);
+        tunnel.position.set((rx + cx2) / 2, y, (rz + cz2) / 2);
+        tunnel.rotation.y = Math.atan2(cx2 - rx, cz2 - rz);
         tunnel.material = bridgeMat;
         ctx.caster(tunnel);
-        const [cx2, cz2] = f.p(c + 3.1, 4.8);
-        const cab = MeshBuilder.CreateBox('jet-bridge-cab', { width: 2.2, height: 1.8, depth: 2.2 }, scene);
-        cab.position.set(cx2, 2.6, cz2);
+        const cab = MeshBuilder.CreateBox('jet-bridge-cab', { width: 2.1, height: 1.7, depth: 2.1 }, scene);
+        cab.position.set(cx2, y, cz2);
+        cab.rotation.y = tunnel.rotation.y;
         cab.material = bridgeMat;
         ctx.caster(cab);
-        const legPost = MeshBuilder.CreateCylinder('jet-bridge-leg', { height: 2.2, diameter: 0.35 }, scene);
-        legPost.position.set((ax + 3 * bx) / 4, 1.1, (az + 3 * bz) / 4);
-        legPost.material = bridgeMat;
+        const legX = rx + (cx2 - rx) * 0.7;
+        const legZ = rz + (cz2 - rz) * 0.7;
+        const leg = MeshBuilder.CreateCylinder('jet-bridge-leg', { height: y - 0.7, diameter: 0.35, tessellation: 8 }, scene);
+        leg.position.set(legX, (y - 0.7) / 2, legZ);
+        leg.material = metalMat;
+        const wheels = MeshBuilder.CreateBox('jet-bridge-wheels', { width: 1.6, height: 0.5, depth: 0.8 }, scene);
+        wheels.position.set(legX, 0.25, legZ);
+        wheels.material = darkMat;
       }
     } else {
       const corners = [f.p(1, 1), f.p(f.across - 1, 1), f.p(f.across - 1, f.depth - 1), f.p(1, f.depth - 1)];
@@ -400,6 +428,33 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       top.receiveShadows = true;
       ctx.caster(top);
       if (s.kind === 'terminal') {
+        // a curved metal roof over the hall, overhanging the glass a little
+        const rings: Vector3[][] = [];
+        const us: number[] = [];
+        for (let i = 0; i <= 12; i++) {
+          const x = b.x0 - 1 + ((b.w + 2) * i) / 12;
+          const ring: Vector3[] = [];
+          for (let j = 0; j <= 12; j++) {
+            const a = (Math.PI * j) / 12;
+            ring.push(new Vector3(x, h + 0.6 + Math.sin(a) * Math.min(3, b.d * 0.12), b.cz - Math.cos(a) * (b.d / 2 + 2)));
+          }
+          rings.push(ring);
+          us.push(i / 12);
+        }
+        const arch = orient(loft(scene, 'terminal-roof', rings, us, null, false), (x, _y, z) => [x, 0, z]);
+        arch.material = seamRoofFor(scene, b.w);
+        arch.receiveShadows = true;
+        ctx.caster(arch);
+        for (let x = b.x0 + 2; x < b.x1 - 1; x += 6) {
+          for (const z of [b.z0 - 1.4, b.z1 + 1.4]) {
+            const col = MeshBuilder.CreateCylinder('canopy-column', { height: h + 1, diameter: 0.35, tessellation: 8 }, scene);
+            col.position.set(x, (h + 1) / 2, z);
+            col.material = metal;
+          }
+        }
+      }
+      for (const x of [b.x0 - 3, b.x1 + 3]) floods.push(new Vector3(x, 14, b.z0 - 3));
+      if (s.kind === 'cargoHub') {
         const sky = MeshBuilder.CreateBox('skylight', { width: Math.max(1, b.w - 6), height: 0.2, depth: 1.4 }, scene);
         sky.position.set(b.cx, h + 0.7, b.cz);
         sky.material = glass;
@@ -452,7 +507,37 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       decal(scene, label, b.cx, -(b.z1) - 1.6, Math.min(b.w, 18), 2.4, Y.apron, '#cfd8d4', null);
     }
   }
-  return { lights, litGlass };
+  // flood masts (the heads glow at night; the view turns a few of them into real lights)
+  if (floods.length) {
+    const mast = MeshBuilder.CreateCylinder('flood-mast', { height: 1, diameter: 0.45, tessellation: 8 }, scene);
+    mast.material = metal;
+    ctx.caster(thinInstances(mast, floods.map((p) => [p.x, p.y / 2, p.z, 1, p.y, 1] as Place)));
+    lightBoxes('flood-head', '#fff1cf', floods.map((p) => [p.x, p.y + 0.4, p.z, 2.6, 0.6, 1.2] as Place), 1, 0.04);
+  }
+  return { lights, litGlass, floods };
+}
+
+let seams: { scene: Scene; w: number; mat: PBRMaterial }[] = [];
+/** Standing-seam metal for curved roofs, the seams about every 2 m. */
+function seamRoofFor(scene: Scene, w: number): PBRMaterial {
+  seams = seams.filter((x) => !x.mat.isDisposed());
+  const hit = seams.find((x) => x.scene === scene && x.w === w);
+  if (hit) return hit.mat;
+  const m = pbr(scene, 'seam-roof', '#ffffff', 0.35, 0.6);
+  m.albedoTexture = canvasTexture(scene, 'seam-roof', 256, 64, (g, W, H) => {
+    g.fillStyle = '#a3a8ae';
+    g.fillRect(0, 0, W, H);
+    for (let x = 0; x < W; x += 8) {
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      g.fillRect(x, 0, 1, H);
+      g.fillStyle = 'rgba(255,255,255,0.15)';
+      g.fillRect(x + 1, 0, 1, H);
+    }
+  }, { u: Math.max(1, w / 32) });
+  m.backFaceCulling = false;
+  m.twoSidedLighting = true;
+  seams.push({ scene, w, mat: m });
+  return m;
 }
 
 /** Maps points in a Stand's own frame — u across its open side, v from the back (0) to the open side — onto the ground (x, z). */
