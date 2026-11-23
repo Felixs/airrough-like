@@ -6,6 +6,7 @@ import { WEEKDAY_NAMES } from '../sim/schedule';
 import { mountBuildMode, type BuildModeView } from './buildMode';
 import { dayName } from './dayEnd';
 import { seedButton, wireSeedButtons } from './seed';
+import { contractCard } from './contracts';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
@@ -148,6 +149,10 @@ export function showPlanMode(root: HTMLElement, initial: RunState, handlers: Pla
               <dt>Expected net</dt><dd class="expect ${est.net < 0 ? 'neg' : 'pos'}">≈ ${est.net >= 0 ? '+' : ''}${money(est.net)}</dd>
               <dt>Money after the Day</dt><dd class="expect">≈ ${money(est.moneyAfter)}</dd>
             </dl></div>
+          ${run.contracts?.length ? `<div class="card contracts-card"><h3>Airline Contracts</h3>
+            <div class="contracts compact">${run.contracts.map((c) => contractCard(c)).join('')}</div>
+            <p class="note">Already in the Forecast and the expected fees.</p></div>` : ''}
+          ${run.freePlots ? `<div class="card"><p class="note">🗺 Land Grant: your next ${run.freePlots === 1 ? 'Land Plot is' : `${run.freePlots} Land Plots are`} free (Build · Land).</p></div>` : ''}
         </section>
         <section class="col wide">
           <div class="card calendar"><h3>Run Calendar <small>click a Day for details</small></h3>

@@ -416,8 +416,7 @@ export function checkChange(session: BuildSession, change: Change): PlacementChe
     case 'buyPlot': {
       const { plot } = change;
       label = `Land Plot ${plot.px + 1}-${plot.py + 1}`;
-      const bought = session.ownedPlots.length - session.base.startingPlots;
-      cost = Math.round(BUILD_COSTS.plotBase * (BUILD_COSTS.plotGrowth ? bought + 1 : 1) * run.modifiers.landCostFactor);
+      cost = nextPlotPrice(session);
       const inWorld = plot.px * WORLD.plotW >= WORLD.x0 && plot.py * WORLD.plotH >= WORLD.y0 &&
         (plot.px + 1) * WORLD.plotW <= WORLD.x0 + WORLD.width && (plot.py + 1) * WORLD.plotH <= WORLD.y0 + WORLD.height;
       items.push({ label: 'Not owned yet', ok: !session.ownedPlots.some((o) => o.px === plot.px && o.py === plot.py) });
@@ -487,6 +486,7 @@ export function confirmBuild(session: BuildSession): RunState {
   // Upkeep follows from the layout, so it changes with it.
   return {
     ...run, layout: session.layout, ownedPlots: session.ownedPlots, money: run.money - cost,
+    ...(run.freePlots ? { freePlots: Math.max(0, run.freePlots - (session.ownedPlots.length - run.ownedPlots.length)) } : {}),
     stats: { ...run.stats, spending: run.stats.spending + Math.max(0, cost) },
   };
 }
@@ -515,6 +515,8 @@ export function lengthened(r: Runway, side: 'start' | 'end' = 'end'): Runway | n
 
 /** Plot price for the next purchase in this session. */
 export function nextPlotPrice(session: BuildSession): number {
+  // a Land Grant makes the next plots free
+  if (session.ownedPlots.length - session.base.ownedPlots.length < (session.base.freePlots ?? 0)) return 0;
   const bought = session.ownedPlots.length - session.base.startingPlots;
   return Math.round(BUILD_COSTS.plotBase * (BUILD_COSTS.plotGrowth ? bought + 1 : 1) * session.base.modifiers.landCostFactor);
 }

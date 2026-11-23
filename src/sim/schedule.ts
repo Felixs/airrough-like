@@ -8,6 +8,7 @@ import { createRandom, mixSeed, type Random } from './random';
 import type { ScheduledFlight } from './simulation';
 import { trafficEffects, type TrafficEffects, type TwistRef } from './twists';
 import { makeCallsign } from './airlines';
+import { NO_CONTRACT_EFFECTS, type ContractEffects } from './contracts';
 
 /** Mon..Sun; Saturday is the Rush Day, Sunday the Boss Day. */
 export const DAY_FACTORS = [1, 1.05, 1.1, 1.15, 1.2, 2.0, 1.6] as const;
@@ -90,6 +91,8 @@ export interface DayPlanSetup {
   readonly includeOvernight?: boolean;
   /** The Day's Twist; a Traffic Surge changes Demand, mix and peaks. */
   readonly twist?: TwistRef | readonly TwistRef[] | null;
+  /** What the signed Airline Contracts do to the traffic. */
+  readonly contracts?: ContractEffects;
 }
 
 export function demandFor(week: number, weekday: number): number {
@@ -113,6 +116,14 @@ function pickSize(rng: Random, mix: Record<SizeClass, number>): SizeClass {
   return 'medium';
 }
 
+/** The Traffic Mix with a Contract's additions, scaled back to 100%. */
+function withSizeAdd(mix: Record<SizeClass, number>, add: Readonly<Record<SizeClass, number>>): Record<SizeClass, number> {
+  if (!add.small && !add.medium && !add.large) return mix;
+  const raw = { small: mix.small + add.small, medium: mix.medium + add.medium, large: mix.large + add.large };
+  const total = raw.small + raw.medium + raw.large;
+  return { small: raw.small / total, medium: raw.medium / total, large: raw.large / total };
+}
+
 /** Morning and evening peaks with some traffic all day. */
 function arrivalMinute(rng: Random, traffic: TrafficEffects): number {
   const { firstArrivalMinute: lo, lastArrivalMinute: hi } = SCHEDULE_RULES;
@@ -126,17 +137,24 @@ function arrivalMinute(rng: Random, traffic: TrafficEffects): number {
 
 export function planDay(setup: DayPlanSetup): DayPlan {
   const { layout, week, weekday } = setup;
+  const contracts = setup.contracts ?? NO_CONTRACT_EFFECTS;
   const rng = createRandom(mixSeed(setup.seed, week, weekday));
   const traffic = trafficEffects(setup.twist);
-  const demand = Math.round(demandFor(week, weekday) * traffic.demandFactor);
-  const quota = quotaFor(demand, weekday);
-  const baseMix = trafficMix(week, weekday);
+  const demand = Math.round(demandFor(week, weekday) * traffic.demandFactor * contracts.demandFactor);
+  const quota = Math.ceil(quotaFor(demand, weekday) * contracts.quotaFactor - 1e-9);
+  const baseMix = withSizeAdd(trafficMix(week, weekday), contracts.sizeAdd);
   const shift = Math.min(baseMix.small - 0.05, traffic.mediumShift + traffic.largeShift);
   const mix = {
     small: baseMix.small - shift,
     medium: baseMix.medium + Math.min(shift, traffic.mediumShift),
     large: baseMix.large + Math.max(0, shift - traffic.mediumShift),
   };
+  const cargoShare = Math.min(0.9, (() => {
+    const s = SCHEDULE_RULES.cargoShare * contracts.cargoShareFactor;
+    return s + (1 - s) * contracts.cargoConversion;
+  })());
+  // Contract rolls use their own stream, so the rest of the Schedule stays as it would be without them
+  const contractRng = createRandom(mixSeed(setup.seed, week, weekday, 0xc047));
 
   const longestRunway = Math.max(0, ...layout.runways.map((r) => RUNWAY_FITS[r.length]));
   const fittingStands = (size: SizeClass, purpose: Purpose) =>
@@ -159,13 +177,9 @@ export function planDay(setup: DayPlanSetup): DayPlan {
   const overnightStandsLeft = new Map<string, Set<string>>(); // purpose → free stand ids for overnight aircraft
   const flights: ScheduledFlight[] = [];
 
-  for (let i = 0; i < demand; i++) {
-    let size = pickSize(rng, mix);
-    const purpose: Purpose = rng.next() < SCHEDULE_RULES.cargoShare ? 'cargo' : 'passenger';
-    const overnightRoll = rng.next();
-    const minute = arrivalMinute(rng, traffic);
-    const typeRoll = rng.next();
-
+  /** Lets one wanted flight in (or turns it away): Runway and Stands, then the Stands' daily capacity. */
+  const admit = (wantedSize: SizeClass, purpose: Purpose, minute: number, typeRoll: number, overnightRoll: number) => {
+    let size = wantedSize;
     let reason = reasonAgainst(size, purpose);
     if (reason && week <= 1 && !reasonAgainst('small', purpose)) {
       size = 'small';
@@ -173,7 +187,7 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     }
     if (reason) {
       turnAway(reason, size, purpose);
-      continue;
+      return;
     }
     const full = (sz: SizeClass) => (arrivals.get(`${sz}/${purpose}`) ?? 0) >= capacity(sz, purpose);
     // The first Days of a Run: a flight that finds its Stands full comes as a Small aircraft instead, if Small ones
@@ -182,7 +196,7 @@ export function planDay(setup: DayPlanSetup): DayPlan {
     const capKey = `${size}/${purpose}`;
     if (full(size)) {
       turnAway('standCapacity', size, purpose);
-      continue;
+      return;
     }
     arrivals.set(capKey, (arrivals.get(capKey) ?? 0) + 1);
 
@@ -202,6 +216,32 @@ export function planDay(setup: DayPlanSetup): DayPlan {
       }
     }
     flights.push(overnight ? { id: '', type, arrivalMinute: 0, overnight: true } : { id: '', type, arrivalMinute: minute });
+  };
+
+  for (let i = 0; i < demand; i++) {
+    let size = pickSize(rng, mix);
+    const purpose: Purpose = rng.next() < cargoShare ? 'cargo' : 'passenger';
+    const overnightRoll = rng.next();
+    const minute = arrivalMinute(rng, traffic);
+    const typeRoll = rng.next();
+    if (contracts.cargoLargeShare > 0 && purpose === 'cargo' && contractRng.next() < contracts.cargoLargeShare) size = 'large';
+    admit(size, purpose, minute, typeRoll, overnightRoll);
+  }
+
+  // Flights Contracts add on top of Demand (they don't count towards the Quota)
+  let extraWanted = 0;
+  for (const extra of contracts.extras) {
+    if (extra.weekday !== undefined && extra.weekday !== weekday) continue;
+    const n = Math.round(demandFor(week, weekday) * extra.share);
+    extraWanted += n;
+    for (let i = 0; i < n; i++) {
+      const size = pickSize(contractRng, extra.mix ?? mix);
+      const purpose: Purpose = extra.purpose ?? (contractRng.next() < cargoShare ? 'cargo' : 'passenger');
+      const minute = extra.window
+        ? Math.floor(extra.window[0] + contractRng.next() * (extra.window[1] - extra.window[0]))
+        : arrivalMinute(contractRng, traffic);
+      admit(size, purpose, minute, contractRng.next(), 1);
+    }
   }
 
   flights.sort((a, b) => a.arrivalMinute - b.arrivalMinute);
@@ -227,11 +267,11 @@ export function planDay(setup: DayPlanSetup): DayPlan {
   return {
     week,
     weekday,
-    demand,
+    demand: demand + extraWanted,
     quota,
     schedule,
     forecast: {
-      demand, quota, arrivalsBySize, arrivalsByPurpose, turnedAway: { ...turnedAway, total },
+      demand: demand + extraWanted, quota, arrivalsBySize, arrivalsByPurpose, turnedAway: { ...turnedAway, total },
       turnedAwayDetail: [...detail.values()].sort((a, b) => b.count - a.count),
       maxMovements: schedule.reduce((n, f) => n + (f.overnight ? 1 : 2), 0),
       peakHour: perHour.indexOf(Math.max(...perHour)),

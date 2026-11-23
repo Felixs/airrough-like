@@ -3,7 +3,8 @@ import { airportBounds } from './render/bounds';
 import { AirportView } from './render/view';
 import { advance, formatClock, isDayOver, REAL_TIME, stepFraction, type Speed } from './sim/clock';
 import { buyUpgrade } from './sim/plan';
-import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, startLiveDay, startRun, type RunState } from './sim/run';
+import { continueEndless, dayPlan, dayTwists, endDay, runInfo, setBonusTwist, signContract, skipContracts, startLiveDay, startRun, type RunState } from './sim/run';
+import { showContractOffer } from './ui/contracts';
 import { acknowledgeAlert, daySettled, resolveFuel, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
@@ -102,6 +103,14 @@ async function start(): Promise<void> {
   };
   const openPlan = () => {
     saveRun(store, run);
+    // a won Week: pick an Airline Contract first
+    if (run.contractOffer?.length) {
+      showContractOffer(appEl, run, (index) => {
+        run = index === null ? skipContracts(run) : signContract(run, index);
+        openPlan();
+      });
+      return;
+    }
     dayLabel.textContent = dayName(run.week, run.weekday);
     mountAirfield();
     showPlanMode(appEl, run, {
@@ -261,9 +270,9 @@ async function start(): Promise<void> {
     const darkness = view.setTime(ended ? null : sim.clock.minute);
     view.aircraft.update(sim.flights, darkness, performance.now(), sim.clock.minute, stepFraction(sim.clock), view.cabinLight());
     // between Days the Day report and Plan Mode cover the map: keep its last picture instead of drawing, and build the
-    // aircraft models a Day may need, one at a time, so none stutters on first sight
+    // aircraft models a Day may need (and a spare aircraft of each), one every few frames, so none stutters on first sight
     view.paused = ended;
-    if (ended && ++frames % 20 === 0) view.aircraft.prewarmStep();
+    if (ended && ++frames % 5 === 0) view.aircraft.prewarmStep();
     topBar.showClock(formatClock(sim.clock), isDayOver(sim.clock));
     liveDay.update(sim, quota);
     if (!ended && isDayOver(sim.clock)) {
