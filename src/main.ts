@@ -25,7 +25,7 @@ const newSeed = () => (Number.isFinite(fixedSeed) && fixedSeed > 0 ? fixedSeed :
 async function start(): Promise<void> {
   const appEl = document.querySelector<HTMLElement>('#app')!;
   const mapEl = document.querySelector<HTMLElement>('#map')!;
-  // the airfield in 3D (Babylon.js): a fixed top-down view of the whole airport
+  // the airfield in 3D (Babylon.js), with a free camera
   const view = new AirportView(mapEl, 'live');
 
   const store = browserStore();
@@ -247,6 +247,12 @@ async function start(): Promise<void> {
     if (document.hidden && options.runInBackground) play(Math.min(elapsed, 5_000));
   }, 1_000);
   let frames = 0;
+  // `?debug` hands the view and the Run to scripts (the README screenshots aim the camera and fix the quality with it)
+  if (new URLSearchParams(location.search).has('debug')) {
+    let drawn = 0;
+    view.onFrame(() => drawn++);
+    Object.assign(window, { aab: { view, sim: () => sim, layout: () => run.layout, frames: () => drawn } });
+  }
   view.onFrame((ms) => {
     lastBackground = performance.now();
     play(Math.min(ms, 100));

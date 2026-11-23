@@ -52,6 +52,8 @@ export class AirportView {
   private light = { darkness: -1, warmth: -1 };
   private probeDarkness = -1;
   private tier = 0;
+  /** A quality level fixed by `?quality=` or setQuality(): no automatic stepping down. */
+  private lockedTier: number | null = null;
   private slowFor = 0;
   private frameHandlers: Array<(ms: number) => void> = [];
   private readonly observer: ResizeObserver;
@@ -135,7 +137,9 @@ export class AirportView {
     this.pipeline.bloomKernel = 48;
     this.pipeline.bloomScale = 0.5;
     this.aircraft = new AircraftLayer(scene, (m) => this.glow.addIncludedOnlyMesh(m), (m) => this.shadows.addShadowCaster(m, false));
-    this.setTier(0);
+    const asked = TIERS.findIndex((t) => t.name === new URLSearchParams(location.search).get('quality'));
+    if (asked >= 0) this.lockedTier = asked;
+    this.setTier(asked >= 0 ? asked : 0);
     this.setTime(null);
     let last = performance.now();
     this.engine.runRenderLoop(() => {
@@ -423,13 +427,34 @@ export class AirportView {
 
   /** Steps quality down after two seconds below 45 fps (only while the tab is shown; very slow frames count too). */
   private watchSpeed(ms: number): void {
-    if (document.hidden) return;
+    if (document.hidden || this.lockedTier !== null) return;
     const frame = Math.min(ms, 1000);
     this.slowFor = frame > 1000 / 45 ? this.slowFor + frame : Math.max(0, this.slowFor - frame * 0.5);
     if (this.slowFor > 2000 && this.tier < TIERS.length - 1) {
       this.slowFor = 0;
       this.setTier(this.tier + 1);
     }
+  }
+
+  /** Fixes the quality level ('high', 'medium' or 'low'), or with null lets it step down on slow frames again. */
+  setQuality(name: string | null): void {
+    const i = TIERS.findIndex((t) => t.name === name);
+    this.lockedTier = i >= 0 ? i : null;
+    this.slowFor = 0;
+    if (i >= 0 && i !== this.tier) this.setTier(i);
+  }
+
+  /**
+   * Live Day: aims the camera at a point of the map (sim world units), from `radius` away, turned `alpha` around and
+   * tilted `beta` down from straight above (radians). Counts as the Player moving the camera.
+   */
+  lookAt(x: number, y: number, radius: number, alpha: number, beta: number): void {
+    this.moved = true;
+    const c = this.camera;
+    c.alpha = alpha;
+    c.beta = clamp(beta, c.lowerBetaLimit, c.upperBetaLimit);
+    c.radius = Math.max(radius, c.lowerRadiusLimit ?? 0);
+    c.setTarget(new Vector3(x, 0, -y));
   }
 
   /** The quality level in use (for bug reports). */

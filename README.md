@@ -25,6 +25,25 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 | ![Live Day at dawn: aircraft lights over the dark airfield](docs/screenshots/live-day-dawn.png) | ![Leaving Build Mode with unconfirmed changes](docs/screenshots/build-confirm.png) |
 | **Dawn**: the day–night cycle, with navigation, beacon and landing lights on the aircraft | **Build or discard**: leaving Build Mode or starting the Day with unconfirmed changes asks first |
 
+### The look
+
+Day 1 at the best quality (`?quality=high`), from the starting view at five times of day and closer up.
+
+| | |
+|---|---|
+| ![Dawn](docs/screenshots/look/1-dawn.jpg) | ![Morning](docs/screenshots/look/2-morning.jpg) |
+| **05:45** dawn: runway and aircraft lights | **08:30** morning |
+| ![Midday](docs/screenshots/look/3-midday.jpg) | ![Evening](docs/screenshots/look/4-evening.jpg) |
+| **12:30** midday | **19:15** low evening sun |
+| ![Night](docs/screenshots/look/5-night.jpg) | ![Straight down over the airport](docs/screenshots/look/overhead.jpg) |
+| **22:00** night: lit windows and floodlit aprons | Straight down over the airport |
+| ![A parked aircraft with its ground vehicles](docs/screenshots/look/parked-morning.jpg) | ![The Terminal and its jet bridges](docs/screenshots/look/terminal-midday.jpg) |
+| A parked aircraft and its ground vehicles | The Terminal and its jet bridges |
+| ![A taxiing aircraft](docs/screenshots/look/taxiing-midday.jpg) | ![A parked aircraft in the evening sun](docs/screenshots/look/parked-evening.jpg) |
+| A taxiing aircraft | The same Stand in the evening sun |
+| ![A parked aircraft at night](docs/screenshots/look/parked-night.jpg) | ![The Terminal at night](docs/screenshots/look/terminal-night.jpg) |
+| A parked aircraft at night | The Terminal at night |
+
 The screenshots are taken automatically from the real game by the [Screenshots workflow](.github/workflows/screenshots.yml) whenever the UI changes (`scripts/screenshots.mjs`).
 
 - Domain language: [`CONTEXT.md`](CONTEXT.md)

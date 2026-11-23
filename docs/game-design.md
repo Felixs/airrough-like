@@ -304,7 +304,8 @@ cooldown (`simulation.ts → ACTIONS`).
   Between the simulation's 15-second steps aircraft glide from where they were to where they are.
 - **Quality:** the view starts at High (sharp on high-density screens, detailed shadows, edge smoothing, glow) and
   steps down by itself to Medium (normal resolution, coarser shadows, no glow) and then Low (lower resolution, no
-  shadows) when frames stay below 45 per second for two seconds.
+  shadows) when frames stay below 45 per second for two seconds. Adding `?quality=high` (or `medium`, `low`) to the
+  game's address fixes the level instead.
 - **Day report and Score Screen** open on a **Summary** tab and keep the full numbers on a **Details** tab. The Day
   report's Summary shows the Quota result with Movements against the Quota as a bar, then three tiles (Net today with
   the money now; Landed with how many diverted; Safety: Crashes and Incidents, or ✓), and under both tabs the next Day

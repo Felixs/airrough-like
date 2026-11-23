@@ -103,5 +103,89 @@ while (!(await page.$('.report')) && Date.now() - start < 180_000) {
 await settle();
 await page.screenshot({ path: out('day-report') });
 
+// ---- The look: the Live Day at five times of day, and close-ups, all at the best quality and 1.5x pixel density.
+// The Day plays at Low quality (software rendering is slow); each picture switches to High and waits for it to draw.
+const look = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1.5 });
+const lp = await look.newPage();
+lp.on('pageerror', (e) => console.error('page error:', e.message));
+await lp.goto(`${url}?seed=7&debug&quality=low`);
+await lp.waitForSelector('.menu-card');
+await lp.click('[data-tab="options"]');
+await lp.uncheck('input[data-opt="eventPopups"]');
+await lp.click('[data-tab="play"]');
+await lp.click('[data-go="new"]');
+await lp.waitForSelector('.start');
+await lp.click('.start');
+await lp.uncheck('#auto-slow');
+await lp.addStyleTag({ content: '.clean :is(#top-bar, .rail, .panel, .hours, .chips) { visibility: hidden !important; }' });
+const lookClock = () => lp.$eval('#clock', (el) => el.textContent ?? '');
+const playTo = async (time) => {
+  await lp.click('[data-speed="8"]');
+  const start = Date.now();
+  while ((await lookClock()) < time && Date.now() - start < 240_000) {
+    const ack = await lp.$('#alert-banner:not([hidden]) button[data-ack]');
+    if (ack) await ack.click();
+    await lp.waitForTimeout(150);
+  }
+  await lp.click('[data-speed="0"]');
+};
+/** Aims the camera (null: the starting view over the whole airport) and saves a picture at High quality. */
+const best = async (name, aim = null, clean = true) => {
+  const ok = await lp.evaluate(([aim, clean]) => {
+    document.documentElement.classList.toggle('clean', clean);
+    const { view, sim, layout } = window.aab;
+    if (!aim) {
+      view.resetCamera();
+      return true;
+    }
+    const T = 8; // TILE_SIZE
+    const flights = sim().flights.filter((f) => f.position);
+    const big = ['B748F', 'B77W', 'A350', 'B738F', 'B738', 'A320', 'Q400', 'C208F', 'C208']; // the biggest aircraft first
+    const rank = (f) => (big.includes(f.type) ? big.indexOf(f.type) : big.length);
+    const pick = (phases) => flights.filter((f) => phases.includes(f.phase)).sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))[0];
+    const terminal = layout().structures.find((s) => s.kind === 'terminal');
+    const centre = (r) => ({ x: (r.x + r.w / 2) * T, y: (r.y + r.h / 2) * T });
+    if (aim.what === 'airport') {
+      // straight down over the starting view's centre (the camera is private in TypeScript, plain here)
+      view.resetCamera();
+      const c = view.camera;
+      view.lookAt(c.target.x, -c.target.z, c.radius * aim.r, aim.a, aim.b);
+      return true;
+    }
+    const f = aim.what === 'parked' ? pick(['onStand']) : aim.what === 'moving' ? pick(['taxiIn', 'taxiOut', 'holdShort', 'landing', 'takeoff']) : null;
+    const at = f ? f.position : terminal ? centre(terminal) : null;
+    if (!at) return false;
+    view.lookAt(at.x, at.y, aim.r, aim.a, aim.b);
+    return Boolean(f) || aim.what === 'terminal';
+  }, [aim, clean]);
+  if (!ok) console.warn(`${name}: nothing to aim at; framed the Terminal instead`);
+  await lp.evaluate(() => window.aab.view.setQuality('high'));
+  const from = await lp.evaluate(() => window.aab.frames());
+  await lp.waitForFunction((from) => window.aab.frames() >= from + 5, from, { timeout: 180_000, polling: 500 });
+  await lp.screenshot({ path: `docs/screenshots/look/${name}.jpg`, type: 'jpeg', quality: 90 });
+  await lp.evaluate(() => window.aab.view.setQuality('low'));
+  console.log(`look/${name}: ${await lookClock()}`);
+};
+const parked = (a, b = 1.15, r = 34) => ({ what: 'parked', r, a, b });
+const terminal = (a, b = 0.95) => ({ what: 'terminal', r: 95, a, b });
+
+await playTo('05:45');
+await best('1-dawn', null, false);
+await playTo('08:30');
+await best('2-morning', null, false);
+await best('parked-morning', parked(-Math.PI / 2 - 0.7));
+await best('overhead', { what: 'airport', r: 1.1, a: -Math.PI / 2, b: 0.12 });
+await playTo('12:30');
+await best('3-midday', null, false);
+await best('terminal-midday', terminal(-Math.PI / 2 + 0.6));
+await best('taxiing-midday', { what: 'moving', r: 40, a: -Math.PI / 2 + 0.9, b: 1.2 });
+await playTo('19:15');
+await best('4-evening', null, false);
+await best('parked-evening', parked(Math.PI / 2 + 0.6, 1.2, 40));
+await playTo('22:00');
+await best('5-night', null, false);
+await best('parked-night', parked(-Math.PI / 2 - 0.7));
+await best('terminal-night', terminal(-Math.PI / 2 + 0.6, 1.05));
+
 await browser.close();
 console.log('screenshots saved to docs/screenshots/');
