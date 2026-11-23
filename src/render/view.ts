@@ -140,12 +140,16 @@ export class AirportView {
       const ms = now - last;
       last = now;
       for (const h of this.frameHandlers) h(ms);
+      if (this.paused) return;
       this.watchSpeed(ms);
       scene.render();
     });
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
   }
+
+  /** While true the view keeps its last picture and draws nothing (e.g. while Plan Mode covers it). */
+  paused = false;
 
   /** Runs `handler` once per frame, before drawing, with the real milliseconds since the last frame. */
   onFrame(handler: (ms: number) => void): void {
@@ -413,10 +417,11 @@ export class AirportView {
     if (this.mode === 'build' && this.area) this.fit(this.area);
   }
 
-  /** Steps quality down after two seconds below 45 fps (only while the tab is shown). */
+  /** Steps quality down after two seconds below 45 fps (only while the tab is shown; very slow frames count too). */
   private watchSpeed(ms: number): void {
-    if (document.hidden || ms > 500) return;
-    this.slowFor = ms > 1000 / 45 ? this.slowFor + ms : Math.max(0, this.slowFor - ms * 0.5);
+    if (document.hidden) return;
+    const frame = Math.min(ms, 1000);
+    this.slowFor = frame > 1000 / 45 ? this.slowFor + frame : Math.max(0, this.slowFor - frame * 0.5);
     if (this.slowFor > 2000 && this.tier < TIERS.length - 1) {
       this.slowFor = 0;
       this.setTier(this.tier + 1);
