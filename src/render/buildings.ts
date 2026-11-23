@@ -47,7 +47,7 @@ interface Mats {
   rubber: PBRMaterial;
   bronze: PBRMaterial;
   orange: PBRMaterial;
-  skylight: StandardMaterial;
+  skylight: PBRMaterial;
   warmLamp: StandardMaterial;
   sodium: StandardMaterial;
   whiteLamp: StandardMaterial;
@@ -96,9 +96,9 @@ function mats(kit: BuildingKit): Mats {
         }
       }
     }, 0.75, 0),
-    darkSteel: pbr(scene, 'bld-dark-steel', '#3a3f45', 0.5, 0.6),
-    steel: pbr(scene, 'bld-steel', '#c8ccd0', 0.35, 0.8),
-    fascia: pbr(scene, 'bld-fascia', '#dfe2e2', 0.3, 0.6),
+    darkSteel: pbr(scene, 'bld-dark-steel', '#3a3f45', 0.6, 0.2),
+    steel: pbr(scene, 'bld-steel', '#b4b9be', 0.45, 0.3),
+    fascia: pbr(scene, 'bld-fascia', '#dfe2e2', 0.4, 0.15),
     roof: textured(scene, 'bld-roof', (g, W, H) => {
       g.fillStyle = '#b9bcbc';
       g.fillRect(0, 0, W, H);
@@ -131,7 +131,7 @@ function mats(kit: BuildingKit): Mats {
     rubber: pbr(scene, 'bld-rubber', '#16181b', 0.8),
     bronze: pbr(scene, 'bld-bronze', '#6b5641', 0.45, 0.7),
     orange: pbr(scene, 'bld-orange', '#e07b1f', 0.5, 0.1, true),
-    skylight: kit.lamp('bld-skylight', '#c8a478', 0.05),
+    skylight: glowing(kit, 'bld-skylight', '#3d5163', '#a8875f'),
     warmLamp: kit.lamp('bld-warm-lamp', '#ffd9a0', 0.05),
     sodium: kit.lamp('bld-sodium', '#ffb050', 0.05),
     whiteLamp: kit.lamp('bld-white-lamp', '#eef4ff', 0.05),
@@ -296,7 +296,7 @@ class Frame {
     if (glowing) this.kit.glow(mesh);
   }
   lamps(mat: StandardMaterial, at: ReadonlyArray<readonly [number, number, number]>, size: number): void {
-    this.copies(MeshBuilder.CreateBox('lamp', { width: size, height: size * 0.3, depth: size }, this.kit.scene), mat, at, false, true);
+    this.copies(MeshBuilder.CreateBox('lamp', { width: size, height: size * 0.3, depth: size }, this.kit.scene), mat, at, false, false);
   }
   /** A world point (world units) from a local one (metres). */
   world(x: number, y: number, z: number): Vector3 {
@@ -373,10 +373,10 @@ export function buildTerminal(kit: BuildingKit, s: TileRect, airside: Facing): v
   // downlights in the deck's underside
   const dl: Array<[number, number, number]> = [];
   for (let x = -L / 2 + 3; x < L / 2 - 2; x += 6.5) {
-    for (let z = zl + 2; z < zN - 0.5; z += 4.5) dl.push([x, ry - 0.05, z]);
-    for (let z = d0 + 1; z < zg - 0.5; z += 3.5) dl.push([x, ry - 0.05, z]);
+    for (let z = zl + 3; z < zN - 1; z += 6) dl.push([x, ry - 0.05, z]);
+    dl.push([x, ry - 0.05, (d0 + zg) / 2]);
   }
-  f.lamps(M.warmLamp, dl, 0.7);
+  f.lamps(M.warmLamp, dl, 0.5);
   f.box(L, 0.25, 3, 0, 0, zN - 5, M.offWhite); // drop-off kerb
   if (L >= 80) f.label('TERMINAL', 0, ry + 2.02, (zh + zl) / 2 + 2, Math.min(L * 0.55, 120), 14);
   for (const x of [-L / 2 - 6, L / 2 + 6]) kit.floods.push(f.world(x, 28, zS - 6));
