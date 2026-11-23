@@ -288,14 +288,18 @@ cooldown (`simulation.ts → ACTIONS`).
   - **ATC Tower:** a white two-storey base with ribbon windows, a slim round white shaft with a lit stair slit, flared
     equipment floors with a lit window band, a 12-sided cab of outward-sloping green-tinted glass (a faint green glow
     at night), a roof disc with antennas and a radar dome, red obstruction lights, and TWR on the ground.
-  - **Support Buildings**, each with its name on the ground in front: Fire & Rescue Station (white with a red band,
-    glazed bay doors lit white at night, a drill tower, two crash tenders on the forecourt, a blue beacon); Admin
+  - **Support Buildings**, each with its name on the ground in front (on the De-icing Pad, on the pad): Fire & Rescue
+    Station (white with a red band, glazed bay doors lit white at night, a drill tower, two crash tenders on the
+    forecourt facing out, a blue beacon on the first); Admin
     Office (four glass storeys behind stone fins); Airline Office (three glass storeys under a bronze crown); Ramp
     Agent Station (a low building with an orange roof edge and a vehicle shed with tugs and baggage carts); Fuel Farm
-    (white tanks with a blue band in a bund wall, a pipe rack and a pump house); De-icing Pad (blue-lined pad, two
+    (white tanks with a blue band in a bund wall, a pipe rack, a pump house and two lamp posts); De-icing Pad (blue-lined pad, two
     boom trucks, glycol tanks).
-  - Flood masts stand at the front corners of Terminals and Cargo Hubs; at night their heads glow and the first four
-    light the apron round them.
+  - Flood masts stand at the front corners of Terminals and Cargo Hubs (where two buildings meet, one mast serves
+    both); at night their heads glow and the first four light the apron round them.
+  - Names painted on buildings and in front of them (TERMINAL, CARGO, the Support Buildings') run along the building's
+    front: on buildings facing south or north they read from the south, on buildings facing east or west from the
+    airside.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).

@@ -27,7 +27,9 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 
 ### The look
 
-Day 1 at the best quality (`?quality=high`), from the starting view at five times of day and closer up.
+Day 1 at the best quality (`?quality=high`), from the starting view at five times of day and closer up. The last
+pictures show buildings a Day 1 airport lacks: the script draws a built-up test layout in place of the Run's
+(`?debug` → `aab.showLayout(structures)`, only the picture changes).
 
 | | |
 |---|---|
@@ -43,8 +45,17 @@ Day 1 at the best quality (`?quality=high`), from the starting view at five time
 | A taxiing aircraft | The same Stand in the evening sun |
 | ![A parked aircraft at night](docs/screenshots/look/parked-night.jpg) | ![The Terminal at night](docs/screenshots/look/terminal-night.jpg) |
 | A parked aircraft at night | The Terminal at night |
+| ![The Terminal and the Cargo Hub grown by two wings each](docs/screenshots/look/wings-day.jpg) | ![The wings at night](docs/screenshots/look/wings-night.jpg) |
+| The Terminal and the Cargo Hub, each grown by two wings | The same at night |
+| ![Every Support Building](docs/screenshots/look/support-day.jpg) | ![Every Support Building at night](docs/screenshots/look/support-night.jpg) |
+| Every Support Building: Ramp Agent Station, Admin and Airline Offices, Fire & Rescue, Fuel Farm, De-icing Pad | The same at night |
+| ![A Terminal facing north](docs/screenshots/look/facing-north.jpg) | ![A Cargo Hub facing east](docs/screenshots/look/facing-east.jpg) |
+| A Terminal facing north, onto Stands on its north side | A Cargo Hub facing east |
+| ![Support Buildings facing west](docs/screenshots/look/facing-west.jpg) | |
+| Support Buildings facing west onto a Taxiway | |
 
-The screenshots are taken automatically from the real game by the [Screenshots workflow](.github/workflows/screenshots.yml) whenever the UI changes (`scripts/screenshots.mjs`).
+The screenshots are taken automatically from the real game by the [Screenshots workflow](.github/workflows/screenshots.yml) whenever the UI changes (`scripts/screenshots.mjs`); run with the input `shots: buildings` it takes only the building
+pictures, a quick check after changing the buildings.
 
 - Domain language: [`CONTEXT.md`](CONTEXT.md)
 - Decisions: [`docs/adr/`](docs/adr). Babylon.js draws the airport in 3D; all game logic lives in a pure TypeScript simulation.
