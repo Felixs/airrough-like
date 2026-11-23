@@ -23,6 +23,17 @@ export interface Airfield {
   readonly litGlass: readonly PBRMaterial[];
   /** Where floodlights hang over the aprons (the view lights the first few at night). */
   readonly floods: readonly Vector3[];
+  /** The jet bridge of each Contact Stand at a Terminal, by Stand id. */
+  readonly bridges: ReadonlyMap<string, JetBridge>;
+}
+
+/** A jet bridge: at rest beside its Stand, or swung out to an aircraft door. */
+export interface JetBridge {
+  /**
+   * Moves the cab a little towards `door` (a point on the fuselage, with `out` pointing away from it) or, with null,
+   * back to rest. Called every frame, so the bridge swings out and back rather than jumping.
+   */
+  dock(door: Vector3 | null, out?: Vector3): void;
 }
 
 export interface AirfieldContext {
@@ -65,6 +76,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     return m;
   };
   const yellow = paint('paint-yellow', '#e7b928');
+  const bridges = new Map<string, JetBridge>();
   const bridgeMat = pbr(scene, 'jet-bridge', '#c9ccd0', 0.4, 0.3);
   const metalMat = pbr(scene, 'bridge-metal', '#b9bec5', 0.32, 0.8);
   const darkMat = pbr(scene, 'bridge-dark', '#1a1c20', 0.65);
@@ -183,71 +195,68 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     if (s.kind === 'runway' || s.kind === 'stand' || s.kind === 'holdingBay') for (let x = s.x; x < s.x + s.w; x++) for (let y = s.y; y < s.y + s.h; y++) others.add(`${x},${y}`);
   }
   const open = (x: number, y: number) => !paved.has(`${x},${y}`) && !others.has(`${x},${y}`);
-  // Taxiway tiles next to Stands and Holding Bays are apron: concrete, like the Stands themselves
-  const spotTiles = new Set<string>();
-  for (const s of layout.structures) {
-    if (s.kind !== 'stand' && s.kind !== 'holdingBay') continue;
-    for (let x = s.x - 3; x < s.x + s.w + 3; x++) for (let y = s.y - 3; y < s.y + s.h + 3; y++) spotTiles.add(`${x},${y}`);
-  }
-  const apron = { pos: [] as number[], idx: [] as number[], uv: [] as number[] };
+  // Taxiways are paved in the same concrete as the aprons and Stands: per tile, inset half a tile along sides that face
+  // open ground, the outside corners of ends and turns rounded, and a curved fillet in every inside corner
   const I = TAXIWAY_INSET * T;
-  const asphalt = { pos: [] as number[], idx: [] as number[], uv: [] as number[] };
-  let buf = asphalt;
-  const idx = { push: (...v: number[]) => buf.idx.push(...v) };
+  const ROUND = 4; // outside corners: the whole inset corner square
+  const FILLET = T; // inside corners
+  const taxiPaving = { pos: [] as number[], idx: [] as number[], uv: [] as number[] };
   const vert = (x: number, y: number) => {
-    buf.pos.push(x, Y.taxi, -y);
-    buf.uv.push(x / 64, -y / 64);
-    return buf.pos.length / 3 - 1;
+    taxiPaving.pos.push(x, Y.taxi, -y);
+    taxiPaving.uv.push(x / 32, -y / 32);
+    return taxiPaving.pos.length / 3 - 1;
   };
   for (const k of paved) {
     const [tx, ty] = k.split(',').map(Number) as [number, number];
-    buf = spotTiles.has(k) ? apron : asphalt;
     const l = open(tx - 1, ty) ? I : 0;
     const rr = open(tx + 1, ty) ? I : 0;
     const t = open(tx, ty - 1) ? I : 0;
     const bb = open(tx, ty + 1) ? I : 0;
-    const a = vert(tx * T + l, ty * T + t);
-    const b = vert((tx + 1) * T - rr, ty * T + t);
-    const c = vert((tx + 1) * T - rr, (ty + 1) * T - bb);
-    const d = vert(tx * T + l, (ty + 1) * T - bb);
-    idx.push(a, b, c, a, c, d);
-    // fillet in every inside corner (both neighbours paved, the diagonal open)
+    const p = { x: tx * T + l, y: ty * T + t, w: T - l - rr, h: T - t - bb };
+    // the outline, clockwise from the top-left corner
+    const pts: Array<[number, number]> = [];
+    const corner = (cx: number, cy: number, dx: -1 | 1, dy: -1 | 1) => {
+      const sideX = open(tx + dx, ty);
+      const sideY = open(tx, ty + dy);
+      if (sideX && sideY) {
+        // rounded: a quarter circle from the side before the corner to the side after it
+        const r = Math.min(ROUND, p.w, p.h);
+        const ox = cx - dx * r;
+        const oy = cy - dy * r;
+        // walking clockwise (y down) the side before the corner is the vertical one where dx = dy
+        const a0 = dx === dy ? Math.atan2(0, dx) : Math.atan2(dy, 0);
+        for (let i = 0; i <= 6; i++) {
+          const a = a0 + (Math.PI / 2) * (i / 6);
+          pts.push([ox + r * Math.cos(a), oy + r * Math.sin(a)]);
+        }
+      } else if (!sideX && !sideY && open(tx + dx, ty + dy)) {
+        // inside corner: an I × I notch (the neighbours are inset there; the fillet paves the curve)
+        const first: [number, number] = dx === dy ? [cx, cy - dy * I] : [cx - dx * I, cy];
+        const second: [number, number] = dx === dy ? [cx - dx * I, cy] : [cx, cy - dy * I];
+        pts.push(first, [cx - dx * I, cy - dy * I], second);
+      } else pts.push([cx, cy]);
+    };
+    corner(p.x, p.y, -1, -1);
+    corner(p.x + p.w, p.y, 1, -1);
+    corner(p.x + p.w, p.y + p.h, 1, 1);
+    corner(p.x, p.y + p.h, -1, 1);
+    const centre = vert(p.x + p.w / 2, p.y + p.h / 2);
+    const ring = pts.map(([x, y]) => vert(x, y));
+    for (let i = 0; i < ring.length; i++) taxiPaving.idx.push(centre, ring[i]!, ring[(i + 1) % ring.length]!);
+    // fillet in every inside corner (both neighbours paved, the diagonal open), tangent to both inset edges
     for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
       if (open(tx + dx, ty) || open(tx, ty + dy) || !open(tx + dx, ty + dy)) continue;
-      if (!paved.has(`${tx + dx},${ty}`) && !others.has(`${tx + dx},${ty}`)) continue;
       const cx = (dx > 0 ? (tx + 1) * T : tx * T) - dx * I;
       const cy = (dy > 0 ? (ty + 1) * T : ty * T) - dy * I;
-      const corner = vert(cx, cy);
-      let prev = vert(cx + dx * T, cy);
-      for (let i = 1; i <= 6; i++) {
-        const s = i / 6;
-        const px = (1 - s) ** 2 * (cx + dx * T) + 2 * s * (1 - s) * cx + s * s * cx;
-        const py = (1 - s) ** 2 * cy + 2 * s * (1 - s) * cy + s * s * (cy + dy * T);
-        const next = vert(px, py);
-        idx.push(corner, prev, next);
+      const c = vert(cx, cy);
+      let prev = vert(cx + dx * FILLET, cy);
+      for (let i = 1; i <= 8; i++) {
+        const s = i / 8;
+        const next = vert(cx + dx * FILLET * (1 - s) ** 2, cy + dy * FILLET * s * s);
+        taxiPaving.idx.push(c, prev, next);
         prev = next;
       }
     }
-  }
-  if (asphalt.idx.length) {
-    const taxiMesh = orient(meshFrom(scene, 'taxiways', asphalt.pos, asphalt.idx, asphalt.uv), (x, _y, z) => [x, Y.taxi - 1, z]);
-    taxiMesh.material = textured('taxiway', canvasTexture(scene, 'taxiway', 512, 512, (g, W, H) => {
-      g.fillStyle = '#3d3f43';
-      g.fillRect(0, 0, W, H);
-      speckle(g, W, H, 26000, 0.22, 1.5, 4);
-      blots(g, W, H, 30, 0.08, 18, 6);
-      g.strokeStyle = 'rgba(0,0,0,0.25)';
-      for (let i = 0; i <= W; i += 64) {
-        g.beginPath();
-        g.moveTo(i, 0);
-        g.lineTo(i, H);
-        g.moveTo(0, i);
-        g.lineTo(W, i);
-        g.stroke();
-      }
-    }));
-    taxiMesh.receiveShadows = true;
-    taxiMesh.isPickable = false;
   }
   const centre = centreLinePaths(layout).map((line) => line.map(([x, y]) => [x, -y] as [number, number]));
   groundLines(scene, 'centre-lines', centre, 0.6, Y.taxi + Y.paint).material = yellow;
@@ -295,11 +304,11 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       g.stroke();
     }
   }));
-  if (apron.idx.length) {
-    const apronMesh = orient(meshFrom(scene, 'apron', apron.pos, apron.idx, apron.uv), (x, _y, z) => [x, Y.taxi - 1, z]);
-    apronMesh.material = concrete;
-    apronMesh.receiveShadows = true;
-    apronMesh.isPickable = false;
+  if (taxiPaving.idx.length) {
+    const taxiMesh = orient(meshFrom(scene, 'taxiways', taxiPaving.pos, taxiPaving.idx, taxiPaving.uv), (x, _y, z) => [x, Y.taxi - 1, z]);
+    taxiMesh.material = concrete;
+    taxiMesh.receiveShadows = true;
+    taxiMesh.isPickable = false;
   }
   const pads: number[] = [];
   const padIdx: number[] = [];
@@ -346,32 +355,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
       dash(ou, ov, ou, ov + oh);
       // jet bridge from the Terminal to Contact Stands
       if (s.placement === 'contact' && layout.structures.some((o) => o.kind === 'terminal' && sharesEdge(o, s))) {
-        const [rx, rz] = f.p(c + Math.min(7, f.across / 2 - 1), 1.6);
-        const [cx2, cz2] = f.p(c + 2.6, 7.5);
-        const y = 2.4;
-        const rot = MeshBuilder.CreateCylinder('jet-bridge-rotunda', { diameter: 2.4, height: y + 1, tessellation: 16 }, scene);
-        rot.position.set(rx, (y + 1) / 2, rz);
-        rot.material = bridgeMat;
-        ctx.caster(rot);
-        const len = Math.hypot(cx2 - rx, cz2 - rz);
-        const tunnel = MeshBuilder.CreateBox('jet-bridge', { width: 1.5, height: 1.5, depth: len }, scene);
-        tunnel.position.set((rx + cx2) / 2, y, (rz + cz2) / 2);
-        tunnel.rotation.y = Math.atan2(cx2 - rx, cz2 - rz);
-        tunnel.material = bridgeMat;
-        ctx.caster(tunnel);
-        const cab = MeshBuilder.CreateBox('jet-bridge-cab', { width: 2.1, height: 1.7, depth: 2.1 }, scene);
-        cab.position.set(cx2, y, cz2);
-        cab.rotation.y = tunnel.rotation.y;
-        cab.material = bridgeMat;
-        ctx.caster(cab);
-        const legX = rx + (cx2 - rx) * 0.7;
-        const legZ = rz + (cz2 - rz) * 0.7;
-        const leg = MeshBuilder.CreateCylinder('jet-bridge-leg', { height: y - 0.7, diameter: 0.35, tessellation: 8 }, scene);
-        leg.position.set(legX, (y - 0.7) / 2, legZ);
-        leg.material = metalMat;
-        const wheels = MeshBuilder.CreateBox('jet-bridge-wheels', { width: 1.6, height: 0.5, depth: 0.8 }, scene);
-        wheels.position.set(legX, 0.25, legZ);
-        wheels.material = darkMat;
+        bridges.set(s.id, jetBridge(scene, s, ctx.caster, { bridge: bridgeMat, metal: metalMat, dark: darkMat }));
       }
     } else {
       const corners = [f.p(1, 1), f.p(f.across - 1, 1), f.p(f.across - 1, f.depth - 1), f.p(1, f.depth - 1)];
@@ -514,7 +498,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     ctx.caster(thinInstances(mast, floods.map((p) => [p.x, p.y / 2, p.z, 1, p.y, 1] as Place)));
     lightBoxes('flood-head', '#fff1cf', floods.map((p) => [p.x, p.y + 0.4, p.z, 2.6, 0.6, 1.2] as Place), 1, 0.04);
   }
-  return { lights, litGlass, floods };
+  return { lights, litGlass, floods, bridges };
 }
 
 /** Standing-seam metal for curved roofs, the seams about every 2 m. */
@@ -533,6 +517,74 @@ function seamRoofFor(scene: Scene, w: number): PBRMaterial {
   m.backFaceCulling = false;
   m.twoSidedLighting = true;
   return m;
+}
+
+/**
+ * A jet bridge on a Contact Stand: a rotunda at the Terminal, on the left of an aircraft parked nose-in, a telescopic
+ * tunnel on a wheeled leg, and a cab. At rest it points out along the Stand, angled away; docked, the cab meets the door.
+ */
+function jetBridge(scene: Scene, s: TileRect & { facing?: Facing }, caster: (m: Mesh) => void, mat: { bridge: PBRMaterial; metal: PBRMaterial; dark: PBRMaterial }): JetBridge {
+  // directions in sim coordinates (x east, y south): `back` from the open side to the Terminal, `left` of a parked aircraft
+  const open = { south: [0, 1], north: [0, -1], east: [1, 0], west: [-1, 0] }[s.facing ?? 'south'] as [number, number];
+  const back: [number, number] = [-open[0], -open[1]];
+  const left: [number, number] = [back[1], -back[0]];
+  const across = open[0] === 0 ? s.w * T : s.h * T;
+  const depth = open[0] === 0 ? s.h * T : s.w * T;
+  const cx = (s.x + s.w / 2) * T;
+  const cy = (s.y + s.h / 2) * T;
+  const side = Math.min(7, across / 2 - 1);
+  const rx = cx + back[0] * (depth / 2 - 1.6) + left[0] * side;
+  const ry = cy + back[1] * (depth / 2 - 1.6) + left[1] * side;
+  const H = 2.4; // tunnel height at the rotunda (world units, 2 m each)
+  const pivot = new Vector3(rx, H, -ry);
+  // at rest it points out along the Stand and a little away from it, clear of an aircraft taxiing in
+  const rest = new Vector3(rx + open[0] * 6 + left[0] * 4, H, -(ry + open[1] * 6 + left[1] * 4));
+  const restOut = new Vector3(open[0] + left[0], 0, -(open[1] + left[1])).normalize();
+
+  const rot = MeshBuilder.CreateCylinder('jet-bridge-rotunda', { diameter: 2.4, height: H + 1, tessellation: 16 }, scene);
+  rot.position.set(rx, (H + 1) / 2, -ry);
+  rot.material = mat.bridge;
+  caster(rot);
+  const tunnel = MeshBuilder.CreateBox('jet-bridge', { width: 1.5, height: 1.5, depth: 1 }, scene);
+  tunnel.material = mat.bridge;
+  caster(tunnel);
+  const cab = MeshBuilder.CreateBox('jet-bridge-cab', { width: 2.1, height: 1.7, depth: 2.1 }, scene);
+  cab.material = mat.bridge;
+  caster(cab);
+  const leg = MeshBuilder.CreateCylinder('jet-bridge-leg', { height: 1, diameter: 0.35, tessellation: 8 }, scene);
+  leg.material = mat.metal;
+  const wheels = MeshBuilder.CreateBox('jet-bridge-wheels', { width: 1.6, height: 0.5, depth: 0.8 }, scene);
+  wheels.material = mat.dark;
+
+  const end = rest.clone();
+  const facing = restOut.clone();
+  const place = () => {
+    // the cab stands just off the door, facing it; the tunnel runs from the rotunda to the back of the cab
+    const cabAt = end.add(facing.scale(1.15));
+    cab.position.copyFrom(cabAt);
+    cab.rotation.y = Math.atan2(-facing.x, -facing.z);
+    const len = Math.max(1, Vector3.Distance(pivot, cabAt) - 1);
+    tunnel.position.copyFrom(Vector3.Lerp(pivot, cabAt, 0.5));
+    tunnel.scaling.z = len;
+    tunnel.lookAt(cabAt);
+    const foot = Vector3.Lerp(pivot, cabAt, 0.7);
+    const legH = Math.max(0.3, foot.y - 0.75);
+    leg.position.set(foot.x, legH / 2, foot.z);
+    leg.scaling.y = legH;
+    wheels.position.set(foot.x, 0.25, foot.z);
+    wheels.rotation.y = Math.atan2(cabAt.x - pivot.x, cabAt.z - pivot.z); // (lookAt turns the tunnel by quaternion)
+  };
+  place();
+  return {
+    dock(door, out) {
+      const target = door ?? rest;
+      const dir = door && out ? out : restOut;
+      if (Vector3.DistanceSquared(end, target) < 1e-4 && Vector3.DistanceSquared(facing, dir) < 1e-4) return;
+      end.copyFrom(Vector3.Lerp(end, target, 0.06));
+      facing.copyFrom(Vector3.Lerp(facing, dir, 0.06).normalize());
+      place();
+    },
+  };
 }
 
 /** Maps points in a Stand's own frame — u across its open side, v from the back (0) to the open side — onto the ground (x, z). */

@@ -256,17 +256,20 @@ cooldown (`simulation.ts → ACTIONS`).
   soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion).
 - **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
-  for the landing pilot. Taxiways are one paved surface with slab joints; a Taxiway is 3 tiles wide for aircraft, but
+  for the landing pilot. Taxiways are one paved surface of light concrete slabs, the same as the aprons and Stands (only
+  Runways are dark asphalt); a Taxiway is 3 tiles wide for aircraft, but
   along a side facing open ground its paving (and its blue edge lights) are drawn half a tile in, so a plain Taxiway
   looks 2 tiles wide, half a Runway; where it meets a Stand, Holding Bay, Runway or another Taxiway it is paved right up
-  to it, and every inside corner of a junction or turn has a curved fillet about one tile across. Yellow centre lines
+  to it. The outside corners of Taxiway ends and turns are rounded (radius half a tile), and every inside corner of a
+  junction or turn has a curved fillet about one tile across. Yellow centre lines
   join with curved corners and curved lead-offs at T-junctions and stop at the hold-short lines (two solid and two dashed
   yellow lines across the drawn paving, with a red sign such as "09-27" beside them).
 - **Stands and Holding Bays** are concrete pads with a curved yellow lead-in from the lane in front, a stop bar and
   their number (or B1, B2…) at the open side left of the lead-in line; Stands have a red dashed outline, Holding Bays a
-  yellow one. Taxiway tiles within 3 tiles of a Stand or Holding Bay are concrete apron rather than asphalt. Contact
-  Stands at a Terminal get a jet bridge: a rotunda by the building, a tunnel angled out to a cab by the aircraft's
-  front door, and a wheeled leg. While an aircraft is on its Stand, ground vehicles stand round it: a pushback tug at
+  yellow one. Contact Stands at a Terminal get a jet bridge: a rotunda by the building on the left of a parked aircraft,
+  a tunnel on a wheeled leg and a cab. At rest it points out along the Stand, angled away from it; once a Medium or
+  Large aircraft has stopped on the Stand it swings out until the cab meets the aircraft's front left door, and swings
+  back when the aircraft leaves (Small aircraft use stairs: the bridge stays at rest). While an aircraft is on its Stand, ground vehicles stand round it: a pushback tug at
   the nose, belt loaders with a baggage tug and two to four container carts at its holds, often ground power, and for
   Medium and Large aircraft often a fuel truck under the wing and a catering truck at the rear door.
 - **Buildings** stand up in 3D: Terminals with glass curtain walls (lit from inside at night), a curved standing-seam
@@ -301,7 +304,9 @@ cooldown (`simulation.ts → ACTIONS`).
   accelerates from its hold point, lifts off after 80% of its takeoff run and climbs until it leaves 60 units past the
   Runway end. The aircraft really rises (up to 45 world units at the edge of the airfield), nose up when climbing,
   with its shadow on the ground below. A Rejected Takeoff speeds up and brakes smoothly to its exit without lifting off.
-  Between the simulation's 15-second steps aircraft glide from where they were to where they are.
+  Between the simulation's 15-second steps aircraft glide from where they were to where they are. Onto a Stand or
+  Holding Bay an aircraft follows the lead-in: a smooth turn off the lane onto the centre line, then straight in, nose
+  first. Leaving, it is pushed back straight out along the centre line, tail first, then turns onto the lane.
 - **Quality:** the view starts at High (sharp on high-density screens, detailed shadows, edge smoothing, glow) and
   steps down by itself to Medium (normal resolution, coarser shadows, no glow) and then Low (lower resolution, no
   shadows) when frames stay below 45 per second for two seconds. Adding `?quality=high` (or `medium`, `low`) to the

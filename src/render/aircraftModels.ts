@@ -170,6 +170,16 @@ function doorsOf(m: AircraftModel): Array<{ t: number; exit: boolean }> {
 }
 
 /**
+ * The front left door (the one a jet bridge docks at), in the model's own frame: metres, nose along +x, left side +z,
+ * the fuselage centre line at y = 0.
+ */
+export function frontDoor(type: AircraftTypeId): Vector3 {
+  const m = MODELS[type];
+  const t = doorsOf(m)[0]!.t;
+  return new Vector3(m.L / 2 - t * m.L, m.R * 0.1, m.R);
+}
+
+/**
  * The fuselage texture: u along the length (0 nose … 1 tail), v round the body starting underneath (v = (θ + 90°) / 360°,
  * θ = 0 on the left side, 90° on top). Paint, livery shapes, windows, doors, cockpit windows and titles; a second
  * texture holds the cabin windows lit at night.

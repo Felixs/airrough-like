@@ -1,7 +1,8 @@
-import { Color3, MeshBuilder, StandardMaterial, TransformNode, type InstancedMesh, type Mesh, type Scene } from '@babylonjs/core';
+import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3, type InstancedMesh, type Mesh, type Scene } from '@babylonjs/core';
 import type { AircraftTypeId } from '../sim/aircraft';
 import type { Flight } from '../sim/simulation';
-import { aircraftMaterials, buildMaster, CARGO_LIVERY, MODELS, pbr, type AircraftMaterials, type Master } from './aircraftModels';
+import { aircraftMaterials, buildMaster, CARGO_LIVERY, frontDoor, MODELS, pbr, type AircraftMaterials, type Master } from './aircraftModels';
+import type { JetBridge } from './airfield';
 import { METRE, mapPoint } from './units';
 
 /**
@@ -32,7 +33,49 @@ const VEHICLES: Record<VehicleKind, ReadonlyArray<readonly [number, number, numb
 /** Highest point of a landing or takeoff on the map, in world units (altitude 1). */
 const CLIMB = 45;
 
-interface Pose { x: number; y: number; heading: number }
+/** Where an aircraft is at a step: sim world units, heading in degrees, and whether it is parked (Stand or Bay). */
+interface Pose { x: number; y: number; heading: number; parked: boolean }
+
+const PARKED = new Set<Flight['phase']>(['onStand', 'inBay']);
+const poseOf = (f: Flight): Pose => ({ x: f.position?.x ?? 0, y: f.position?.y ?? 0, heading: f.heading, parked: PARKED.has(f.phase) });
+const headingOf = (dx: number, dy: number, fallback: number) => (dx * dx + dy * dy < 1e-9 ? fallback : (Math.atan2(dx, -dy) * 180) / Math.PI);
+const turnTo = (from: number, to: number, k: number) => from + (((((to - from) % 360) + 540) % 360) - 180) * k;
+
+/**
+ * Where an aircraft is `k` (0…1) of the way between two steps. Into a Stand or Bay it follows the lead-in: a smooth turn
+ * off the taxilane onto the centre line, then straight in, nose first. Out of one it is pushed back straight along the
+ * centre line, tail first, then turns onto the taxilane. Elsewhere it glides in a straight line.
+ */
+function between(a: Pose, b: Pose, k: number): { x: number; y: number; heading: number } {
+  if (b.parked && !a.parked) {
+    // the centre line runs through the Stand's middle (b) along its parked heading; P is where the lane meets it
+    const dx = Math.sin((b.heading * Math.PI) / 180);
+    const dy = -Math.cos((b.heading * Math.PI) / 180);
+    const along = (a.x - b.x) * dx + (a.y - b.y) * dy;
+    const px = b.x + dx * along;
+    const py = b.y + dy * along;
+    const u = 1 - k;
+    const x = u * u * a.x + 2 * u * k * px + k * k * b.x;
+    const y = u * u * a.y + 2 * u * k * py + k * k * b.y;
+    const tx = u * (px - a.x) + k * (b.x - px);
+    const ty = u * (py - a.y) + k * (b.y - py);
+    return { x, y, heading: headingOf(tx, ty, b.heading) };
+  }
+  if (a.parked && !b.parked) {
+    const dx = Math.sin((a.heading * Math.PI) / 180);
+    const dy = -Math.cos((a.heading * Math.PI) / 180);
+    const along = (b.x - a.x) * dx + (b.y - a.y) * dy;
+    const px = a.x + dx * along;
+    const py = a.y + dy * along;
+    if (k < 0.6) {
+      const q = k / 0.6;
+      return { x: a.x + (px - a.x) * q, y: a.y + (py - a.y) * q, heading: a.heading };
+    }
+    const q = (k - 0.6) / 0.4;
+    return { x: px + (b.x - px) * q, y: py + (b.y - py) * q, heading: turnTo(a.heading, b.heading, q) };
+  }
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, heading: turnTo(a.heading, b.heading, k) };
+}
 
 interface Visual {
   readonly key: string;
@@ -46,6 +89,9 @@ interface Visual {
   readonly discs: InstancedMesh[];
   /** Ground vehicles round the aircraft while it is on its Stand. */
   readonly service: TransformNode;
+  /** The fuselage, and its front left door in the fuselage's frame (for jet bridges). */
+  readonly body: TransformNode;
+  readonly door: Vector3;
   from: Pose;
   to: Pose;
   altFrom: number;
@@ -86,6 +132,8 @@ export class AircraftLayer {
   private readonly ring: Mesh;
   private readonly vehicleParts: Record<VehicleMat, Mesh>;
   private minute = -1;
+  /** The airfield's jet bridges by Stand id; parked jets dock them. */
+  bridges: ReadonlyMap<string, JetBridge> = new Map();
   /** Reduce motion: the beacon glows steadily and the strobes stay off instead of flashing. */
   calm = false;
   /** The aircraft picked in the flight strips or alerts: drawn with a ring round it. */
@@ -202,7 +250,7 @@ export class AircraftLayer {
     const livery = liveryFor(f);
     const key = `${f.type}:${livery}`;
     const pooled = this.free.get(key)?.pop();
-    const at = { x: f.position?.x ?? 0, y: f.position?.y ?? 0, heading: f.heading };
+    const at = poseOf(f);
     const phaseMs = [...f.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7);
     if (pooled) {
       pooled.root.setEnabled(true);
@@ -259,7 +307,7 @@ export class AircraftLayer {
       props.push(hub);
     }
     const service = this.buildService(root, f.type, drawScale(f.type), phaseMs);
-    return { key, root, gear, nav, beacons, strobes, beam, props, discs, service, from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs };
+    return { key, root, gear, nav, beacons, strobes, beam, props, discs, service, body, door: frontDoor(f.type), from: at, to: { ...at }, altFrom: f.altitude, altTo: f.altitude, phaseMs };
   }
 
   private release(v: Visual): void {
@@ -284,6 +332,7 @@ export class AircraftLayer {
     for (const m of this.masters.values()) if (m.lit) m.lit.emissiveColor = Color3.White().scale(litWindows);
     const lightsOn = darkness > 0.1;
     let ringed = false;
+    const docked = new Set<JetBridge>();
     for (const f of flights) {
       if (!f.position) continue;
       let v = this.visuals.get(f.id);
@@ -293,7 +342,7 @@ export class AircraftLayer {
       }
       if (stepped) {
         v.from = v.to;
-        v.to = { x: f.position.x, y: f.position.y, heading: f.heading };
+        v.to = poseOf(f);
         v.altFrom = v.altTo;
         v.altTo = f.altitude;
         // a long jump (onto a Stand, a new phase) is not a glide
@@ -303,10 +352,10 @@ export class AircraftLayer {
         }
       }
       const k = minute < 0 ? 1 : fraction;
-      const turn = ((((v.to.heading - v.from.heading) % 360) + 540) % 360) - 180;
-      const x = v.from.x + (v.to.x - v.from.x) * k;
-      const y = v.from.y + (v.to.y - v.from.y) * k;
-      const heading = ((v.from.heading + turn * k) * Math.PI) / 180;
+      const pose = between(v.from, v.to, k);
+      const x = pose.x;
+      const y = pose.y;
+      const heading = (pose.heading * Math.PI) / 180;
       const alt = v.altFrom + (v.altTo - v.altFrom) * k;
       const p = mapPoint(x, y, alt * CLIMB);
       v.root.position.copyFrom(p);
@@ -322,7 +371,16 @@ export class AircraftLayer {
       for (const b of v.beacons) b.m.isVisible = moving && (this.calm || (t + b.phase * 500) % 1000 < 130);
       for (const s of v.strobes) s.isVisible = !this.calm && runway && (t < 60 || (t > 160 && t < 220));
       v.beam.isVisible = lightsOn && (runway || alt > 0.01);
-      v.service.setEnabled(f.phase === 'onStand');
+      // ground vehicles and the jet bridge once the aircraft has come to a stop on its Stand
+      const settled = f.phase === 'onStand' && v.from.parked;
+      v.service.setEnabled(settled);
+      const bridge = settled && f.standId && MODELS[f.type].size !== 'small' ? this.bridges.get(f.standId) : undefined;
+      if (bridge) {
+        v.root.computeWorldMatrix(true);
+        const world = v.body.computeWorldMatrix(true);
+        bridge.dock(Vector3.TransformCoordinates(v.door, world), Vector3.TransformNormal(new Vector3(0, 0, 1), world).normalize());
+        docked.add(bridge);
+      }
       const spinning = moving || f.phase === 'holdShort';
       for (const h of v.props) if (spinning) h.rotation.x += 0.9;
       for (const d of v.discs) d.isVisible = spinning;
@@ -336,6 +394,7 @@ export class AircraftLayer {
       }
     }
     if (!ringed) this.ring.setEnabled(false);
+    for (const b of this.bridges.values()) if (!docked.has(b)) b.dock(null);
   }
 
   /**

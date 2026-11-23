@@ -172,6 +172,7 @@ export class AirportView {
     const before = new Set<object>([...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes]);
     this.airfield = buildAirfield({ scene: s, caster: (m) => this.shadows.addShadowCaster(m, false), glow: (m) => this.glow.addIncludedOnlyMesh(m) }, layout);
     this.airfieldItems = [...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes].filter((x) => !before.has(x));
+    this.aircraft.bridges = this.airfield.bridges;
     // floodlights over the aprons (a few real lights; the other masts only glow)
     for (const f of this.floods) f.dispose();
     this.floods = (this.mode === 'live' ? this.airfield.floods.slice(0, 4) : []).map((p, i) => {
