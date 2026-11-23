@@ -303,7 +303,26 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   pale green on the Tower cab) with its bars and floor slabs as matt paint; at night the lit interior shows through.
   The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and turns part
   way to a dull ground colour below the horizon (so glass seen from above still reads as sky).
-- **Ground:** mown grass with trees outside a perimeter fence round everything built. Runways are painted asphalt with
+- **Ground:** inside a perimeter fence round everything built (and the landside dressing) the grass is kept short and
+  mown in wide light and dark bands running east–west; outside it lies farmland: fields of slightly different greens
+  (a few hay-coloured, some with faint rows), soft lusher and drier patches, and fine grass detail close up, so no
+  pattern repeats. Apart from the landside's own verge trees and hedges, trees grow only outside the fence: hedgerows of dense bushes along many field edges (a tree every
+  so often, sometimes a row of poplars), copses of broadleaves and pines with bushes round their rims, and single
+  trees. There are five kinds with lumpy, slightly varied crowns (darker underneath) in several greens and sizes:
+  spreading oaks, rounder limes, slim light birches, tall narrow poplars and dark tiered spruces.
+- **Landside dressing** (decoration only, rebuilt from the layout whenever it changes; it never affects play): on the
+  landside of every Terminal and Cargo Hub (the side away from its airside) runs a two-lane access road, 16 m of dark
+  asphalt with kerbs, white edge lines and a dashed centre line, a footpath along the building and street lamps on the
+  far verge (glowing at night) with small trees between them; the roads of neighbouring buildings on the same line
+  join up. Behind the road a Terminal has a car park (four rows of marked bays, two aisles, entries at both ends,
+  most bays taken by cars in everyday colours, a hedge along the back) and a Cargo Hub a concrete lorry yard with
+  articulated lorries. One end of the road turns away from the airport as a road running off the map (the fence opens
+  for it). At each end of the building a narrow service road (lighter grey asphalt, white edge lines) runs from the
+  access road past the building to the apron, with a red-outlined equipment area beside it holding container
+  dollies, tugs and ground power units. All of it keeps to free tiles, clear of structures, Runway end zones and a
+  tile round each Runway, and is left out wherever there is no room (a building squeezed between others gets no car
+  park or service road on that side).
+- **Runways** are painted asphalt with
   side stripes, centre line, threshold bars, aiming points, rubber in the touchdown zones and their designators upright
   for the landing pilot. Taxiways are one paved surface of light concrete slabs, the same as the aprons and Stands (only
   Runways are dark asphalt); a Taxiway is 3 tiles wide for aircraft, but
@@ -360,8 +379,9 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
     Agent Station (a low building with an orange roof edge and a vehicle shed with tugs and baggage carts); Fuel Farm
     (white tanks with a blue band in a bund wall, a pipe rack and a pump house); De-icing Pad (blue-lined pad, two
     boom trucks, glycol tanks).
-  - Flood masts stand at the front corners of Terminals and Cargo Hubs; at night their heads glow and the first four
-    light the apron round them (real lights, so aircraft and vehicles there are lit too).
+  - Flood masts (28 m, matt galvanised grey, tapering) stand at the front corners of Terminals and Cargo Hubs, a little
+    out on the apron side. Each head is a frame with a service platform and two rows of four floodlight housings
+    tilted down towards the apron; at night their lenses glow and the first four masts light the apron round them (real lights, so aircraft and vehicles there are lit too).
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).

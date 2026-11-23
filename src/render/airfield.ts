@@ -1,15 +1,18 @@
 /**
- * The airfield in 3D, built from the layout: grass, trees and fence; painted Runways and Taxiways with their lights;
- * Stands and Holding Bays with markings and numbers; Terminals, Cargo Hubs, the ATC Tower and Support Buildings.
+ * The airfield in 3D, built from the layout: painted Runways and Taxiways with their lights; Stands and Holding Bays
+ * with markings and numbers; Terminals, Cargo Hubs, the ATC Tower and Support Buildings with flood masts; and round
+ * them the landside dressing (landside.ts), grass, trees and fence (scenery.ts).
  * Everything is built in code from the tile rectangles (1 tile = 16 m).
  */
-import { Color3, Mesh, MeshBuilder, PBRMaterial, StandardMaterial, TransformNode, Vector3, type Scene, type Texture } from '@babylonjs/core';
+import { Color3, Matrix, Mesh, MeshBuilder, PBRMaterial, Quaternion, StandardMaterial, TransformNode, Vector3, type Scene, type Texture } from '@babylonjs/core';
 import { runwayNames, sharesEdge, TILE_SIZE, WORLD, type AirportLayout, type Facing, type RunwayName, type Structure, type TileRect } from '../sim/layout';
 import { holdShortLines, TAXIWAY_INSET, taxiwayEdgeLights } from '../sim/markings';
 import { pbr } from './aircraftModels';
 import { buildCargoHub, buildSupport, buildTerminal, buildTower, type BuildingKit } from './buildings';
 import { groundLines, meshFrom, orient, thinInstances, type Place } from './geometry';
+import { buildLandside } from './landside';
 import { paintName } from './lettering';
+import { buildGrass, buildTrees, fieldGrid, plantCountryside, type Area } from './scenery';
 import { centreLinePaths } from './taxiLines';
 import { blots, canvasTexture, rng, speckle } from './textures';
 
@@ -91,64 +94,6 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   bridgeGlass.emissiveColor = Color3.Black();
   litGlass.push(bridgeGlass);
   const red = paint('paint-red', '#c0392b');
-
-  // ---- grass, trees, fence
-  const margin = 40 * T;
-  const grassTex = canvasTexture(scene, 'grass', 512, 512, (g, W, H) => {
-    g.fillStyle = '#5a7838';
-    g.fillRect(0, 0, W, H);
-    for (let i = 0; i < W; i += 64) {
-      g.fillStyle = (i / 64) % 2 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.04)';
-      g.fillRect(0, i, W, 64);
-    }
-    const r = rng(11);
-    for (let i = 0; i < 60; i++) {
-      g.fillStyle = `rgba(${r() < 0.5 ? '90,70,30' : '30,60,20'},${0.08 * r()})`;
-      g.beginPath();
-      g.arc(r() * W, r() * H, 10 + r() * 60, 0, Math.PI * 2);
-      g.fill();
-    }
-    speckle(g, W, H, 18000, 0.16, 2, 5);
-  }, { u: (WORLD.width * T + 2 * margin) / 120, v: (WORLD.height * T + 2 * margin) / 120 });
-  const world = box3({ x: WORLD.x0, y: WORLD.y0, w: WORLD.width, h: WORLD.height });
-  const grass = MeshBuilder.CreateGround('grass', { width: world.w + 2 * margin, height: world.d + 2 * margin }, scene);
-  grass.position.set(world.cx, 0, world.cz);
-  grass.material = textured('grass', grassTex, 0.95);
-  grass.receiveShadows = true;
-  grass.isPickable = false;
-
-  const xs = layout.structures.flatMap((s) => [s.x, s.x + s.w]);
-  const ys = layout.structures.flatMap((s) => [s.y, s.y + s.h]);
-  const fence = { x0: (Math.min(...xs) - 1.5) * T, x1: (Math.max(...xs) + 1.5) * T, z0: -(Math.max(...ys) + 1.5) * T, z1: -(Math.min(...ys) - 1.5) * T };
-  {
-    const r = rng(42);
-    const trunks: Place[] = [];
-    const crowns: Place[] = [];
-    const colours: number[] = [];
-    const greens = ['#3c5a2a', '#4a6b2f', '#355226', '#56733a', '#2f4a22'];
-    for (let i = 0; i < 900; i++) {
-      const x = world.x0 - margin * 0.8 + r() * (world.w + margin * 1.6);
-      const z = world.z0 - margin * 0.8 + r() * (world.d + margin * 1.6);
-      const s = 1.8 + r() * 2.6;
-      if (x > fence.x0 - s - 3 && x < fence.x1 + s + 3 && z > fence.z0 - s - 3 && z < fence.z1 + s + 3) continue;
-      trunks.push([x, s * 0.6, z, s * 0.12, s * 1.2, s * 0.12]);
-      crowns.push([x, s * 1.6, z, s, s * (0.9 + r() * 0.5), s]);
-      const c = Color3.FromHexString(greens[Math.floor(r() * greens.length)]!);
-      colours.push(c.r, c.g, c.b, 1);
-    }
-    const trunk = MeshBuilder.CreateCylinder('trunk', { height: 1, diameter: 1, tessellation: 6 }, scene);
-    trunk.material = pbr(scene, 'trunk', '#4a3b2b', 0.9);
-    thinInstances(trunk, trunks);
-    const crown = MeshBuilder.CreateIcoSphere('crown', { radius: 1, subdivisions: 2 }, scene);
-    crown.material = pbr(scene, 'crown', '#ffffff', 0.9);
-    ctx.caster(thinInstances(crown, crowns, new Float32Array(colours)));
-    const posts: Place[] = [];
-    for (let x = fence.x0; x <= fence.x1; x += 3) posts.push([x, 0.6, fence.z0, 0.08, 1.2, 0.08], [x, 0.6, fence.z1, 0.08, 1.2, 0.08]);
-    for (let z = fence.z0; z <= fence.z1; z += 3) posts.push([fence.x0, 0.6, z, 0.08, 1.2, 0.08], [fence.x1, 0.6, z, 0.08, 1.2, 0.08]);
-    const post = MeshBuilder.CreateBox('fence-post', { size: 1 }, scene);
-    post.material = pbr(scene, 'fence', '#9aa1a8', 0.5, 0.5);
-    thinInstances(post, posts);
-  }
 
   // ---- runways
   const names = runwayNames(layout);
@@ -394,19 +339,93 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     floods,
     label: (text, x, y, w, h, height, colour, yaw) => void decal(scene, text, x, y, w, h, height, colour, null, true, yaw),
   };
-  const metal = pbr(scene, 'metal', '#b9bec5', 0.32, 0.8);
   for (const s of layout.structures) {
     if (s.kind === 'terminal') buildTerminal(kit, s, airsideOf(s, layout));
     else if (s.kind === 'cargoHub') buildCargoHub(kit, s, airsideOf(s, layout));
     else if (s.kind === 'atcTower') buildTower(kit, s, airsideOf(s, layout));
     else if (s.kind === 'supportBuilding') buildSupport(kit, s, s.role, airsideOf(s, layout));
   }
-  // flood masts (the heads glow at night; the view turns a few of them into real lights)
+  // flood masts: galvanised lattice-grey poles with a service platform and a frame of floodlights angled down at the
+  // apron (the lamps glow at night; the view turns a few of the masts into real lights)
   if (floods.length) {
-    const mast = MeshBuilder.CreateCylinder('flood-mast', { height: 1, diameter: 0.45, tessellation: 8 }, scene);
-    mast.material = metal;
+    const steel = pbr(scene, 'flood-steel', '#9ea3a8', 0.55, 0.15);
+    const housing = pbr(scene, 'flood-housing', '#3a3e44', 0.5, 0.1);
+    const mast = MeshBuilder.CreateCylinder('flood-mast', { height: 1, diameterTop: 0.3, diameterBottom: 0.6, tessellation: 10 }, scene);
+    mast.material = steel;
     ctx.caster(thinInstances(mast, floods.map((p) => [p.x, p.y / 2, p.z, 1, p.y, 1] as Place)));
-    lightBoxes('flood-head', '#fff1cf', floods.map((p) => [p.x, p.y + 0.4, p.z, 2.6, 0.6, 1.2] as Place), 1, 0.04);
+    const frames: Matrix[] = [];
+    const platforms: Matrix[] = [];
+    const boxesOut: Matrix[] = [];
+    const lenses: Matrix[] = [];
+    const halls = layout.structures.filter((s) => s.kind === 'terminal' || s.kind === 'cargoHub');
+    const TILT = 0.5;
+    for (const p of floods) {
+      // the head faces the airside of the nearest Terminal or Cargo Hub
+      const near = halls.reduce<{ s: TileRect | null; d: number }>((best, s) => {
+        const b = box3(s);
+        const d = Math.hypot(b.cx - p.x, b.cz - p.z);
+        return d < best.d ? { s, d } : best;
+      }, { s: null, d: Infinity }).s;
+      const side = near ? airsideOf(near, layout) : 'south';
+      const [dx, dz] = { south: [0, -1], north: [0, 1], east: [1, 0], west: [-1, 0] }[side] as [number, number];
+      const yaw = Math.atan2(dx, dz);
+      const at = (along: number, up: number, out: number, sx: number, sy: number, sz: number, pitch = 0) =>
+        Matrix.Compose(new Vector3(sx, sy, sz), Quaternion.RotationYawPitchRoll(yaw, pitch, 0), new Vector3(p.x + dz * along + dx * out, p.y + up, p.z - dx * along + dz * out));
+      platforms.push(at(0, -0.9, 0.2, 3.6, 0.12, 1.4));
+      frames.push(at(0, 0.3, 0.1, 3.4, 0.14, 0.14), at(0, -0.6, 0.1, 3.4, 0.14, 0.14), at(-1.65, -0.15, 0.1, 0.14, 1.0, 0.14), at(1.65, -0.15, 0.1, 0.14, 1.0, 0.14));
+      for (const row of [0.2, -0.5]) {
+        for (const col of [-1.2, -0.4, 0.4, 1.2]) {
+          boxesOut.push(at(col, row, 0.35, 0.7, 0.6, 0.35, TILT));
+          lenses.push(at(col, row - 0.09, 0.53, 0.6, 0.5, 0.04, TILT));
+        }
+      }
+    }
+    const box = (name: string, list: Matrix[], mat: PBRMaterial) => {
+      const m = MeshBuilder.CreateBox(name, { size: 1 }, scene);
+      m.material = mat;
+      m.isPickable = false;
+      ctx.caster(thinInstances(m, list));
+    };
+    box('flood-platform', platforms, steel);
+    box('flood-frame', frames, steel);
+    box('flood-housing', boxesOut, housing);
+    const lens = MeshBuilder.CreateBox('flood-lens', { size: 1 }, scene);
+    lens.material = lightMat('flood-lens', '#fff1cf', 0.08);
+    lens.isPickable = false;
+    ctx.glow(thinInstances(lens, lenses));
+  }
+
+  // ---- landside dressing, grass, trees and fence (decoration only: src/render/landside.ts and scenery.ts)
+  const margin = 40 * T;
+  const world = box3({ x: WORLD.x0, y: WORLD.y0, w: WORLD.width, h: WORLD.height });
+  const ground: Area = { x0: world.x0 - margin, x1: world.x1 + margin, z0: world.z0 - margin, z1: world.z1 + margin };
+  const land = buildLandside(scene, ctx.caster, layout, (s) => airsideOf(s, layout), concrete, ground);
+  lightBoxes('street-lamp', '#ffd59a', [...land.lamps], 1, 0.05);
+  const xs = layout.structures.flatMap((s) => [s.x * T, (s.x + s.w) * T]);
+  const zs = layout.structures.flatMap((s) => [-s.y * T, -(s.y + s.h) * T]);
+  const fence: Area = {
+    x0: Math.min(...xs, ...land.areas.map((a) => a.x0 - 4)) - 1.5 * T,
+    x1: Math.max(...xs, ...land.areas.map((a) => a.x1 + 4)) + 1.5 * T,
+    z0: Math.min(...zs, ...land.areas.map((a) => a.z0 - 4)) - 1.5 * T,
+    z1: Math.max(...zs, ...land.areas.map((a) => a.z1 + 4)) + 1.5 * T,
+  };
+  const fields = fieldGrid(ground);
+  buildGrass(scene, ground, fence, fields);
+  const onRoad = (x: number, z: number, pad: number) => land.roads.some((a) => x > a.x0 - pad && x < a.x1 + pad && z > a.z0 - pad && z < a.z1 + pad);
+  const clear = (x: number, z: number, rad: number) => (x > fence.x0 - rad - 4 && x < fence.x1 + rad + 4 && z > fence.z0 - rad - 4 && z < fence.z1 + rad + 4) || onRoad(x, z, rad + 2);
+  const middle = [(fence.x0 + fence.x1) / 2, (fence.z0 + fence.z1) / 2] as const;
+  buildTrees(scene, ctx.caster, [...plantCountryside(ground, fields, middle, clear), ...land.trees]);
+  {
+    const posts: Place[] = [];
+    const post = (x: number, z: number) => {
+      if (!onRoad(x, z, 0.5)) posts.push([x, 0.9, z, 0.1, 1.8, 0.1]);
+    };
+    for (let x = fence.x0; x <= fence.x1; x += 3) post(x, fence.z0), post(x, fence.z1);
+    for (let z = fence.z0; z <= fence.z1; z += 3) post(fence.x0, z), post(fence.x1, z);
+    const m = MeshBuilder.CreateBox('fence-post', { size: 1 }, scene);
+    m.material = pbr(scene, 'fence', '#8e959b', 0.6, 0.1);
+    m.isPickable = false;
+    thinInstances(m, posts);
   }
   return { lights, litGlass, floods, bridges };
 }
