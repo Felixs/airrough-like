@@ -294,7 +294,8 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   to three times the starting distance), and it can't go below about 20° above the ground or wander far off the map.
   "⌂ View" (key V) goes back to the starting view. Far away the airfield fades into haze under a sky that follows the
   Day. Build Mode looks straight down at the whole map without perspective (tiles stay square) and can zoom and pan
-  (Controls). Scale: a tile is 16 m, so Medium aircraft fit their 3-tile Stands at real size.
+  (Controls). Land Plots not yet owned are dimmed, each with its price as plain text over its middle (hidden when
+  zoomed out so far the plot is too small to read). Scale: a tile is 16 m, so Medium aircraft fit their 3-tile Stands at real size.
 - **Lighting:** physically based materials (painted metal with a clear coat, glass, concrete, grass), a sun that moves
   from east to west through the Day and casts real shadows, sky reflections on paint and glass, tone mapping and a
   soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion). The sun
