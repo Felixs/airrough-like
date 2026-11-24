@@ -26,6 +26,8 @@ export interface BuildingKit {
   readonly lamp: (name: string, hex: string, day?: number) => StandardMaterial;
   /** Flood masts (world units); the view turns the first few into real lights. */
   readonly floods: Vector3[];
+  /** Where two buildings meet: no flood mast there. */
+  readonly noFloods: Vector3[];
   /** A building name painted flat at `height` (world units) over sim point (x, y), turned by `yaw` (radians). */
   readonly label: (text: string, x: number, y: number, w: number, h: number, height: number, colour: string, yaw?: number) => void;
 }
@@ -330,10 +332,17 @@ class Frame {
     const yaw = this.side === 'east' || this.side === 'west' ? TURN[this.side] : 0;
     this.kit.label(text, p.x, -p.z, w * METRE, h * METRE, p.y + 0.03, colour, yaw);
   }
-  /** A flood mast at a local point; one already standing within 24 m (the next building's, where two meet) serves both. */
+  /**
+   * A flood mast at a local point. Where two buildings meet, their masts would stand in front of the join, out in the
+   * first Stand: there neither gets one (the masts at the outer ends of the joined frontage light it).
+   */
   flood(x: number, y: number, z: number): void {
     const p = this.world(x, y, z);
-    if (!this.kit.floods.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 24 * METRE)) this.kit.floods.push(p);
+    const near = this.kit.floods.findIndex((q) => Math.hypot(q.x - p.x, q.z - p.z) < 24 * METRE);
+    if (near >= 0) {
+      this.kit.floods.splice(near, 1);
+      this.kit.noFloods.push(p);
+    } else if (!this.kit.noFloods.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 24 * METRE)) this.kit.floods.push(p);
   }
   /**
    * A name sign on short posts on a roof edge, facing the airside: white capitals on a dark plate `h` m tall (as wide
@@ -403,7 +412,12 @@ export function buildTerminal(kit: BuildingKit, s: TileRect, airside: Facing): v
   const zl = zN - 12; // landside glass; the canopy runs on to the edge
   const ry = 19.5; // underside of the roof deck
   const inner = L - 6; // between the stone end walls
-  const g = (kind: string, w: number) => glass(kit, `${kind}-${s.x}-${s.y}`, w, GLASS[kind]!);
+  // under the roof deck the glass is in shade, so it shows less of the bright sky
+  const g = (kind: string, w: number) => {
+    const m = glass(kit, `${kind}-${s.x}-${s.y}`, w, GLASS[kind]!);
+    if (kind !== 'slot') m.environmentIntensity = 0.7;
+    return m;
+  };
   f.box(inner, 6.6, zh - zg, 0, 0, (zg + zh) / 2, M.darkSteel);
   f.face(inner, 6, 0, 0, zg - 0.02, 's', g('gate', inner));
   f.box(inner + 0.4, 1, zh - zg + 0.4, 0, 6, (zg + zh) / 2, M.stone);
@@ -689,6 +703,16 @@ export function buildSupport(kit: BuildingKit, s: TileRect, role: SupportRole, f
       part(2.6, 2.2, 2.2, 0, 1.7, 5, M.white);
       part(0.6, 0.6, 11, 0, 7, -1, M.offWhite, -0.75);
       part(1.8, 1.6, 1.8, 0, 10.8, 3.2, body);
+      // six wheels down to the pad (which is raised 0.3 m)
+      for (const wz of [-2.6, 0, 4.9])
+        for (const wx of [-1.15, 1.15]) {
+          const w = MeshBuilder.CreateCylinder('de-ice-wheel', { diameter: 0.9, height: 0.45, tessellation: 12 }, kit.scene);
+          w.parent = r;
+          w.rotation.z = Math.PI / 2;
+          w.position.set(wx, 0.75, wz);
+          w.material = M.rubber;
+          kit.caster(w);
+        }
     }
     for (const x of [L / 2 - 5, L / 2 - 9]) f.cyl(3, 6, x, 0, zN - 5, M.white, { tess: 16 });
   }

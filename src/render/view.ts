@@ -205,7 +205,7 @@ export class AirportView {
     for (const item of this.airfieldItems) item.dispose();
     const s = this.scene;
     const before = new Set<object>([...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes]);
-    this.airfield = buildAirfield({ scene: s, caster: (m) => this.shadows.addShadowCaster(m, false), glow: (m) => this.glow.addIncludedOnlyMesh(m) }, layout);
+    this.airfield = buildAirfield({ scene: s, caster: (m) => this.shadows.addShadowCaster(m, false), glow: (m) => this.glow.addIncludedOnlyMesh(m), dressing: this.mode === 'live' }, layout);
     // painted pools of light on the ground at night (under every flood mast, on Stands, along building fronts)
     this.pools = this.mode === 'live' ? buildLightPools(s, layout, this.airfield.floods) : null;
     this.airfieldItems = [...s.meshes, ...s.materials, ...s.textures, ...s.transformNodes].filter((x) => !before.has(x));
@@ -312,7 +312,8 @@ export class AirportView {
     for (const l of this.airfield?.lights ?? []) l.mat.emissiveColor = l.colour.scale(l.day + (1 - l.day) * aircraftGlow);
     for (const g of this.airfield?.litGlass ?? []) g.emissiveColor = Color3.White().scale(1.3 * aircraftGlow);
     this.glow.intensity = 0.35 + 0.9 * aircraftGlow;
-    this.pipeline.imageProcessing.exposure = 1 + 0.4 * aircraftGlow + 0.12 * golden * day;
+    // a little brighter at golden hour: the low sun leaves much of a wide view in shadow
+    this.pipeline.imageProcessing.exposure = 1 + 0.4 * aircraftGlow + 0.22 * golden * day;
     this.pipeline.imageProcessing.contrast = 1.12 + 0.08 * day;
     return darkness;
   }
@@ -634,7 +635,7 @@ export class AirportView {
 
   private label(text: string, r: TileRect): Mesh {
     const tex = canvasTexture(this.scene, 'plot-label', 512, 64, (g) => {
-      g.fillStyle = 'rgba(11,18,16,0.6)';
+      g.fillStyle = 'rgba(11,18,16,0.72)';
       g.fillRect(0, 0, 512, 64);
       g.fillStyle = '#e6efeb';
       g.font = '700 44px "JetBrains Mono", monospace';
@@ -648,11 +649,13 @@ export class AirportView {
     mat.emissiveTexture = tex;
     mat.useAlphaFromDiffuseTexture = true;
     mat.backFaceCulling = false;
+    mat.fogEnabled = false;
     const w = r.w * T * 0.9;
     const m = MeshBuilder.CreateGround('plot-label', { width: w, height: w / 8 }, this.scene);
     m.position.set((r.x + r.w / 2) * T, 1.4, -(r.y + r.h / 2) * T);
     m.material = mat;
-    m.renderingGroupId = 1;
+    // its own group, drawn after the dimmed plots and grid (group 1), so nothing darkens it
+    m.renderingGroupId = 2;
     m.isPickable = false;
     this.overlay.push(mat, tex);
     return m;

@@ -300,7 +300,8 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   soft glow round lights; at the best quality also soft contact shadows where things meet (ambient occlusion). The sun
   is the strong light and the sky only a weaker, cooler fill, so sunlit and shaded sides differ clearly. Glazing is
   tinted mirror glass: by day it shows the sky (lighter towards the top of each pane, pale blue-grey on the façades,
-  pale green on the Tower cab) with its bars and floor slabs as matt paint; at night the lit interior shows through.
+  pale green on the Tower cab; glass under the Terminal's roof deck is in shade and shows less of it) with its bars
+  and floor slabs as matt paint; at night the lit interior shows through.
   The sky the scene reflects is blue overhead, coloured at the horizon (gold at sunrise and sunset) and turns part
   way to a dull ground colour below the horizon (so glass seen from above still reads as sky).
 - **Ground:** inside a perimeter fence round everything built (and the landside dressing) the grass is kept short and
@@ -310,7 +311,8 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   so often, sometimes a row of poplars), copses of broadleaves and pines with bushes round their rims, and single
   trees. There are five kinds with lumpy, slightly varied crowns (darker underneath) in several greens and sizes:
   spreading oaks, rounder limes, slim light birches, tall narrow poplars and dark tiered spruces.
-- **Landside dressing** (decoration only, rebuilt from the layout whenever it changes; it never affects play): on the
+- **Landside dressing** (decoration only, rebuilt from the layout whenever it changes; it never affects play, and
+  Build Mode leaves it out so free tiles look free): on the
   landside of every Terminal and Cargo Hub (the side away from its airside) runs a two-lane access road, 16 m of dark
   asphalt with kerbs, white edge lines and a dashed centre line, a footpath along the building and street lamps on the
   far verge (glowing at night) with small trees between them; the roads of neighbouring buildings on the same line
@@ -379,14 +381,12 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
     Office (four glass storeys behind stone fins); Airline Office (three glass storeys under a bronze crown); Ramp
     Agent Station (a low building with an orange roof edge and a vehicle shed with tugs and baggage carts); Fuel Farm
     (white tanks with a blue band in a bund wall, a pipe rack, a pump house and two lamp posts); De-icing Pad (blue-lined pad, two
-    boom trucks, glycol tanks).
+    boom trucks on six wheels, glycol tanks).
   - Flood masts (28 m, matt galvanised grey, tapering) stand at the front corners of Terminals and Cargo Hubs, a little
-    out on the apron side; where two buildings meet, one mast serves both. Each head is a frame with a service
+    out on the apron side; where two buildings meet neither has a mast at the join (it would stand in the first Stand),
+    so a joined frontage has masts only at its outer ends. Each head is a frame with a service
     platform and two rows of four floodlight housings tilted down towards the apron; at night their lenses glow and the
     first four masts light the apron round them (real lights, so aircraft and vehicles there are lit too).
-  - Names painted on buildings and in front of them (TERMINAL, CARGO, the Support Buildings') run along the building's
-    front: on buildings facing south or north they read from the south, on buildings facing east or west from the
-    airside.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).
@@ -398,7 +398,7 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   height (strongest below about 12°, gone above about 34°, so roughly 06:00–08:00 and 18:00–20:00): the sunlight turns
   gold and stays strong, so shadows are long and crisp and the walls facing the sun glow, while the sky overhead stays
   blue (a cool fill in the shadows) and only the horizon turns gold. The haze in the distance is pale blue by day and a
-  light peach at golden hour (never brown), slightly thinner then; at night it is dark blue. Midday has a little more
+  light peach at golden hour (never brown), slightly thinner then, and the picture is a little brighter then; at night it is dark blue. Midday has a little more
   contrast than the rest of the Day. At night the sun gives way to dim blue moonlight, and lights, lit windows and
   glass glow, and pools of warm light lie on the ground: a wide one under every flood mast, a softer one on every
   Stand and a row of small ones along each side of a building that meets paving. The pools are painted on the ground,
