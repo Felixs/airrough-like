@@ -32,6 +32,7 @@ export function showContractOffer(root: HTMLElement, run: RunState, onChoice: (i
   const signed = run.contracts ?? [];
   el.innerHTML = `
     <div class="card contract-offer">
+      <button type="button" class="options-button corner" data-options aria-keyshortcuts="O" title="Options (O)">⚙ Options</button>
       <h2>Week ${won} won · pick an Airline Contract</h2>
       <p class="lead">It lasts the rest of the Run: it changes which flights come and pays a bonus, so you know which way to grow the airport.</p>
       <div class="contracts">${offer.map((c, i) => contractCard(c, i)).join('')}</div>

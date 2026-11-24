@@ -29,6 +29,7 @@ export function showScoreScreen(root: HTMLElement, run: RunState, handlers: Scor
   const rows = (pairs: Array<[string, string]>) => pairs.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   el.innerHTML = `
     <div class="card report score ${won ? 'won' : 'lost'}">
+      <button type="button" class="options-button corner" data-options aria-keyshortcuts="O" title="Options (O)">⚙ Options</button>
       <div class="banner">${won ? '🏆 Run won' : '✈ Run over'}<small>${won
         ? 'You survived all four Weeks. Finish now, or keep going in Endless Mode.'
         : `The Daily Quota was missed${run.endless ? ' in Endless Mode' : ''}.`}</small></div>
