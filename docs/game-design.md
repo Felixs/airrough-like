@@ -359,7 +359,7 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   Building names are clean sans-serif capitals with open letter spacing (not the UI's monospace font, which Stand
   numbers keep): painted on the roof of a Terminal or Cargo Hub (dark grey, between two skylight bands, readable from
   above) and on the ground in front of the Tower and Support Buildings (pale), always running along the building and
-  never upside down from the south (bottom to top on buildings facing east or west). Terminals and Cargo Hubs also
+  never upside down (on buildings facing east or west they read from the airside). Terminals and Cargo Hubs also
   carry a name sign on their airside roof edge: white capitals on a dark plate, lit at night.
   - **Terminal** ("Deck"): gate lounges behind glass at apron level, a light stone floor band, a hall about 20 m tall
     glazed with horizontal bars, stone end walls with tall slot windows, and one flat roof deck over everything on
@@ -373,15 +373,20 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   - **ATC Tower:** a white two-storey base with ribbon windows, a slim round white shaft with a lit stair slit, flared
     equipment floors with a lit window band, a 12-sided cab of outward-sloping green-tinted glass (a faint green glow
     at night), a roof disc with antennas and a radar dome, red obstruction lights, and TWR on the ground.
-  - **Support Buildings**, each with its name on the ground in front: Fire & Rescue Station (white with a red band,
-    glazed bay doors lit white at night, a drill tower, two crash tenders on the forecourt, a blue beacon); Admin
+  - **Support Buildings**, each with its name on the ground in front (on the De-icing Pad, on the pad): Fire & Rescue
+    Station (white with a red band, glazed bay doors lit white at night, a drill tower, two crash tenders on the
+    forecourt facing out, a blue beacon on the first); Admin
     Office (four glass storeys behind stone fins); Airline Office (three glass storeys under a bronze crown); Ramp
     Agent Station (a low building with an orange roof edge and a vehicle shed with tugs and baggage carts); Fuel Farm
-    (white tanks with a blue band in a bund wall, a pipe rack and a pump house); De-icing Pad (blue-lined pad, two
+    (white tanks with a blue band in a bund wall, a pipe rack, a pump house and two lamp posts); De-icing Pad (blue-lined pad, two
     boom trucks, glycol tanks).
   - Flood masts (28 m, matt galvanised grey, tapering) stand at the front corners of Terminals and Cargo Hubs, a little
-    out on the apron side. Each head is a frame with a service platform and two rows of four floodlight housings
-    tilted down towards the apron; at night their lenses glow and the first four masts light the apron round them (real lights, so aircraft and vehicles there are lit too).
+    out on the apron side; where two buildings meet, one mast serves both. Each head is a frame with a service
+    platform and two rows of four floodlight housings tilted down towards the apron; at night their lenses glow and the
+    first four masts light the apron round them (real lights, so aircraft and vehicles there are lit too).
+  - Names painted on buildings and in front of them (TERMINAL, CARGO, the Support Buildings') run along the building's
+    front: on buildings facing south or north they read from the south, on buildings facing east or west from the
+    airside.
 - **Grass strips** look like mown grass, not paving: a lighter green strip with mowing bands across it, white
   boundary markers along both edges and a row at each threshold, small designators, no centre line and never lights
   (the Runway Surface upgrade leaves them grass, and its offer says so when the airport has one).

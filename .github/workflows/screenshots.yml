@@ -6,6 +6,12 @@ on:
   # Manual only (Actions → Screenshots → Run workflow, pick a branch): screens change too often during early
   # development to regenerate them on every push.
   workflow_dispatch:
+    inputs:
+      shots:
+        description: "all, or buildings: only the building close-ups in docs/screenshots/look/ (a quick check)"
+        type: choice
+        options: [all, buildings]
+        default: all
 
 permissions:
   contents: write
@@ -27,6 +33,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - name: Take screenshots
+        env:
+          SHOTS: ${{ inputs.shots }}
         run: |
           npx vite preview --port 4173 --strictPort &
           for i in $(seq 1 30); do curl -sf http://localhost:4173/ > /dev/null && break; sleep 1; done

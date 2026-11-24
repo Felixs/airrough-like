@@ -322,13 +322,18 @@ class Frame {
     return Vector3.TransformCoordinates(new Vector3(x, y, z), this.root.computeWorldMatrix(true));
   }
   /**
-   * A name painted flat along the building's length, centred on a local point. It reads left to right from the south
-   * (buildings facing north or south) or bottom to top (facing east or west), never upside down.
+   * A name painted flat at a local point, `w` along the building's length: it reads from the south on buildings facing
+   * south or north and from the airside on buildings facing east or west.
    */
   label(text: string, x: number, y: number, z: number, w: number, h: number, colour = '#4a4f55'): void {
     const p = this.world(x, y, z);
-    const yaw = this.side === 'east' || this.side === 'west' ? -Math.PI / 2 : 0;
+    const yaw = this.side === 'east' || this.side === 'west' ? TURN[this.side] : 0;
     this.kit.label(text, p.x, -p.z, w * METRE, h * METRE, p.y + 0.03, colour, yaw);
+  }
+  /** A flood mast at a local point; one already standing within 24 m (the next building's, where two meet) serves both. */
+  flood(x: number, y: number, z: number): void {
+    const p = this.world(x, y, z);
+    if (!this.kit.floods.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 24 * METRE)) this.kit.floods.push(p);
   }
   /**
    * A name sign on short posts on a roof edge, facing the airside: white capitals on a dark plate `h` m tall (as wide
@@ -437,7 +442,7 @@ export function buildTerminal(kit: BuildingKit, s: TileRect, airside: Facing): v
     f.label('TERMINAL', 0, ry + 2.02, (za + zb) / 2, Math.min(L * 0.6, 110), Math.min(11, zb - za - 1));
     f.sign('TERMINAL', 0, ry + 2, d0 + 1.2, 4.2, M.darkSteel);
   }
-  for (const x of [-L / 2 - 6, L / 2 + 6]) kit.floods.push(f.world(x, 28, zS - 6));
+  for (const x of [-L / 2 - 6, L / 2 + 6]) f.flood(x, 28, zS - 6);
   f.finish();
 }
 
@@ -500,7 +505,7 @@ export function buildCargoHub(kit: BuildingKit, s: TileRect, airside: Facing): v
     f.label('CARGO', hx, hh + 0.45, (za + zb) / 2, Math.min(hallL * 0.55, 60), Math.min(11, zb - za - 1), '#3a3f45');
     f.sign('CARGO', hx, hh + 0.2, zf + 0.6, 3.6, M.darkSteel);
   }
-  for (const x of [-L / 2 - 6, L / 2 + 6]) kit.floods.push(f.world(x, 28, zS - 6));
+  for (const x of [-L / 2 - 6, L / 2 + 6]) f.flood(x, 28, zS - 6);
   f.finish();
 }
 
@@ -608,11 +613,11 @@ export function buildSupport(kit: BuildingKit, s: TileRect, role: SupportRole, f
     }
   } else if (role === 'fireRescueStation') {
     const bw = L - 14;
-    const zf = zS + 14; // forecourt in front for the crash tenders
+    const zf = zS + 18; // forecourt in front for the crash tenders, behind the name
     const bx = -7;
     f.box(bw, 9, zN - 2 - zf, bx, 0, (zf + zN - 2) / 2, M.offWhite);
     f.box(bw + 0.4, 1.4, zN - 2 - zf + 0.4, bx, 9, (zf + zN - 2) / 2, M.red);
-    f.box(bw - 0.6, 0.2, zN - 2 - zf - 0.6, bx, 10.2, (zf + zN - 2) / 2, M.roof);
+    f.box(bw - 0.6, 0.15, zN - 2 - zf - 0.6, bx, 10.4, (zf + zN - 2) / 2, M.roof);
     const bay = glass(kit, `fire-bay-${id}`, 7, { bay: 7, h: 7, hstep: 0.9, vstep: 7, seed: 41, top: '#56606a', bottom: '#2a3038', warm: [235, 240, 255] });
     const n = Math.max(1, Math.floor(bw / 8.2));
     for (let k = 0; k < n; k++) {
@@ -630,15 +635,17 @@ export function buildSupport(kit: BuildingKit, s: TileRect, role: SupportRole, f
     const nT = Math.min(2, n);
     for (let k = 0; k < nT; k++) {
       const x = bx - bw / 2 + (k + 0.5) * (bw / n);
-      const z = zS + 7;
+      const z = zS + 11.2;
       f.box(4, 3.6, 12, x, 0.9, z, truck);
       f.box(4.1, 0.5, 12.1, x, 2.2, z, M.white);
       f.box(3.6, 2.2, 2.6, x, 1.4, z - 6.4, truck);
       for (const wz of [-4, -0.5, 3.5]) for (const sxx of [-2, 2]) f.cyl(1.4, 0.8, x + sxx, 0.7, z + wz, M.rubber, { lying: true, tess: 12 });
     }
-    f.lamps(kit.lamp(`fire-blue-${id}`, '#2a6bff', 0.3), [[bx - bw / 2 + 0.5 * (bw / n), 4.8, zS + 0.8]], 0.6);
+    f.lamps(kit.lamp(`fire-blue-${id}`, '#2a6bff', 0.3), [[bx - bw / 2 + 0.5 * (bw / n), 4.6, zS + 11.2 - 5.2]], 0.6); // on the first tender's cab end
   } else if (role === 'fuelFarm') {
-    for (const [w, d, x, z] of [[L - 4, 0.6, 0, zN - 2], [L - 4, 0.6, 0, zS + 2], [0.6, D - 4, -L / 2 + 2, 0], [0.6, D - 4, L / 2 - 2, 0]] as const) f.box(w, 1.4, d, x, 0, z, M.offWhite);
+    // the bund wall, behind the name
+    const zb = zS + 3.6;
+    for (const [w, d, x, z] of [[L - 4, 0.6, 0, zN - 2], [L - 4, 0.6, 0, zb], [0.6, zN - 2 - zb, -L / 2 + 2, (zb + zN - 2) / 2], [0.6, zN - 2 - zb, L / 2 - 2, (zb + zN - 2) / 2]] as const) f.box(w, 1.4, d, x, 0, z, M.offWhite);
     const tank = pbr(kit.scene, `tank-${id}`, '#e8e9e8', 0.45, 0.3);
     const band = pbr(kit.scene, `tank-band-${id}`, '#2f6f8f', 0.5, 0.3);
     const n = Math.max(1, Math.floor((L - 6) / 14));
@@ -651,8 +658,9 @@ export function buildSupport(kit: BuildingKit, s: TileRect, role: SupportRole, f
       f.cyl(1, 1.6, x, 9.5, z, M.offWhite, { top: 2, bottom: dia, tess: 32 });
     }
     for (let k = 0; k < 3; k++) f.cyl(0.6, L - 8, 0, 1.6 + k * 0.8, zS + 5, k === 1 ? M.hvac : M.yellow, { lying: true, tess: 10 });
-    f.box(8, 4, 6, L / 2 - 8, 0, zS + 6, M.white);
-    f.lamps(M.whiteLamp, [[-L / 2 + 3, 6, zS + 3], [L / 2 - 3, 6, zS + 3]], 0.7);
+    f.box(8, 4, 6, L / 2 - 8, 0, zS + 7, M.white);
+    for (const x of [-L / 2 + 3, L / 2 - 3]) f.cyl(0.3, 6, x, 0, zS + 4.5, M.steel, { tess: 6 });
+    f.lamps(M.whiteLamp, [[-L / 2 + 3, 6.1, zS + 4.5], [L / 2 - 3, 6.1, zS + 4.5]], 0.7);
   } else {
     // de-icing pad: concrete with blue lines, two boom trucks, glycol tanks
     const pad = MeshBuilder.CreateGround('de-icing', { width: L - 2, height: D - 2 }, kit.scene);
@@ -661,7 +669,8 @@ export function buildSupport(kit: BuildingKit, s: TileRect, role: SupportRole, f
     pad.material = pbr(kit.scene, `de-icing-${id}`, '#a6a7a2', 0.9);
     pad.receiveShadows = true;
     const blue = pbr(kit.scene, `de-icing-blue-${id}`, '#7fc4ff', 0.6);
-    for (const [w, d, x, z] of [[L - 4, 0.5, 0, zN - 2], [L - 4, 0.5, 0, zS + 2], [0.5, D - 4, -L / 2 + 2, 0], [0.5, D - 4, L / 2 - 2, 0]] as const) f.box(w, 0.06, d, x, 0.3, z, blue);
+    const zb = zS + 4.6; // the front line, behind the name
+    for (const [w, d, x, z] of [[L - 4, 0.5, 0, zN - 2], [L - 4, 0.5, 0, zb], [0.5, zN - 2 - zb, -L / 2 + 2, (zb + zN - 2) / 2], [0.5, zN - 2 - zb, L / 2 - 2, (zb + zN - 2) / 2]] as const) f.box(w, 0.06, d, x, 0.3, z, blue);
     const body = pbr(kit.scene, `de-ice-truck-${id}`, '#e9a320', 0.45, 0.2, true);
     for (const [x, ry] of [[-L / 4, 0.4], [L / 4 - 4, -0.5]] as const) {
       const r = new TransformNode('de-ice-truck', kit.scene);
@@ -683,6 +692,8 @@ export function buildSupport(kit: BuildingKit, s: TileRect, role: SupportRole, f
     }
     for (const x of [L / 2 - 5, L / 2 - 9]) f.cyl(3, 6, x, 0, zN - 5, M.white, { tess: 16 });
   }
-  f.label(NAMES[role], 0, 0.12, zS + 1.6, Math.min(L - 4, 34), 3.2, '#cfd8d4');
+  // the De-icing Pad's name is painted on the pad (it stands 0.3 m proud), the others' on the ground
+  const onPad = role === 'deIcingPad';
+  f.label(NAMES[role], 0, onPad ? 0.42 : 0.12, onPad ? zS + 2.6 : zS + 1.6, Math.min(L - 4, 34), 3.2, '#cfd8d4');
   f.finish();
 }
