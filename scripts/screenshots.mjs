@@ -121,6 +121,14 @@ if (!buildingsOnly) {
   await page.waitForSelector('.contract-offer');
   await settle();
   await page.screenshot({ path: out('contract-offer') });
+
+// Plan Mode in the light look, with the signed Contract in its card
+await page.click('button[data-contract="0"]');
+await page.waitForSelector('.contracts-card');
+await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+await settle();
+await page.screenshot({ path: out('plan-light') });
+await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
 }
 
 // ---- The look: the Live Day at five times of day, and close-ups, all at the best quality and 1.5x pixel density.
