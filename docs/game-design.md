@@ -463,7 +463,7 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
   alerts start with what happened (CRASH, MAYDAY, …).
 - **Text** is at least 11 px; the palette keeps every text colour at 6:1 contrast or better on the dark panels.
 - **Screen sizes:** below 1200 px wide the side panels narrow and the top bar wraps; below 900 px the map no longer
-  fills the window and the Live Day stacks (map on top, flight strips and Tower panel below), Plan Mode becomes one column and Build Mode puts its tools above
+  fills the window and the Live Day stacks (map on top, flight strips and Tower panel below), Plan Mode becomes one column (its header wraps, with Start Day as a full-width button under it) and Build Mode puts its tools above
   the map.
 - **Reduce motion** (Options; follows the system setting until changed): aircraft beacons glow steadily and strobes
   stay off instead of flashing.
