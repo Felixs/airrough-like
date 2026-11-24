@@ -262,9 +262,22 @@ const takeBest = async (name, aim, clean) => {
 const parked = (a, b = 1.15, r = 34) => ({ what: 'parked', r, a, b });
 /** Lets the Day run about a game minute at 1×, so an aircraft that has just stopped gets its vehicles and jet bridge. */
 const settleParked = async () => {
-  await speedTo('1');
-  await lp.waitForTimeout(150);
-  await speedTo('0');
+  // run at 1× until the game clock has moved on a whole minute and a few frames have drawn it (frames are slow here)
+  await lp.evaluate(
+    () =>
+      new Promise((done) => {
+        const start = window.aab.sim().clock.minute;
+        document.querySelector('[data-speed="1"]').click();
+        const tick = () => {
+          if (window.aab.sim().clock.minute < start + 1) return void setTimeout(tick, 20);
+          document.querySelector('[data-speed="0"]').click();
+          const drawn = window.aab.frames();
+          const wait = () => (window.aab.frames() < drawn + 3 ? setTimeout(wait, 50) : done());
+          wait();
+        };
+        tick();
+      }),
+  );
 };
 const terminal = (a, b = 0.95) => ({ what: 'terminal', r: 95, a, b });
 /** A point of the map in tiles. */

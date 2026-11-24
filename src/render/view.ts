@@ -14,7 +14,6 @@ import { AircraftLayer } from './aircraftLayer';
 import { buildAirfield, type Airfield } from './airfield';
 import { buildLightPools, type LightPools } from './lightPools';
 import { PerfOverlay } from './perfOverlay';
-import { canvasTexture } from './textures';
 
 const GROUND_NIGHT = new Color3(0.02, 0.025, 0.03);
 const GROUND_DAY = new Color3(0.42, 0.46, 0.4);
@@ -403,6 +402,22 @@ export class AirportView {
       // the tile grid fades in as tiles get big enough to aim at (faint when the whole map shows)
       const tilePx = (T / viewW) * cssW;
       if (this.grid) this.grid.color = Color3.Lerp(new Color3(0.3, 0.42, 0.2), new Color3(0.85, 0.9, 0.85), 0.15 + 0.6 * clamp((tilePx - 8) / 16, 0, 1));
+      this.placePlotLabels();
+    }
+  }
+
+  /** Puts each Land Plot price over the middle of its plot, sized to it (hidden when the plot is too small to read). */
+  private placePlotLabels(): void {
+    const at = this.canvas.dataset.tiles ? (JSON.parse(this.canvas.dataset.tiles) as { x: number; y: number; size: number }) : null;
+    if (!at) return;
+    const left = this.canvas.offsetLeft;
+    const top = this.canvas.offsetTop;
+    for (const { el, r } of this.plotLabels) {
+      const w = r.w * at.size;
+      el.style.display = w < 70 ? 'none' : '';
+      el.style.left = `${left + at.x + (r.x + r.w / 2) * at.size}px`;
+      el.style.top = `${top + at.y + (r.y + r.h / 2) * at.size}px`;
+      el.style.fontSize = `${Math.round(clamp(w * 0.07, 10, 16))}px`;
     }
   }
 
@@ -570,6 +585,8 @@ export class AirportView {
   // ---- Build Mode overlay: grid, Land Plots, no-build zones, placement ghost
 
   private overlay: Array<{ dispose(): void }> = [];
+  /** Build Mode: Land Plot prices as page text over the map (always crisp and readable, whatever the 3D light does). */
+  private plotLabels: Array<{ el: HTMLElement; r: TileRect }> = [];
   private grid: LinesMesh | null = null;
   private ghost: Array<{ dispose(): void }> = [];
 
@@ -615,10 +632,17 @@ export class AirportView {
     this.applyCamera();
     this.lines('plots', plots, '#ffc845', 0.6, this.overlay);
     const dim = this.overlayMat('unowned', '#000000', 0.55);
+    this.plotLabels = [];
     for (const p of unowned) {
       this.flat('unowned', p, dim, this.overlay);
-      this.overlay.push(this.label(plotLabel, p));
+      const el = document.createElement('div');
+      el.className = 'plot-label';
+      el.textContent = plotLabel;
+      this.canvas.parentElement?.append(el);
+      this.plotLabels.push({ el, r: p });
+      this.overlay.push({ dispose: () => el.remove() });
     }
+    this.placePlotLabels();
     const zone = this.overlayMat('end-zone', '#ff6b5e', 0.16);
     const hatch: Vector3[][] = [];
     for (const z of endZones) {
@@ -631,34 +655,6 @@ export class AirportView {
       }
     }
     if (hatch.length) this.lines('hatch', hatch, '#ff6b5e', 0.6, this.overlay);
-  }
-
-  private label(text: string, r: TileRect): Mesh {
-    const tex = canvasTexture(this.scene, 'plot-label', 512, 64, (g) => {
-      g.fillStyle = 'rgba(11,18,16,0.72)';
-      g.fillRect(0, 0, 512, 64);
-      g.fillStyle = '#e6efeb';
-      g.font = '700 44px "JetBrains Mono", monospace';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText(text, 256, 34, 500);
-    }, { clamp: true, alpha: true });
-    const mat = new StandardMaterial('plot-label', this.scene);
-    mat.disableLighting = true;
-    mat.diffuseTexture = tex;
-    mat.emissiveTexture = tex;
-    mat.useAlphaFromDiffuseTexture = true;
-    mat.backFaceCulling = false;
-    mat.fogEnabled = false;
-    const w = r.w * T * 0.9;
-    const m = MeshBuilder.CreateGround('plot-label', { width: w, height: w / 8 }, this.scene);
-    m.position.set((r.x + r.w / 2) * T, 1.4, -(r.y + r.h / 2) * T);
-    m.material = mat;
-    // its own group, drawn after the dimmed plots and grid (group 1), so nothing darkens it
-    m.renderingGroupId = 2;
-    m.isPickable = false;
-    this.overlay.push(mat, tex);
-    return m;
   }
 
   /** The placement ghost: rectangles in green (fits) or red (doesn't), a lead-in line, and the thing being moved. */

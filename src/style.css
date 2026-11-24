@@ -243,6 +243,7 @@ kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font: 1
 .build-map canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; outline: none; }
 .build-map .ghost-label { position: absolute; pointer-events: none; font: 700 11px 'JetBrains Mono', monospace; color: #fff; background: rgba(11, 18, 16, 0.78); padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
 .build-map .ghost-label:empty { display: none; }
+.plot-label { position: absolute; transform: translate(-50%, -50%); pointer-events: none; font: 700 12px 'JetBrains Mono', monospace; color: #e6efeb; background: rgba(11, 18, 16, 0.78); padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
 .build-side { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .candidate p { margin: 0 0 6px; font-size: 12px; }
 .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12px; }
