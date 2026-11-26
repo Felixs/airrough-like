@@ -26,6 +26,8 @@ Then open http://localhost:8080. Versions and their images are listed under [Rel
 | **Dawn**: the day–night cycle, with navigation, beacon and landing lights on the aircraft | **Build or discard**: leaving Build Mode or starting the Day with unconfirmed changes asks first |
 | ![Picking an Airline Contract after a won Week](docs/screenshots/contract-offer.png) | ![Plan Mode in the light look](docs/screenshots/plan-light.png) |
 | **Airline Contracts**: after a won Week, pick one of three (or skip for money); each steers the traffic for the rest of the Run | **Light look**: Options → Look switches the menus and panels to a pale "tower by day" console |
+| ![A phone: the Live Day with the map on top and the flight strips below](docs/screenshots/phone-live-day.png) | ![A phone: Plan Mode in one column](docs/screenshots/phone-plan-mode.png) |
+| **On a phone** the Live Day stacks: the 3D map on top, flight strips and the Tower panel below | **Plan Mode on a phone**: one column |
 
 ### The look
 

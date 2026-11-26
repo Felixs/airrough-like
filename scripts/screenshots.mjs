@@ -131,6 +131,39 @@ await page.screenshot({ path: out('plan-light') });
 await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
 }
 
+// ---- A phone (390 × 844): the Live Day stacks (map on top, flight strips and Tower panel below) and Plan Mode is one column
+if (!buildingsOnly) {
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const pp = await phone.newPage();
+  pp.setDefaultTimeout(120_000);
+  await pp.goto(`${url}?seed=7&quality=low`);
+  await pp.waitForSelector('.menu-card');
+  await pp.click('[data-tab="options"]');
+  await pp.uncheck('input[data-opt="eventPopups"]');
+  await pp.click('[data-tab="play"]');
+  await pp.click('[data-go="new"]');
+  await pp.waitForSelector('.start');
+  await pp.waitForTimeout(600);
+  await pp.screenshot({ path: out('phone-plan-mode') });
+  await pp.click('.start');
+  await pp.evaluate(
+    () =>
+      new Promise((done) => {
+        document.querySelector('[data-speed="8"]').click();
+        const tick = () => {
+          document.querySelector('#alert-banner:not([hidden]) button[data-ack]')?.click();
+          if ((document.querySelector('#clock').textContent ?? '') < '09:00') return void setTimeout(tick, 20);
+          document.querySelector('[data-speed="0"]').click();
+          done();
+        };
+        tick();
+      }),
+  );
+  await pp.waitForTimeout(800);
+  await pp.screenshot({ path: out('phone-live-day') });
+  await phone.close();
+}
+
 // ---- The look: the Live Day at five times of day, and close-ups, all at the best quality and 1.5x pixel density.
 // The Day plays at Low quality (software rendering is slow); each picture switches to High and waits for it to draw.
 const look = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1.5 });
@@ -212,7 +245,11 @@ const takeBest = async (name, aim, clean) => {
     }
     // parked: one that has stood a while (so its vehicles are out and a jet bridge docked), not a Small one if any
     const small = (f) => (f.type.startsWith('C208') ? 1 : 0);
-    const settled = () => flights.filter((f) => f.phase === 'onStand').sort((a, b) => small(a) - small(b) || a.phaseStart - b.phaseStart || rank(a) - rank(b))[0];
+    // (parked at least a minute: vehicles and the jet bridge come one step after the aircraft stops)
+    const now = sim().clock.minute;
+    const onStand = flights.filter((f) => f.phase === 'onStand');
+    const stood = onStand.filter((f) => f.phaseStart <= now - 1);
+    const settled = () => (stood.length ? stood : onStand).sort((a, b) => small(a) - small(b) || a.phaseStart - b.phaseStart || rank(a) - rank(b))[0];
     const f = aim.what === 'parked' ? settled() : aim.what === 'moving' ? pick(['taxiIn', 'taxiOut', 'holdShort']) : null;
     const at = f ? f.position : terminal ? centre(terminal) : null;
     if (!at) return false;
@@ -231,6 +268,25 @@ const takeBest = async (name, aim, clean) => {
   console.log(`look/${name}: ${await lookClock()}`);
 };
 const parked = (a, b = 1.15, r = 34) => ({ what: 'parked', r, a, b });
+/** Lets the Day run about a game minute at 1×, so an aircraft that has just stopped gets its vehicles and jet bridge. */
+const settleParked = async () => {
+  // run at 1× until the game clock has moved on a whole minute and a few frames have drawn it (frames are slow here)
+  await lp.evaluate(
+    () =>
+      new Promise((done) => {
+        const start = window.aab.sim().clock.minute;
+        document.querySelector('[data-speed="1"]').click();
+        const tick = () => {
+          if (window.aab.sim().clock.minute < start + 1) return void setTimeout(tick, 20);
+          document.querySelector('[data-speed="0"]').click();
+          const drawn = window.aab.frames();
+          const wait = () => (window.aab.frames() < drawn + 3 ? setTimeout(wait, 50) : done());
+          wait();
+        };
+        tick();
+      }),
+  );
+};
 const terminal = (a, b = 0.95) => ({ what: 'terminal', r: 95, a, b });
 /** A point of the map in tiles. */
 const tile = (x, y, r, a, b = 0.95) => ({ what: 'tile', x, y, r, a, b });
@@ -297,6 +353,7 @@ await playTo('05:45');
 await best('1-dawn', null, false);
 await playTo('08:30');
 await best('2-morning', null, false);
+await settleParked();
 await best('parked-morning', parked(-Math.PI / 2 - 0.7));
 await best('overhead', { what: 'airport', r: 1.1, a: -Math.PI / 2, b: 0.12 });
 await playTo('12:30');
@@ -310,9 +367,11 @@ await speedTo('0');
 await best('taxiing-midday', { what: 'moving', r: 40, a: -Math.PI / 2 + 0.9, b: 1.2 });
 await playTo('19:15');
 await best('4-evening', null, false);
+await settleParked();
 await best('parked-evening', parked(Math.PI / 2 + 0.6, 1.2, 40));
 await playTo('21:15'); // on Day 1 a curfew ends traffic before 22:00, and the Day then skips to its end
 await best('5-night', null, false);
+await settleParked();
 await best('parked-night', parked(-Math.PI / 2 - 0.7));
 await best('terminal-night', terminal(-Math.PI / 2 + 0.6, 1.05));
 await builtByNight();

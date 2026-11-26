@@ -10,7 +10,7 @@ import { holdShortLines, TAXIWAY_INSET, taxiwayEdgeLights } from '../sim/marking
 import { pbr } from './aircraftModels';
 import { buildCargoHub, buildSupport, buildTerminal, buildTower, type BuildingKit } from './buildings';
 import { groundLines, meshFrom, orient, thinInstances, type Place } from './geometry';
-import { buildLandside } from './landside';
+import { buildLandside, type Landside } from './landside';
 import { paintName } from './lettering';
 import { buildGrass, buildTrees, fieldGrid, plantCountryside, type Area } from './scenery';
 import { centreLinePaths } from './taxiLines';
@@ -45,6 +45,8 @@ export interface AirfieldContext {
   readonly scene: Scene;
   readonly caster: (m: Mesh) => void;
   readonly glow: (m: Mesh) => void;
+  /** Landside dressing (roads, car parks, service roads): drawn in a Live Day, left out in Build Mode so free tiles look free. */
+  readonly dressing?: boolean;
 }
 
 /** World-space rectangle of a tile rectangle on the ground: x0…x1 east, z0…z1 (z = −y). */
@@ -337,6 +339,7 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
     litGlass,
     lamp: lightMat,
     floods,
+    noFloods: [],
     label: (text, x, y, w, h, height, colour, yaw) => void decal(scene, text, x, y, w, h, height, colour, null, true, yaw),
   };
   for (const s of layout.structures) {
@@ -399,7 +402,9 @@ export function buildAirfield(ctx: AirfieldContext, layout: AirportLayout): Airf
   const margin = 40 * T;
   const world = box3({ x: WORLD.x0, y: WORLD.y0, w: WORLD.width, h: WORLD.height });
   const ground: Area = { x0: world.x0 - margin, x1: world.x1 + margin, z0: world.z0 - margin, z1: world.z1 + margin };
-  const land = buildLandside(scene, ctx.caster, layout, (s) => airsideOf(s, layout), concrete, ground);
+  const land: Landside = ctx.dressing === false
+    ? { areas: [], roads: [], lamps: [], trees: [] }
+    : buildLandside(scene, ctx.caster, layout, (s) => airsideOf(s, layout), concrete, ground);
   lightBoxes('street-lamp', '#ffd59a', [...land.lamps], 1, 0.05);
   const xs = layout.structures.flatMap((s) => [s.x * T, (s.x + s.w) * T]);
   const zs = layout.structures.flatMap((s) => [-s.y * T, -(s.y + s.h) * T]);
