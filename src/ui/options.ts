@@ -4,6 +4,7 @@ import { reduceMotion, type Options } from '../sim/save';
 /** The Options fields (speed, pop-ups, music, background, motion), shared by the Main Menu and the in-game dialog. */
 export function optionFields(options: Options): string {
   return `
+          <label>Look <select data-opt="theme">${[['dark', 'Dark (night shift)'], ['light', 'Light (tower by day)']].map(([v, l]) => `<option value="${v}"${(options.theme ?? 'dark') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
           <label>Starting speed <select data-opt="defaultSpeed">${[1, 2, 4, 8].map((v) => `<option value="${v}"${options.defaultSpeed === v ? ' selected' : ''}>${v}×</option>`).join('')}</select></label>
           <label class="check"><input type="checkbox" data-opt="autoSlow" ${options.autoSlow ? 'checked' : ''}> Auto-slow: 1× while aircraft land or take off</label>
           <label class="check"><input type="checkbox" data-opt="eventPopups" ${options.eventPopups ? 'checked' : ''}> Pause with a pop-up on Incidents, Crashes and Diversions</label>
@@ -11,6 +12,11 @@ export function optionFields(options: Options): string {
           <label>Music volume <input type="range" min="0" max="100" step="5" data-opt="musicVolume" value="${options.musicVolume ?? 40}" aria-valuetext="${options.musicVolume ?? 40}%"></label>
           <label class="check"><input type="checkbox" data-opt="runInBackground" ${options.runInBackground ? 'checked' : ''}> Keep the Day running while the game's tab is hidden (otherwise it pauses)</label>
           <label class="check"><input type="checkbox" data-opt="reduceMotion" ${reduceMotion(options) ? 'checked' : ''}> Reduce motion: aircraft lights stay steady instead of flashing${options.reduceMotion === undefined ? ' <small>(following your system setting)</small>' : ''}</label>`;
+}
+
+/** Shows the menus and panels in the chosen look (dark or light). */
+export function applyTheme(options: Options): void {
+  document.documentElement.dataset.theme = options.theme ?? 'dark';
 }
 
 /** Reads changes to the Options fields inside `el`; the volume follows its slider while dragged. */
@@ -23,9 +29,11 @@ export function wireOptionFields(el: HTMLElement, current: () => Options, onChan
     const next: Options = key === 'defaultSpeed'
       ? { ...options, defaultSpeed: Number(input.value) as Options['defaultSpeed'] }
       : key === 'music' ? { ...options, music: input.value }
+      : key === 'theme' ? { ...options, theme: input.value === 'light' ? 'light' as const : 'dark' as const }
       : key === 'musicVolume' ? { ...options, musicVolume: Number(input.value) }
       : { ...options, [key]: (input as HTMLInputElement).checked };
     if (key === 'musicVolume') input.setAttribute('aria-valuetext', `${input.value}%`);
+    applyTheme(next);
     onChange(next);
   };
   el.addEventListener('change', onOption);

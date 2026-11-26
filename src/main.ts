@@ -8,7 +8,7 @@ import { showContractOffer } from './ui/contracts';
 import { acknowledgeAlert, daySettled, resolveFuel, finishDay, runTo, useAction, type Simulation } from './sim/simulation';
 import { dayName, showScoreScreen } from './ui/dayEnd';
 import { mountLiveDay } from './ui/liveDay';
-import { showOptionsDialog } from './ui/options';
+import { applyTheme, showOptionsDialog } from './ui/options';
 import { showPlanMode } from './ui/planMode';
 import { mountTopBar } from './ui/topBar';
 import { MusicPlayer } from './audio/music';
@@ -33,6 +33,7 @@ async function start(): Promise<void> {
   const store = browserStore();
   let meta = loadMeta(store);
   let options = loadOptions(store);
+  applyTheme(options);
   const music = new MusicPlayer();
   const applyMusic = () => {
     music.setVolume((options.musicVolume ?? 40) / 100);
@@ -211,10 +212,14 @@ async function start(): Promise<void> {
     });
   };
   document.querySelector('#options-button')!.addEventListener('click', openOptions);
+  // the ⚙ Options buttons on the Day report, the Score Screen and the Contract pick
+  document.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.corner[data-options]')) openOptions();
+  });
   window.addEventListener('keydown', (e) => {
     const target = e.target as HTMLElement;
     if ((e.key === 'o' || e.key === 'O') && !e.ctrlKey && !e.metaKey && !e.altKey && !['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)
-      && !document.querySelector('.menu')) openOptions();
+      && !document.querySelector('.menu') && !document.querySelector('.options-dialog')) openOptions();
   });
 
   // Live Day keys: Space pause/resume, 1–5 Live / 1× / 2× / 4× / 8×, D / M answer a low-fuel decision, V resets the camera

@@ -101,6 +101,7 @@ export function showDayReport(root: HTMLElement, run: RunState, onContinue: () =
   el.setAttribute('aria-label', 'Day report');
   el.innerHTML = `
     <div class="card report">
+      <button type="button" class="options-button corner" data-options aria-keyshortcuts="O" title="Options (O)">⚙ Options</button>
       ${reportTabs(daySummary(run), `${daySections(run)}
         <p class="seed-line">${seedButton(run)} <small>Found a bug? Copy this and send it along.</small></p>`)}
       <div class="report-foot">

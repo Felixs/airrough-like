@@ -151,6 +151,8 @@ export interface Options {
   readonly music?: string;
   /** Music volume, 0–100. */
   readonly musicVolume?: number;
+  /** The look of the menus and panels: dark (default) or light ("tower by day"). The 3D view keeps its own light. */
+  readonly theme?: 'dark' | 'light';
 }
 
 /** Whether to reduce motion: the Player's choice, else the system setting. */

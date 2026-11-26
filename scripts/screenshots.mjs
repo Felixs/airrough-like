@@ -121,6 +121,14 @@ if (!buildingsOnly) {
   await page.waitForSelector('.contract-offer');
   await settle();
   await page.screenshot({ path: out('contract-offer') });
+
+// Plan Mode in the light look, with the signed Contract in its card
+await page.click('button[data-contract="0"]');
+await page.waitForSelector('.contracts-card');
+await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+await settle();
+await page.screenshot({ path: out('plan-light') });
+await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
 }
 
 // ---- A phone (390 × 844): the Live Day stacks (map on top, flight strips and Tower panel below) and Plan Mode is one column

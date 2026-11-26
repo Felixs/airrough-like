@@ -450,10 +450,14 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
 - **Keys in a Live Day:** Space pauses / resumes (to the speed before), 1–5 pick Live / 1× / 2× / 4× / 8×, and D / M
   answer the low-fuel decision (Divert / Mayday), V resets the camera. Build Mode: T S B R U L M D pick tools, 1–9 pick a variant tile, Enter
   confirms, Ctrl Z undoes, Esc frees the cursor; the arrow keys move the map, + and − zoom, F shows the whole map. Buttons name their keys; the Main Menu lists them.
-- **Options while playing:** a ⚙ Options button in the Plan Mode header and the Live Day top bar (key O) opens the
-  same Options as the Main Menu (speed, pop-ups, music, background running, reduce motion) as a dialog; a running Day
-  pauses while it is open and resumes at its speed when it closes (Esc, Close or a click outside). Reset progress
-  stays in the Main Menu.
+- **Options everywhere:** the Main Menu has an Options tab; everywhere else a ⚙ Options button (key O) opens the
+  same Options as a dialog: in the Plan Mode header (Overview, Build and Last Day tabs), the Live Day top bar, and the
+  top right corner of the Day report, the Airline Contract pick and the Score Screen. A running Day pauses while it is
+  open and resumes at its speed when it closes (Esc, Close or a click outside). Reset progress stays in the Main Menu.
+- **Look** (Options): **Dark** ("night shift", the default: near-black green panels, teal, amber and red signals) or
+  **Light** ("tower by day": pale grey consoles like a daylight ATC display, dark ink, deeper teal, amber, red and
+  green). It changes every menu, panel and dialog at once and is remembered; the 3D airfield keeps its own day and
+  night light.
 - **Finding an aircraft:** clicking a flight strip (Inbound, Holding or Ground) or an alert about an aircraft picks
   it: its strip is outlined in yellow (the rail opens and scrolls to it) and on the map it gets a gently pulsing yellow
   ring round it (steady with Reduce motion). Clicking it again drops it; it is dropped by itself when
@@ -462,7 +466,7 @@ A reward for winning a Week that also steers the rest of the Run (`contracts.ts 
 - **Never colour alone:** Stands and Holding Bays in the side panel say their state in words and a symbol (○ free,
   ◐ due with the arriving callsign, ● with the parked callsign); played Days on the Run Calendar carry ✓ or ✗;
   alerts start with what happened (CRASH, MAYDAY, …).
-- **Text** is at least 11 px; the palette keeps every text colour at 6:1 contrast or better on the dark panels.
+- **Text** is at least 11 px; both looks keep every text colour at 6:1 contrast or better on their panels.
 - **Screen sizes:** below 1200 px wide the side panels narrow and the top bar wraps; below 900 px the map no longer
   fills the window and the Live Day stacks (map on top, flight strips and Tower panel below), Plan Mode becomes one column (its header wraps, with Start Day as a full-width button under it) and Build Mode puts its tools above
   the map.
